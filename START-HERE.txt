@@ -3,7 +3,7 @@ TURMOIL RESOURCE TRACKER - WINDOWS DEMO
 Node.js 22 or newer must already be installed.
 
 1. Right-click the downloaded ZIP file and choose "Extract All".
-2. Open the extracted folder, then the Turmoil-Resource-Tracker folder.
+2. Open the extracted folders until you see START-TURMOIL.bat.
 3. Double-click START-TURMOIL.bat.
 
 The first launch installs the app's required files. This needs an internet
