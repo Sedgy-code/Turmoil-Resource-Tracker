@@ -1,0 +1,18 @@
+TURMOIL RESOURCE TRACKER - WINDOWS DEMO
+
+Node.js 22 or newer must already be installed.
+
+1. Right-click the downloaded ZIP file and choose "Extract All".
+2. Open the extracted folder, then the Turmoil-Resource-Tracker folder.
+3. Double-click START-TURMOIL.bat.
+
+The first launch installs the app's required files. This needs an internet
+connection and may take a few minutes. After that, your browser opens the app.
+
+Keep the black launcher window open while using the tracker.
+To use it again later, double-click START-TURMOIL.bat again.
+
+This is a demo with sample clan members. You do not need to configure Discord
+or a database to try it. Demo changes are saved on this computer.
+
+To give your real clan access, follow the Discord and Vercel setup in README.md.
