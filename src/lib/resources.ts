@@ -12,15 +12,13 @@ export const RESOURCE_FIELDS = [
   { key: "mountKeys", label: "Mount Keys", category: "essentials" },
   { key: "mountsToMerge", label: "Mounts to Merge", category: "essentials" },
   { key: "hammers", label: "Hammers", category: "essentials" },
-  { key: "potions", label: "Potions", category: "essentials" },
 ] as const;
 export type ResourceKey =
   | "skillTickets"
   | "eggsPetsTotal"
   | "mountKeys"
   | "mountsToMerge"
-  | "hammers"
-  | "potions";
+  | "hammers";
 export type ResourceValues = Record<ResourceKey, number>;
 export interface SummoningCosts {
   fiveSkills: number;

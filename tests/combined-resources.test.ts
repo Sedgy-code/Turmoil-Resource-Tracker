@@ -32,7 +32,6 @@ const CURRENT_KEYS = [
   "mountKeys",
   "mountsToMerge",
   "hammers",
-  "potions",
 ];
 const LEGACY = {
   eggsCommon: 1,
@@ -103,7 +102,7 @@ async function insertLegacy(
   return id;
 }
 
-test("resource responses expose six fields with one combined eggs and pets total", () => {
+test("resource responses expose five fields with one combined eggs and pets total", () => {
   assert.deepEqual(RESOURCE_FIELDS.map(({ key }) => key).sort(), [...CURRENT_KEYS].sort());
   const parsed = resourceSchema.parse({});
   assertCurrentKeys(parsed);
@@ -159,8 +158,20 @@ test("combined and legacy request values reject invalid types and respect their 
   assert.equal(resourceSchema.safeParse("12").success, false);
 });
 
+test("retired potion requests are validated and omitted while unknown resources remain rejected", () => {
+  for (const potions of [0, 44, 1_000_000_000]) {
+    const parsed = resourceSchema.parse({ eggsPetsTotal: 23, hammers: 19, potions });
+    assertCurrentKeys(parsed);
+    assert.deepEqual(parsed, canonical({ eggsPetsTotal: 23, hammers: 19 }));
+  }
+  for (const potions of [-1, 0.5, NaN, Infinity, "44", null, 1_000_000_001]) {
+    assert.equal(resourceSchema.safeParse({ potions }).success, false);
+  }
+  assert.equal(resourceSchema.safeParse({ potions: 44, unknown: 1 }).success, false);
+});
+
 test("legacy row mapping returns only combined fields for JSON objects and serialized JSON", () => {
-  const legacy = { ...LEGACY, skillTickets: 21, mountKeys: 6, ignoredOldMetadata: 44 };
+  const legacy = { ...LEGACY, skillTickets: 21, mountKeys: 6, potions: 44, ignoredOldMetadata: 44 };
   const snapshot = structuredClone(legacy);
   const row = {
     id: randomUUID(),
@@ -254,5 +265,37 @@ test("copying and editing legacy inventory writes the current shape without chan
     assert.equal((await dashboard(member, WEEK, db)).totals.eggsPetsTotal, 78);
     assert.equal((await dashboard(member, NEXT_WEEK, db)).totals.eggsPetsTotal, 0);
     assert.deepEqual(await db.query("SELECT * FROM resource_entries WHERE id=$1", [legacyId]), before);
+  });
+});
+
+test("retired potions disappear from reads and new writes without changing historical stored inventory", async () => {
+  await withDatabase(async (db) => {
+    const member = await addMember(db, "Member");
+    const historicResources = { ...canonical({ eggsPetsTotal: 23, hammers: 19 }), potions: 44 };
+    const historicId = await insertLegacy(db, member, WEEK, historicResources);
+    const before = await db.query("SELECT * FROM resource_entries WHERE id=$1", [historicId]);
+
+    await initializeSchema(db);
+    const result = await dashboard(member, WEEK, db);
+    assertCurrentKeys(result.totals);
+    assert.deepEqual(result.entries[0].resources, canonical({ eggsPetsTotal: 23, hammers: 19 }));
+    assert.deepEqual(result.totals, canonical({ eggsPetsTotal: 23, hammers: 19 }));
+
+    const copied = await copyPreviousEntry(member, { week: NEXT_WEEK }, db);
+    const storedCopy = await db.query("SELECT resources FROM resource_entries WHERE id=$1", [copied.id]);
+    assertCurrentKeys(storedCopy[0].resources as object);
+    assert.deepEqual(storedCopy[0].resources, copied.resources);
+
+    const oldClient = saveResourcesSchema.parse({
+      week: NEXT_WEEK,
+      resources: { ...historicResources, hammers: 20, potions: 99 },
+      notes: "Saved from an already open browser",
+    });
+    const saved = await saveEntry(member, oldClient, db);
+    assert.deepEqual(saved.resources, canonical({ eggsPetsTotal: 23, hammers: 20 }));
+    const stored = await db.query("SELECT resources FROM resource_entries WHERE id=$1", [saved.id]);
+    assertCurrentKeys(stored[0].resources as object);
+    assert.deepEqual(stored[0].resources, saved.resources);
+    assert.deepEqual(await db.query("SELECT * FROM resource_entries WHERE id=$1", [historicId]), before);
   });
 });

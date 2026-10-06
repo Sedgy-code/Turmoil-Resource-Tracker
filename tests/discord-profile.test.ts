@@ -166,14 +166,14 @@ test("dashboard sorting and editor attribution show server names throughout curr
   await withDatabase(async (db) => {
     const owner = await registerDiscordMember({ ...user(), username: "a_handle" }, db, membership("Zeta Officer"));
     const member = await registerDiscordMember({ ...user(MEMBER_ID), username: "z_handle" }, db, membership("Alpha Knight"));
-    await saveEntry(owner, { week: "2026-10-05", memberId: member.id, resources: { ...EMPTY_RESOURCES, potions: 91 }, notes: "Admin contribution" }, db);
+    await saveEntry(owner, { week: "2026-10-05", memberId: member.id, resources: { ...EMPTY_RESOURCES, hammers: 91 }, notes: "Admin contribution" }, db);
     const current = await dashboard(owner, "2026-10-05", db);
     assert.deepEqual(current.members.map((row) => row.username), ["Alpha Knight", "Zeta Officer"]);
     assert.equal(current.entries[0].updatedBy.username, "Zeta Officer");
     assert.deepEqual((await listMembers(owner, db)).map((row) => row.username), ["Zeta Officer", "Alpha Knight"]);
     const copied = await copyPreviousEntry(member, { week: "2026-10-12" }, db);
     assert.equal(copied.updatedBy.username, "Alpha Knight");
-    assert.equal(copied.resources.potions, 91);
+    assert.equal(copied.resources.hammers, 91);
     assert.equal((await dashboard(owner, "2026-10-05", db)).entries[0].updatedBy.username, "Zeta Officer");
   });
 });

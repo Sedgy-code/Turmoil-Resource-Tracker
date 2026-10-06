@@ -322,12 +322,12 @@ body {
 }
 .eggs-pets-card {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 18px;
   min-width: 0;
-  margin-bottom: 26px;
-  padding: 23px 26px;
+  margin-bottom: 0;
+  padding: 17px 17px 14px;
   background: radial-gradient(ellipse at 0 0, #8d753c1a, transparent 60%), linear-gradient(145deg, #18221b, #111813);
   border-color: #9e85474f;
 }
@@ -375,8 +375,12 @@ body {
   flex-direction: column;
   gap: 5px;
   min-width: 0;
-  max-width: 50%;
-  text-align: right;
+  flex: 1;
+  text-align: left;
+}
+.eggs-pets-total > span {
+  margin-top: auto;
+  padding-top: 10px;
 }
 .eggs-pets-total strong {
   color: var(--gold);
@@ -768,11 +772,12 @@ body {
 }
 @media (max-width: 650px) {
   .eggs-pets-card {
+    order: -1;
     flex-direction: column;
     align-items: stretch;
     gap: 18px;
     padding: 20px 18px;
-    margin-bottom: 23px;
+    margin-bottom: 0;
   }
   .eggs-pets-heading {
     gap: 12px;
@@ -788,9 +793,6 @@ body {
   }
   .eggs-pets-input {
     max-width: none;
-  }
-  .essential-inputs > .essential-field:last-child {
-    grid-column: 1 / -1;
   }
   .stat-card.has-summons,
   .stat-card.has-war-points {

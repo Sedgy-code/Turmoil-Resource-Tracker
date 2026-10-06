@@ -281,7 +281,7 @@ test("migration adds costs to a prior database idempotently while preserving inv
     const member = await addMember(db, "Legacy", "ADMIN");
     const entryId = randomUUID();
     const historyTime = "2026-10-05T01:23:45.000Z";
-    const resources = inventory({ skillTickets: 100, mountKeys: 12, potions: 7 });
+    const resources = inventory({ skillTickets: 100, mountKeys: 12, hammers: 7 });
     await db.query("UPDATE app_members SET last_updated_at = $2 WHERE id = $1", [member.id, historyTime]);
     await db.query("INSERT INTO resource_entries (id,member_id,week_start,resources,notes,updated_at,updated_by) VALUES ($1,$2,$3,$4::jsonb,$5,$6,$2)", [entryId, member.id, WEEK, JSON.stringify(resources), "Legacy notes must survive", historyTime]);
     const before = (await db.query("SELECT * FROM resource_entries WHERE id = $1", [entryId]))[0];

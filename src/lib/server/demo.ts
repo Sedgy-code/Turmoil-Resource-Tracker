@@ -72,7 +72,6 @@ export async function seedDemo(): Promise<void> {
               mountKeys: Math.floor(126 * multiplier),
               mountsToMerge: Math.floor(12 * multiplier),
               hammers: Math.floor(1240 * multiplier),
-              potions: Math.floor(380 * multiplier),
             };
             const updated = new Date(
               Date.now() - (index * 37 + 7) * 60 * 1000 + offset * 7 * 86400000,

@@ -709,7 +709,7 @@ h1 {
 }
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 13px;
   margin-bottom: 16px;
 }
@@ -1382,7 +1382,7 @@ h1 {
 }
 .essential-inputs {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 18px;
 }
 .essential-inputs label > span {
@@ -2238,7 +2238,7 @@ h1 {
     left: calc(50% + 97.5px);
   }
   .essential-inputs {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 18px;
   }
   .form-section {
@@ -2584,7 +2584,7 @@ h1 {
     min-height: 30px;
   }
   .stat-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
     gap: 10px;
     margin-bottom: 14px;
   }

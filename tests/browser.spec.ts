@@ -149,12 +149,26 @@ test("desktop resources persist, copy from history, update totals, and export co
       page.getByRole("heading", { name: "Resource Dashboard" }),
     ).toBeVisible();
     await expect(page.getByRole("table")).toBeVisible();
+    await expect(page.getByText("Potions", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("columnheader", { name: "Potions", exact: true })).toHaveCount(0);
+    const topRow = [
+      page.locator(".stat-grid .stat-card").filter({ hasText: "Skill Tickets" }),
+      page.locator(".stat-grid .stat-card").filter({ hasText: "Mount Keys" }),
+      page.locator(".stat-grid .eggs-pets-card"),
+    ];
+    const topRowBounds = await Promise.all(topRow.map((card) => card.boundingBox()));
+    expect(topRowBounds.every(Boolean)).toBeTruthy();
+    expect(Math.abs(topRowBounds[0]!.y - topRowBounds[1]!.y)).toBeLessThanOrEqual(1);
+    expect(Math.abs(topRowBounds[0]!.y - topRowBounds[2]!.y)).toBeLessThanOrEqual(1);
+    expect(topRowBounds[0]!.x).toBeLessThan(topRowBounds[1]!.x);
+    expect(topRowBounds[1]!.x).toBeLessThan(topRowBounds[2]!.x);
     await noPageOverflow(page);
     await page.screenshot({
       path: testInfo.outputPath("desktop-dashboard.png"),
       fullPage: true,
     });
     await page.getByRole("link", { name: "My Resources", exact: true }).click();
+    await expect(page.getByLabel("Potions", { exact: true })).toHaveCount(0);
     await expect(page.getByLabel("Skill Tickets", { exact: true })).toHaveValue(
       String(ownEntry.resources.skillTickets),
     );
@@ -162,6 +176,7 @@ test("desktop resources persist, copy from history, update totals, and export co
       String(ownEntry.resources.eggsPetsTotal),
     );
     await page.getByLabel("Skill Tickets", { exact: true }).fill("54321");
+    await page.getByLabel("Hammers", { exact: true }).fill("12345");
     await page.getByLabel("Cost of summoning 5 skills", { exact: true }).fill("185.5");
     await page.getByLabel("Cost per mount summon", { exact: true }).fill("45.25");
     await page.getByLabel("Total eggs/pets", { exact: true }).fill("16");
@@ -177,11 +192,22 @@ test("desktop resources persist, copy from history, update totals, and export co
       "54321",
     );
     await expect(page.getByLabel("Total eggs/pets", { exact: true })).toHaveValue("16");
+    await expect(page.getByLabel("Hammers", { exact: true })).toHaveValue("12345");
     await expect(page.getByLabel("Cost of summoning 5 skills", { exact: true })).toHaveValue("185.5");
     await expect(page.getByLabel("Cost per mount summon", { exact: true })).toHaveValue("45.25");
     await expect(page.getByLabel("Notes", { exact: true })).toHaveValue(
       "Browser verification — saved and reloaded.",
     );
+    const saved = await dashboard(request, original.week);
+    expect(saved.totals.hammers).toBe(original.totals.hammers - ownEntry.resources.hammers + 12345);
+    await page.getByRole("link", { name: "Dashboard", exact: true }).click();
+    const hammerCard = page.locator(".stat-card").filter({ hasText: "Hammers" });
+    const format = new Intl.NumberFormat("en-US");
+    await expect(hammerCard.locator(".war-points-total")).toHaveText(
+      `${format.format(saved.totals.hammers * 2)}–${format.format(saved.totals.hammers * 5)}`,
+    );
+    await expect(hammerCard.locator(".war-points-note")).toHaveText("2–5 points per hammer.");
+    await page.getByRole("link", { name: "My Resources", exact: true }).click();
     await page
       .getByRole("button", { name: "Copy previous week", exact: true })
       .click();
@@ -225,6 +251,9 @@ test("desktop resources persist, copy from history, update totals, and export co
       page.locator(".stat-card").filter({ hasText: "Mounts to Merge" })
         .locator(".war-points-total"),
     ).toHaveText(new Intl.NumberFormat("en-US").format(copied.totals.mountsToMerge * 1_080));
+    await expect(hammerCard.locator(".war-points-total")).toHaveText(
+      `${format.format(copied.totals.hammers * 2)}–${format.format(copied.totals.hammers * 5)}`,
+    );
     const downloadPromise = page.waitForEvent("download");
     await page.getByRole("button", { name: "Export CSV", exact: true }).click();
     const download = await downloadPromise;
@@ -236,9 +265,10 @@ test("desktop resources persist, copy from history, update totals, and export co
     const chunks: Buffer[] = [];
     for await (const chunk of stream!) chunks.push(Buffer.from(chunk));
     const csv = Buffer.concat(chunks).toString("utf8");
-    expect(csv.trim().split("\r\n")).toHaveLength(7);
+    expect(csv.trim().split("\r\n")).toHaveLength(6);
     expect(csv).toContain(`Skill Tickets,${copied.totals.skillTickets}`);
     expect(csv).toContain(`Total eggs/pets,${copied.totals.eggsPetsTotal}`);
+    expect(csv).not.toContain("Potions");
     expect(csv).not.toMatch(/Common|Rare|Epic|Legendary|Ultimate|Mythic/);
     await expect(page.locator(".eggs-pets-card")).toContainText(
       new Intl.NumberFormat("en-US").format(copied.totals.eggsPetsTotal),
@@ -272,6 +302,50 @@ test("desktop resources persist, copy from history, update totals, and export co
     });
     expect(restoredPrevious.ok(), await restoredPrevious.text()).toBeTruthy();
   }
+});
+
+test("hammer clan war estimates follow the selected week and show a zero range for no hammers", async ({
+  page,
+  request,
+}) => {
+  await demoSession(request);
+  const original = await dashboard(request);
+  const adjacentWeek = (offset: number) => {
+    const date = new Date(`${original.week}T00:00:00Z`);
+    date.setUTCDate(date.getUTCDate() + offset * 7);
+    return date.toISOString().slice(0, 10);
+  };
+  const previousWeek = adjacentWeek(-1);
+  const nextWeek = adjacentWeek(1);
+  const hammerTotals = new Map([
+    [original.week, 1_234],
+    [previousWeek, 67_890],
+    [nextWeek, 0],
+  ]);
+  await page.route(/\/api\/dashboard(?:\?|$)/, (route) => {
+    const week = new URL(route.request().url()).searchParams.get("week") || original.week;
+    return route.fulfill({
+      json: {
+        ...original,
+        week,
+        totals: { ...original.totals, hammers: hammerTotals.get(week) ?? 0 },
+      },
+    });
+  });
+  await page.goto(`/?week=${original.week}`);
+  const hammerCard = page.locator(".stat-card").filter({ hasText: "Hammers" });
+  await expect(hammerCard.locator(".war-points-total")).toHaveText("2,468–6,170");
+  await expect(hammerCard.locator(".war-points-note")).toHaveText("2–5 points per hammer.");
+  await page.getByRole("button", { name: "Previous week", exact: true }).click();
+  await expect(page.getByLabel("Select week", { exact: true })).toHaveValue(previousWeek);
+  await expect(hammerCard.locator(".stat-number")).toHaveText("67,890");
+  await expect(hammerCard.locator(".war-points-total")).toHaveText("135,780–339,450");
+  await page.getByRole("button", { name: "Next week", exact: true }).click();
+  await expect(hammerCard.locator(".war-points-total")).toHaveText("2,468–6,170");
+  await page.getByRole("button", { name: "Next week", exact: true }).click();
+  await expect(page.getByLabel("Select week", { exact: true })).toHaveValue(nextWeek);
+  await expect(hammerCard.locator(".stat-number")).toHaveText("0");
+  await expect(hammerCard.locator(".war-points-total")).toHaveText("0–0");
 });
 
 test("resource fields can be cleared, typed without a leading zero, and saved blank as zero", async ({
@@ -650,6 +724,16 @@ test("mobile dashboard, menu, complete resource form, and week navigation fit th
     page.getByRole("heading", { name: "Resource Dashboard" }),
   ).toBeVisible();
   await expect(page.getByRole("table")).toBeVisible();
+  const mobileCards = page.locator(".stat-grid > article");
+  const mobileBounds = await Promise.all(
+    [0, 1, 2].map((index) => mobileCards.nth(index).boundingBox()),
+  );
+  expect(mobileBounds.every(Boolean)).toBeTruthy();
+  expect(Math.abs(mobileBounds[0]!.x - mobileBounds[1]!.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(mobileBounds[0]!.x - mobileBounds[2]!.x)).toBeLessThanOrEqual(1);
+  expect(mobileBounds[2]!.y).toBeLessThan(mobileBounds[0]!.y);
+  expect(mobileBounds[1]!.y).toBeGreaterThan(mobileBounds[0]!.y);
+  await expect(mobileCards.nth(2)).toContainText("Total eggs/pets");
   await noPageOverflow(page);
   await page.screenshot({
     path: testInfo.outputPath("mobile-dashboard.png"),
@@ -661,7 +745,8 @@ test("mobile dashboard, menu, complete resource form, and week navigation fit th
   await page.getByRole("link", { name: "My Resources", exact: true }).click();
   await expect(page.getByLabel("Skill Tickets", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Total eggs/pets", { exact: true })).toHaveCount(1);
-  await expect(page.locator('input[type="number"]')).toHaveCount(8);
+  await expect(page.locator('input[type="number"]')).toHaveCount(7);
+  await expect(page.getByLabel("Potions", { exact: true })).toHaveCount(0);
   await expect(page.getByLabel("Cost of summoning 5 skills", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Cost per mount summon", { exact: true })).toBeVisible();
   await expect(
@@ -695,7 +780,7 @@ test("mobile dashboard, menu, complete resource form, and week navigation fit th
   await page.getByRole("button", { name: "Open navigation", exact: true }).click();
   await page.getByRole("link", { name: "Dashboard", exact: true }).click();
   await expect(page.locator(".stat-summons")).toHaveCount(2);
-  await expect(page.locator(".stat-war-points")).toHaveCount(2);
+  await expect(page.locator(".stat-war-points")).toHaveCount(3);
   await noPageOverflow(page);
   expect(errors).toEqual([]);
 });

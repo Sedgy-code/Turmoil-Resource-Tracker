@@ -28,7 +28,6 @@ import {
   Copy,
   Egg,
   Flame,
-  FlaskConical,
   Hammer,
   KeyRound,
   LayoutDashboard,
@@ -103,8 +102,12 @@ const essentials: {
     color: "purple",
   },
   { key: "hammers", icon: Hammer, label: "Hammers", color: "orange" },
-  { key: "potions", icon: FlaskConical, label: "Potions", color: "green" },
 ];
+const dashboardResources = [
+  ...essentials.slice(0, 2),
+  { key: "eggsPetsTotal", icon: Egg, label: "Total eggs/pets", color: "gold" },
+  ...essentials.slice(2),
+] satisfies typeof essentials;
 
 async function api<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -609,7 +612,10 @@ export default function Tracker({ view }: { view: View }) {
                 </div>
               </div>
               <div className="stat-grid">
-                {essentials.map(({ key, label, icon: StatIcon, color }) => {
+                {dashboardResources.map(({ key, label, icon: StatIcon, color }) => {
+                  if (key === "eggsPetsTotal") {
+                    return <EggsPetsCard key={key} total={data.totals.eggsPetsTotal} />;
+                  }
                   const summons =
                     key === "skillTickets"
                       ? {
@@ -627,15 +633,20 @@ export default function Tracker({ view }: { view: View }) {
                   const warPoints =
                     key === "skillTickets"
                       ? {
-                          total: (data.summons?.skills ?? 0) * 225,
+                          total: numberFormat((data.summons?.skills ?? 0) * 225),
                           note: "225 points per skill summon.",
                         }
                       : key === "mountsToMerge"
                         ? {
-                            total: data.totals.mountsToMerge * 1_080,
+                            total: numberFormat(data.totals.mountsToMerge * 1_080),
                             note: "1,080 points per mount to merge.",
                           }
-                        : null;
+                        : key === "hammers"
+                          ? {
+                              total: `${numberFormat(data.totals.hammers * 2)}–${numberFormat(data.totals.hammers * 5)}`,
+                              note: "2–5 points per hammer.",
+                            }
+                          : null;
                   return (
                     <article
                       className={`stat-card ${summons ? "has-summons" : ""} ${warPoints ? "has-war-points" : ""}`}
@@ -677,7 +688,7 @@ export default function Tracker({ view }: { view: View }) {
                             Potential clan war points
                           </span>
                           <strong className="war-points-total">
-                            {numberFormat(warPoints.total)}
+                            {warPoints.total}
                           </strong>
                           <span className="war-points-note">
                             {warPoints.note}
@@ -692,7 +703,6 @@ export default function Tracker({ view }: { view: View }) {
                   );
                 })}
               </div>
-              <EggsPetsCard total={data.totals.eggsPetsTotal} />
               <MemberResources
                 data={data}
                 week={week}
@@ -888,7 +898,7 @@ function Login({ configured, error }: { configured: boolean; error: string }) {
 
 function EggsPetsCard({ total }: { total: number }) {
   return (
-    <article className="panel eggs-pets-card">
+    <article className="stat-card eggs-pets-card">
       <div className="eggs-pets-heading">
         <div className="eggs-pets-icons" aria-hidden="true">
           <span className="resource-icon gold">
@@ -1841,11 +1851,10 @@ function DashboardSkeleton() {
     >
       <div className="skeleton skeleton-hero" />
       <div className="stat-grid">
-        {essentials.map((item) => (
+        {dashboardResources.map((item) => (
           <div className="skeleton skeleton-stat" key={item.key} />
         ))}
       </div>
-      <div className="skeleton skeleton-eggs-pets" />
     </div>
   );
 }

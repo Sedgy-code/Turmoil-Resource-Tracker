@@ -37,6 +37,9 @@ export const resourceSchema = z
           key,
           z.number().int().min(0).max(1_000_000_000).optional(),
         ]),
+        // Older open clients may still submit potions. Validate the retired
+        // field, then omit it with the other legacy values during normalization.
+        ["potions", z.number().int().min(0).max(1_000_000_000).optional()],
       ],
     ),
   )
