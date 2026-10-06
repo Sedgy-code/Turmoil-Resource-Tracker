@@ -1,5 +1,5 @@
 import type { Member, ResourceEntry } from "../types";
-import { EMPTY_RESOURCES, type ResourceValues } from "../resources";
+import { normalizeResources, EMPTY_SUMMONING_COSTS, type SummoningCosts } from "../resources";
 
 export function iso(value: unknown): string | null {
   if (!value) return null;
@@ -28,11 +28,16 @@ export function entryFromRow(row: Record<string, unknown>): ResourceEntry {
     row.week_start instanceof Date
       ? row.week_start.toISOString().slice(0, 10)
       : String(row.week_start).slice(0, 10);
+  const summoningCosts =
+    typeof row.summoning_costs === "string"
+      ? JSON.parse(row.summoning_costs)
+      : row.summoning_costs;
   return {
     id: String(row.id),
     memberId: String(row.member_id),
     week,
-    resources: { ...EMPTY_RESOURCES, ...(values as ResourceValues) },
+    resources: normalizeResources(values),
+    summoningCosts: { ...EMPTY_SUMMONING_COSTS, ...(summoningCosts as SummoningCosts) },
     notes: String(row.notes),
     updatedAt: iso(row.updated_at)!,
     updatedBy: {

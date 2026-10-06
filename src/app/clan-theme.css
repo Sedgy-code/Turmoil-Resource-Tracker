@@ -260,6 +260,8 @@ body {
 }
 .stat-card {
   position: relative;
+  display: flex;
+  flex-direction: column;
 }
 .stat-card::before {
   content: "";
@@ -272,9 +274,122 @@ body {
 }
 .stat-foot {
   color: #91a396;
+  margin-top: auto;
+  padding-top: 10px;
 }
 .stat-foot > span {
   background: var(--emerald);
+}
+.stat-summons {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  padding: 11px 0 5px;
+  border-top: 1px solid #b4974933;
+}
+.summon-label {
+  color: #c6d5ca;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.summon-total {
+  color: var(--gold);
+  font-family: var(--heading);
+  font-size: 21px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.summon-note,
+.summon-warning {
+  font-size: 10px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.summon-note {
+  color: var(--muted);
+}
+.summon-warning {
+  color: #edce88;
+  margin: 3px 0 0;
+}
+.eggs-pets-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-width: 0;
+  margin-bottom: 26px;
+  padding: 23px 26px;
+  background: radial-gradient(ellipse at 0 0, #8d753c1a, transparent 60%), linear-gradient(145deg, #18221b, #111813);
+  border-color: #9e85474f;
+}
+.eggs-pets-heading {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+.eggs-pets-icons {
+  position: relative;
+  width: 65px;
+  height: 46px;
+  flex-shrink: 0;
+}
+.eggs-pets-icons > .resource-icon:first-child {
+  width: 42px;
+  height: 42px;
+}
+.eggs-pets-icons > .resource-icon:last-child {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 32px;
+  height: 32px;
+  box-shadow: 0 0 0 3px #152018;
+}
+.eggs-pets-copy {
+  min-width: 0;
+}
+.eggs-pets-copy h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.4;
+}
+.eggs-pets-copy p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.eggs-pets-total {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  max-width: 50%;
+  text-align: right;
+}
+.eggs-pets-total strong {
+  color: var(--gold);
+  font-family: var(--heading);
+  font-size: 30px;
+  font-weight: 650;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.eggs-pets-total span {
+  color: #91a396;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.skeleton-eggs-pets {
+  min-height: 105px;
+  margin-top: 16px;
 }
 .resource-icon.amber,
 .resource-icon.gold {
@@ -395,6 +510,44 @@ body {
 .essential-inputs label > span,
 .member-select > span {
   color: #b9c9be;
+}
+.essential-inputs > .essential-field {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.essential-field > label {
+  display: block;
+  min-width: 0;
+}
+.essential-inputs .summoning-cost-field {
+  margin-top: 15px;
+  padding-top: 12px;
+  border-top: 1px solid #b4974933;
+}
+.essential-inputs .summoning-cost-field > span {
+  color: #dec486;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: normal;
+}
+.summoning-cost-field small {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+  margin-top: 7px;
+}
+.eggs-pets-input {
+  display: block;
+  max-width: 360px;
+}
+.eggs-pets-input > span {
+  display: block;
+  color: #c6d5ca;
+  font-size: 11px;
+  line-height: 1.5;
+  margin-bottom: 9px;
 }
 .form-section h3 > svg,
 .management-stats svg,
@@ -609,6 +762,40 @@ body {
   }
 }
 @media (max-width: 650px) {
+  .eggs-pets-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 18px;
+    padding: 20px 18px;
+    margin-bottom: 23px;
+  }
+  .eggs-pets-heading {
+    gap: 12px;
+  }
+  .eggs-pets-copy h3 {
+    font-size: 15px;
+  }
+  .eggs-pets-total {
+    max-width: none;
+    border-top: 1px solid #9e854733;
+    padding-top: 15px;
+    text-align: left;
+  }
+  .eggs-pets-input {
+    max-width: none;
+  }
+  .essential-inputs > .essential-field:last-child {
+    grid-column: 1 / -1;
+  }
+  .stat-card.has-summons {
+    min-height: 245px;
+  }
+  .summon-total {
+    font-size: 20px;
+  }
+  .summoning-cost-field small {
+    font-size: 11px;
+  }
   .hero {
     display: block;
     padding: 24px 21px 20px;

@@ -10,7 +10,7 @@ import type {
   Member,
   SessionResponse,
 } from "../src/lib/types";
-import { EMPTY_RESOURCES, RESOURCE_FIELDS } from "../src/lib/resources";
+import { EMPTY_RESOURCES, EMPTY_SUMMONING_COSTS, RESOURCE_FIELDS } from "../src/lib/resources";
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
 const executablePath =
@@ -127,6 +127,14 @@ test("desktop resources persist, copy from history, update totals, and export co
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("dialog", (dialog) => dialog.accept());
   try {
+    const previousCosts = { fiveSkills: 25, mount: 5 };
+    const seededPrevious = await request.put("/api/resources", {
+      headers: { Origin: baseURL },
+      data: { week: previousEntry.week, memberId: previousEntry.memberId,
+        resources: previousEntry.resources, summoningCosts: previousCosts,
+        notes: previousEntry.notes },
+    });
+    expect(seededPrevious.ok(), await seededPrevious.text()).toBeTruthy();
     await page.goto("/");
     await expect(
       page.getByRole("heading", { name: "Resource Dashboard" }),
@@ -141,9 +149,13 @@ test("desktop resources persist, copy from history, update totals, and export co
     await expect(page.getByLabel("Skill Tickets", { exact: true })).toHaveValue(
       String(ownEntry.resources.skillTickets),
     );
+    await expect(page.getByLabel("Total eggs/pets", { exact: true })).toHaveValue(
+      String(ownEntry.resources.eggsPetsTotal),
+    );
     await page.getByLabel("Skill Tickets", { exact: true }).fill("54321");
-    await page.getByLabel("Mythic Eggs", { exact: true }).fill("9");
-    await page.getByLabel("Mythic Pets", { exact: true }).fill("7");
+    await page.getByLabel("Cost of summoning 5 skills", { exact: true }).fill("100");
+    await page.getByLabel("Cost per mount summon", { exact: true }).fill("4");
+    await page.getByLabel("Total eggs/pets", { exact: true }).fill("16");
     await page
       .getByLabel("Notes", { exact: true })
       .fill("Browser verification — saved and reloaded.");
@@ -155,12 +167,9 @@ test("desktop resources persist, copy from history, update totals, and export co
     await expect(page.getByLabel("Skill Tickets", { exact: true })).toHaveValue(
       "54321",
     );
-    await expect(page.getByLabel("Mythic Eggs", { exact: true })).toHaveValue(
-      "9",
-    );
-    await expect(page.getByLabel("Mythic Pets", { exact: true })).toHaveValue(
-      "7",
-    );
+    await expect(page.getByLabel("Total eggs/pets", { exact: true })).toHaveValue("16");
+    await expect(page.getByLabel("Cost of summoning 5 skills", { exact: true })).toHaveValue("100");
+    await expect(page.getByLabel("Cost per mount summon", { exact: true })).toHaveValue("4");
     await expect(page.getByLabel("Notes", { exact: true })).toHaveValue(
       "Browser verification — saved and reloaded.",
     );
@@ -173,7 +182,14 @@ test("desktop resources persist, copy from history, update totals, and export co
     await expect(page.getByLabel("Skill Tickets", { exact: true })).toHaveValue(
       String(previousEntry.resources.skillTickets),
     );
+    await expect(page.getByLabel("Total eggs/pets", { exact: true })).toHaveValue(
+      String(previousEntry.resources.eggsPetsTotal),
+    );
     const copied = await dashboard(request);
+    expect(copied.entries.find((entry) => entry.memberId === copied.currentUser.id)?.summoningCosts)
+      .toEqual(previousCosts);
+    await expect(page.getByLabel("Cost of summoning 5 skills", { exact: true })).toHaveValue("25");
+    await expect(page.getByLabel("Cost per mount summon", { exact: true })).toHaveValue("5");
     expect(
       copied.entries.find((entry) => entry.memberId === copied.currentUser.id)
         ?.resources,
@@ -203,10 +219,14 @@ test("desktop resources persist, copy from history, update totals, and export co
     const chunks: Buffer[] = [];
     for await (const chunk of stream!) chunks.push(Buffer.from(chunk));
     const csv = Buffer.concat(chunks).toString("utf8");
-    expect(csv.trim().split("\r\n")).toHaveLength(18);
+    expect(csv.trim().split("\r\n")).toHaveLength(7);
     expect(csv).toContain(`Skill Tickets,${copied.totals.skillTickets}`);
-    expect(csv).toContain(`Mythic Eggs,${copied.totals.eggsMythic}`);
-    expect(csv).toContain(`Mythic Pets,${copied.totals.petsMythic}`);
+    expect(csv).toContain(`Total eggs/pets,${copied.totals.eggsPetsTotal}`);
+    expect(csv).not.toMatch(/Common|Rare|Epic|Legendary|Ultimate|Mythic/);
+    await expect(page.locator(".eggs-pets-card")).toContainText(
+      new Intl.NumberFormat("en-US").format(copied.totals.eggsPetsTotal),
+    );
+    await expect(page.getByRole("columnheader", { name: "Total eggs/pets", exact: true })).toBeVisible();
     await page.getByRole("link", { name: "Weeks", exact: true }).click();
     await expect(
       page.getByRole("heading", { name: "Weeks", exact: true }),
@@ -222,10 +242,18 @@ test("desktop resources persist, copy from history, update totals, and export co
         week: ownEntry.week,
         memberId: ownEntry.memberId,
         resources: ownEntry.resources,
+        summoningCosts: ownEntry.summoningCosts,
         notes: ownEntry.notes,
       },
     });
     expect(restored.ok(), await restored.text()).toBeTruthy();
+    const restoredPrevious = await request.put("/api/resources", {
+      headers: { Origin: baseURL },
+      data: { week: previousEntry.week, memberId: previousEntry.memberId,
+        resources: previousEntry.resources, summoningCosts: previousEntry.summoningCosts,
+        notes: previousEntry.notes },
+    });
+    expect(restoredPrevious.ok(), await restoredPrevious.text()).toBeTruthy();
   }
 });
 
@@ -261,12 +289,9 @@ test("resource fields can be cleared, typed without a leading zero, and saved bl
     const tickets = page.getByLabel("Skill Tickets", { exact: true });
     await tickets.pressSequentially("42");
     await expect(tickets).toHaveValue("42");
-    const eggs = page.getByLabel("Common Eggs", { exact: true });
+    const eggs = page.getByLabel("Total eggs/pets", { exact: true });
     await eggs.pressSequentially("7");
     await expect(eggs).toHaveValue("7");
-    const pets = page.getByLabel("Mythic Pets", { exact: true });
-    await pets.pressSequentially("3");
-    await expect(pets).toHaveValue("3");
     for (const invalid of ["-1", "1.5", "1000000001"]) {
       await tickets.fill(invalid);
       expect(
@@ -283,8 +308,7 @@ test("resource fields can be cleared, typed without a leading zero, and saved bl
     const expected = {
       ...EMPTY_RESOURCES,
       skillTickets: 42,
-      eggsCommon: 7,
-      petsMythic: 3,
+      eggsPetsTotal: 7,
     };
     const saved = await dashboard(request, original.week);
     expect(
@@ -309,6 +333,95 @@ test("resource fields can be cleared, typed without a leading zero, and saved bl
       },
     });
     expect(restored.ok(), await restored.text()).toBeTruthy();
+  }
+});
+
+test("weekly summoning costs persist, give per-member totals, and blank costs save as zero", async ({ page, request }) => {
+  await demoSession(request);
+  const original = await dashboard(request);
+  const own = original.entries.find((entry) => entry.memberId === original.currentUser.id)!;
+  const other = original.entries.find((entry) => entry.memberId !== own.memberId)!;
+  expect(own).toBeTruthy();
+  expect(other).toBeTruthy();
+  const skillCostLabel = "Cost of summoning 5 skills";
+  const mountCostLabel = "Cost per mount summon";
+  try {
+    const seeded = await request.put("/api/resources", {
+      headers: { Origin: baseURL },
+      data: { week: other.week, memberId: other.memberId,
+        resources: { ...EMPTY_RESOURCES, skillTickets: 150, mountKeys: 18 },
+        summoningCosts: { fiveSkills: 50, mount: 3 }, notes: other.notes },
+    });
+    expect(seeded.ok(), await seeded.text()).toBeTruthy();
+    await page.goto(`/resources?week=${original.week}`);
+    await page.getByLabel("Skill Tickets", { exact: true }).fill("120");
+    await page.getByLabel("Mount Keys", { exact: true }).fill("14");
+    const skillCost = page.getByLabel(skillCostLabel, { exact: true });
+    const mountCost = page.getByLabel(mountCostLabel, { exact: true });
+    for (const input of [skillCost, mountCost]) {
+      for (const invalid of ["-1", "1.5", "1000000001"]) {
+        await input.fill(invalid);
+        expect(await input.evaluate((field: HTMLInputElement) => field.checkValidity())).toBeFalsy();
+      }
+      await input.fill("");
+      await expect(input).toHaveValue("");
+    }
+    await skillCost.pressSequentially("30");
+    await mountCost.pressSequentially("2");
+    await expect(page.locator(".save-bar")).toContainText("Unsaved changes");
+    await page.getByRole("button", { name: "Save resources", exact: true }).click();
+    await expect(page.getByRole("status")).toContainText("resources are saved");
+    await page.reload();
+    await expect(page.getByLabel(skillCostLabel, { exact: true })).toHaveValue("30");
+    await expect(page.getByLabel(mountCostLabel, { exact: true })).toHaveValue("2");
+    const saved = await dashboard(request, original.week);
+    expect(saved.entries.find((entry) => entry.memberId === own.memberId)?.summoningCosts)
+      .toEqual({ fiveSkills: 30, mount: 2 });
+    const baseline = original.entries.filter((entry) => entry.memberId !== own.memberId && entry.memberId !== other.memberId);
+    const baselineSkills = baseline.reduce((sum, entry) => sum + (entry.summoningCosts.fiveSkills > 0
+      ? entry.resources.skillTickets * 5 / entry.summoningCosts.fiveSkills : 0), 0);
+    const baselineMounts = baseline.reduce((sum, entry) => sum + (entry.summoningCosts.mount > 0
+      ? entry.resources.mountKeys / entry.summoningCosts.mount : 0), 0);
+    expect(saved.summons.skills).toBe(Math.round(baselineSkills + 35));
+    expect(saved.summons.mounts).toBe(Math.round(baselineMounts + 13));
+    await page.getByRole("link", { name: "Dashboard", exact: true }).click();
+    const skillCard = page.locator(".stat-card").filter({ hasText: "Skill Tickets" });
+    const mountCard = page.locator(".stat-card").filter({ hasText: "Mount Keys" });
+    await expect(skillCard.locator(".stat-summons")).toContainText("Total skill summons");
+    await expect(skillCard.locator(".summon-total")).toHaveText(new Intl.NumberFormat("en-US").format(saved.summons.skills));
+    await expect(mountCard.locator(".stat-summons")).toContainText("Total mount summons");
+    await expect(mountCard.locator(".summon-total")).toHaveText(new Intl.NumberFormat("en-US").format(saved.summons.mounts));
+    const headers = page.getByRole("table").locator("thead");
+    await expect(headers).not.toContainText(/summon|cost/i);
+    await page.getByRole("link", { name: "My Resources", exact: true }).click();
+    await page.getByLabel(skillCostLabel, { exact: true }).fill("");
+    await page.getByLabel(mountCostLabel, { exact: true }).fill("");
+    await page.getByLabel("Total eggs/pets", { exact: true }).fill("");
+    await page.getByRole("button", { name: "Save resources", exact: true }).click();
+    await expect(page.getByRole("status")).toContainText("resources are saved");
+    const cleared = await dashboard(request, original.week);
+    expect(cleared.entries.find((entry) => entry.memberId === own.memberId)?.summoningCosts).toEqual(EMPTY_SUMMONING_COSTS);
+    expect(cleared.entries.find((entry) => entry.memberId === own.memberId)?.resources.eggsPetsTotal).toBe(0);
+    expect(cleared.summons.skills).toBe(Math.round(baselineSkills + 15));
+    expect(cleared.summons.mounts).toBe(Math.round(baselineMounts + 6));
+    expect(cleared.summons.missingSkillCosts).toBe(saved.summons.missingSkillCosts + 1);
+    expect(cleared.summons.missingMountCosts).toBe(saved.summons.missingMountCosts + 1);
+    await page.reload();
+    await expect(page.getByLabel(skillCostLabel, { exact: true })).toHaveValue("0");
+    await expect(page.getByLabel(mountCostLabel, { exact: true })).toHaveValue("0");
+    await expect(page.getByLabel("Total eggs/pets", { exact: true })).toHaveValue("0");
+    await page.getByRole("link", { name: "Dashboard", exact: true }).click();
+    await expect(skillCard.locator(".summon-warning")).toContainText(String(cleared.summons.missingSkillCosts));
+    await expect(mountCard.locator(".summon-warning")).toContainText(String(cleared.summons.missingMountCosts));
+  } finally {
+    for (const entry of [own, other]) {
+      const restored = await request.put("/api/resources", {
+        headers: { Origin: baseURL },
+        data: { week: entry.week, memberId: entry.memberId, resources: entry.resources,
+          summoningCosts: entry.summoningCosts, notes: entry.notes },
+      });
+      expect(restored.ok(), await restored.text()).toBeTruthy();
+    }
   }
 });
 
@@ -491,8 +604,10 @@ test("mobile dashboard, menu, complete resource form, and week navigation fit th
     .click();
   await page.getByRole("link", { name: "My Resources", exact: true }).click();
   await expect(page.getByLabel("Skill Tickets", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Mythic Eggs", { exact: true })).toHaveCount(1);
-  await expect(page.getByLabel("Mythic Pets", { exact: true })).toHaveCount(1);
+  await expect(page.getByLabel("Total eggs/pets", { exact: true })).toHaveCount(1);
+  await expect(page.locator('input[type="number"]')).toHaveCount(8);
+  await expect(page.getByLabel("Cost of summoning 5 skills", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Cost per mount summon", { exact: true })).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Save resources", exact: true }),
   ).toBeVisible();
@@ -517,6 +632,14 @@ test("mobile dashboard, menu, complete resource form, and week navigation fit th
     path: testInfo.outputPath("mobile-resources.png"),
     fullPage: true,
   });
+  await page.setViewportSize({ width: 320, height: 740 });
+  await noPageOverflow(page);
+  await expect(page.getByLabel("Cost of summoning 5 skills", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Cost per mount summon", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Open navigation", exact: true }).click();
+  await page.getByRole("link", { name: "Dashboard", exact: true }).click();
+  await expect(page.locator(".stat-summons")).toHaveCount(2);
+  await noPageOverflow(page);
   expect(errors).toEqual([]);
 });
 

@@ -20,11 +20,13 @@ CREATE TABLE IF NOT EXISTS resource_entries (
   member_id TEXT NOT NULL REFERENCES app_members(id),
   week_start DATE NOT NULL CHECK (EXTRACT(ISODOW FROM week_start) = 1),
   resources JSONB NOT NULL DEFAULT '{}'::jsonb,
+  summoning_costs JSONB NOT NULL DEFAULT '{}'::jsonb,
   notes TEXT NOT NULL DEFAULT '' CHECK (LENGTH(notes) <= 2000),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_by TEXT NOT NULL REFERENCES app_members(id),
   UNIQUE (member_id, week_start)
 );
+ALTER TABLE resource_entries ADD COLUMN IF NOT EXISTS summoning_costs JSONB NOT NULL DEFAULT '{}'::jsonb;
 CREATE INDEX IF NOT EXISTS entries_week_idx ON resource_entries(week_start);
 CREATE TABLE IF NOT EXISTS auth_sessions (
   token_hash TEXT PRIMARY KEY,

@@ -120,7 +120,7 @@ test("re-login updates a profile without creating a member or changing resources
 test("membership checks refresh nicknames and server avatars, including profile removals", async () => {
   await withDatabase(async (db) => {
     const { member, token } = await sessionFor(db);
-    await saveEntry(member, { week: "2026-10-05", resources: { ...EMPTY_RESOURCES, eggsMythic: 12 }, notes: "Profile sync" }, db);
+    await saveEntry(member, { week: "2026-10-05", resources: { ...EMPTY_RESOURCES, eggsPetsTotal: 12 }, notes: "Profile sync" }, db);
     const renamed = await recheck(db, token, { ...membership("Renamed Knight", user()), avatar: "new_server_avatar" });
     assert.equal(renamed?.username, "Renamed Knight");
     assert.match(renamed!.avatarUrl!, /new_server_avatar\.png/);
@@ -136,7 +136,7 @@ test("membership checks refresh nicknames and server avatars, including profile 
     assert.equal(raw?.avatarUrl, avatarUrl(rawUser));
     assert.equal(raw?.id, member.id);
     assert.equal(raw?.role, "ADMIN");
-    assert.equal((await dashboard(raw!, "2026-10-05", db)).totals.eggsMythic, 12);
+    assert.equal((await dashboard(raw!, "2026-10-05", db)).totals.eggsPetsTotal, 12);
   });
 });
 

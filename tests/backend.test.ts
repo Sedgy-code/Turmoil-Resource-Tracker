@@ -416,7 +416,12 @@ describe("Tracker permissions and persistence", () => {
     assert.deepEqual(result.weeks, []);
   });
   test("members can save only their own entries; admins can edit another member", async () => {
-    const values = { ...EMPTY_RESOURCES, hammers: 40, skillTickets: 100 };
+    const values = {
+      ...EMPTY_RESOURCES,
+      hammers: 40,
+      skillTickets: 100,
+      eggsPetsTotal: 83,
+    };
     await assert.rejects(
       saveEntry(
         member,
@@ -442,7 +447,7 @@ describe("Tracker permissions and persistence", () => {
       {
         week: "2026-10-05",
         memberId: member.id,
-        resources: { ...values, hammers: 42 },
+        resources: { ...values, hammers: 42, eggsPetsTotal: 84 },
         notes: "Admin edit",
       },
       db,
@@ -451,14 +456,17 @@ describe("Tracker permissions and persistence", () => {
     assert.equal(edited.updatedBy.id, admin.id);
     const result = await dashboard(admin, "2026-10-05", db);
     assert.equal(result.totals.hammers, 42);
+    assert.equal(result.totals.eggsPetsTotal, 84);
     assert.equal(result.stats.submittedMembers, 1);
     assert.deepEqual(result.weeks, ["2026-10-05"]);
   });
   test("copy uses the immediately previous week and preserves history", async () => {
     const entry = await copyPreviousEntry(member, { week: "2026-10-12" }, db);
     assert.equal(entry.resources.hammers, 42);
+    assert.equal(entry.resources.eggsPetsTotal, 84);
     assert.equal(entry.notes, "Admin edit");
     assert.equal((await dashboard(admin, "2026-10-05", db)).totals.hammers, 42);
+    assert.equal((await dashboard(admin, "2026-10-05", db)).totals.eggsPetsTotal, 84);
     await assert.rejects(
       copyPreviousEntry(member, { week: "2026-09-28" }, db),
       apiFailure("PREVIOUS_WEEK_EMPTY"),
@@ -524,6 +532,7 @@ describe("Tracker permissions and persistence", () => {
       apiFailure("ACCOUNT_INACTIVE"),
     );
     assert.equal((await dashboard(admin, "2026-10-05", db)).totals.hammers, 0);
+    assert.equal((await dashboard(admin, "2026-10-05", db)).totals.eggsPetsTotal, 0);
     assert.equal(
       (
         await db.query("SELECT id FROM resource_entries WHERE member_id = $1", [

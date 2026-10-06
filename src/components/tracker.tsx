@@ -46,14 +46,16 @@ import {
 } from "lucide-react";
 import {
   EMPTY_RESOURCES,
-  RARITIES,
+  EMPTY_SUMMONING_COSTS,
   RESOURCE_FIELDS,
   currentWeek,
   formatWeek,
   numberFormat,
+  resourceMaximum,
   shiftWeek,
   type ResourceKey,
   type ResourceValues,
+  type SummoningCosts,
 } from "@/lib/resources";
 import type {
   DashboardResponse,
@@ -602,28 +604,65 @@ export default function Tracker({ view }: { view: View }) {
                 </div>
               </div>
               <div className="stat-grid">
-                {essentials.map(({ key, label, icon: StatIcon, color }) => (
-                  <article className="stat-card" key={key}>
-                    <div className="stat-label">
-                      <span className={`resource-icon ${color}`}>
-                        <StatIcon size={20} strokeWidth={1.8} />
+                {essentials.map(({ key, label, icon: StatIcon, color }) => {
+                  const summons =
+                    key === "skillTickets"
+                      ? {
+                          label: "Total skill summons",
+                          total: data.summons?.skills ?? 0,
+                          missing: data.summons?.missingSkillCosts ?? 0,
+                        }
+                      : key === "mountKeys"
+                        ? {
+                            label: "Total mount summons",
+                            total: data.summons?.mounts ?? 0,
+                            missing: data.summons?.missingMountCosts ?? 0,
+                          }
+                        : null;
+                  return (
+                    <article
+                      className={`stat-card ${summons ? "has-summons" : ""}`}
+                      key={key}
+                    >
+                      <div className="stat-label">
+                        <span className={`resource-icon ${color}`}>
+                          <StatIcon size={20} strokeWidth={1.8} />
+                        </span>
+                        <span>{label}</span>
+                      </div>
+                      <strong className="stat-number">
+                        {numberFormat(data.totals[key])}
+                      </strong>
+                      {summons && (
+                        <div className="stat-summons">
+                          <span className="summon-label">{summons.label}</span>
+                          <strong className="summon-total">
+                            {new Intl.NumberFormat("en-US", {
+                              minimumFractionDigits: 0,
+                              maximumFractionDigits: 0,
+                            }).format(summons.total)}
+                          </strong>
+                          <span className="summon-note">
+                            Clan total rounded to a whole number.
+                          </span>
+                          {summons.missing > 0 && (
+                            <p className="summon-warning">
+                              Incomplete: {summons.missing}{" "}
+                              {summons.missing === 1 ? "member" : "members"}{" "}
+                              missing a cost.
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      <span className="stat-foot">
+                        <span />
+                        Ready for the clan
                       </span>
-                      <span>{label}</span>
-                    </div>
-                    <strong className="stat-number">
-                      {numberFormat(data.totals[key])}
-                    </strong>
-                    <span className="stat-foot">
-                      <span />
-                      Ready for the clan
-                    </span>
-                  </article>
-                ))}
+                    </article>
+                  );
+                })}
               </div>
-              <div className="rarity-grid">
-                <RarityCard type="eggs" totals={data.totals} />
-                <RarityCard type="pets" totals={data.totals} />
-              </div>
+              <EggsPetsCard total={data.totals.eggsPetsTotal} />
               <MemberResources
                 data={data}
                 week={week}
@@ -817,49 +856,26 @@ function Login({ configured, error }: { configured: boolean; error: string }) {
   );
 }
 
-function RarityCard({
-  type,
-  totals,
-}: {
-  type: "eggs" | "pets";
-  totals: ResourceValues;
-}) {
-  const Icon = type === "eggs" ? Egg : PawPrint;
-  const sum = RARITIES.reduce(
-    (acc, rarity) => acc + totals[`${type}${rarity}`],
-    0,
-  );
+function EggsPetsCard({ total }: { total: number }) {
   return (
-    <article className="rarity-card">
-      <div className="rarity-heading">
-        <span
-          className={`resource-icon ${type === "eggs" ? "gold" : "purple"}`}
-        >
-          <Icon size={20} />
-        </span>
-        <div>
-          <h3>{type === "eggs" ? "Eggs to Hatch" : "Pets to Merge"}</h3>
-          <p>
-            {type === "eggs"
-              ? "New companions. New possibilities."
-              : "More power in every merge."}
-          </p>
+    <article className="panel eggs-pets-card">
+      <div className="eggs-pets-heading">
+        <div className="eggs-pets-icons" aria-hidden="true">
+          <span className="resource-icon gold">
+            <Egg size={21} />
+          </span>
+          <span className="resource-icon green">
+            <PawPrint size={19} />
+          </span>
         </div>
-        <strong>
-          {numberFormat(sum)}
-          <small>total</small>
-        </strong>
+        <div className="eggs-pets-copy">
+          <h3>Total eggs/pets</h3>
+          <p>All eggs and pets combined across the clan.</p>
+        </div>
       </div>
-      <div className="rarity-values">
-        {RARITIES.map((rarity) => (
-          <div key={rarity}>
-            <span className={`rarity-name ${rarity.toLowerCase()}`}>
-              <i />
-              {rarity}
-            </span>
-            <strong>{numberFormat(totals[`${type}${rarity}`])}</strong>
-          </div>
-        ))}
+      <div className="eggs-pets-total">
+        <strong>{numberFormat(total)}</strong>
+        <span>Ready for the clan</span>
       </div>
     </article>
   );
@@ -937,49 +953,19 @@ function MemberResources({
           <thead>
             <tr>
               <th className="sticky-member">Member</th>
-              <th>
-                <Ticket size={14} />
-                Skill Tickets
-              </th>
-              <th>
-                <Egg size={14} />
-                Eggs <small>all rarities</small>
-              </th>
-              <th>
-                <PawPrint size={14} />
-                Pets <small>all rarities</small>
-              </th>
-              <th>
-                <KeyRound size={14} />
-                Mount Keys
-              </th>
-              <th>Mounts</th>
-              <th>
-                <Hammer size={14} />
-                Hammers
-              </th>
-              <th>
-                <FlaskConical size={14} />
-                Potions
-              </th>
-              {RARITIES.map((r) => (
-                <th key={`e${r}`}>
-                  <span className={`rarity-name ${r.toLowerCase()}`}>
-                    <i />
-                    {r}
-                  </span>
-                  <small>eggs</small>
-                </th>
-              ))}
-              {RARITIES.map((r) => (
-                <th key={`p${r}`}>
-                  <span className={`rarity-name ${r.toLowerCase()}`}>
-                    <i />
-                    {r}
-                  </span>
-                  <small>pets</small>
-                </th>
-              ))}
+              {RESOURCE_FIELDS.map(({ key, label }) => {
+                const FieldIcon =
+                  key === "eggsPetsTotal"
+                    ? Egg
+                    : (essentials.find((field) => field.key === key)?.icon ??
+                      Backpack);
+                return (
+                  <th key={key}>
+                    <FieldIcon size={14} />
+                    {label}
+                  </th>
+                );
+              })}
               <th>Last updated</th>
               <th>Notes</th>
               {admin && <th>Edit</th>}
@@ -1012,32 +998,15 @@ function MemberResources({
                       </div>
                     </div>
                   </td>
-                  <td>{numberFormat(resources.skillTickets)}</td>
-                  <td className="accent-number">
-                    {numberFormat(
-                      RARITIES.reduce(
-                        (acc, r) => acc + resources[`eggs${r}`],
-                        0,
-                      ),
-                    )}
-                  </td>
-                  <td>
-                    {numberFormat(
-                      RARITIES.reduce(
-                        (acc, r) => acc + resources[`pets${r}`],
-                        0,
-                      ),
-                    )}
-                  </td>
-                  <td>{numberFormat(resources.mountKeys)}</td>
-                  <td>{numberFormat(resources.mountsToMerge)}</td>
-                  <td>{numberFormat(resources.hammers)}</td>
-                  <td>{numberFormat(resources.potions)}</td>
-                  {RARITIES.map((r) => (
-                    <td key={`e${r}`}>{numberFormat(resources[`eggs${r}`])}</td>
-                  ))}
-                  {RARITIES.map((r) => (
-                    <td key={`p${r}`}>{numberFormat(resources[`pets${r}`])}</td>
+                  {RESOURCE_FIELDS.map(({ key }) => (
+                    <td
+                      key={key}
+                      className={
+                        key === "eggsPetsTotal" ? "accent-number" : undefined
+                      }
+                    >
+                      {numberFormat(resources[key as ResourceKey])}
+                    </td>
                   ))}
                   <td
                     className="updated-cell"
@@ -1121,6 +1090,7 @@ function ResourceForm({
       : data.currentUser;
   const entry = data.entries.find((item) => item.memberId === selected.id);
   const savedResources = entry?.resources ?? EMPTY_RESOURCES;
+  const savedCosts = entry?.summoningCosts ?? EMPTY_SUMMONING_COSTS;
   const resourceKeys = RESOURCE_FIELDS.map(({ key }) => key as ResourceKey);
   const draftResources = (resources: ResourceValues) =>
     Object.fromEntries(
@@ -1129,15 +1099,28 @@ function ResourceForm({
   const [values, setValues] = useState<Record<ResourceKey, string>>(() =>
     draftResources(savedResources),
   );
+  const [costValues, setCostValues] = useState<
+    Record<keyof SummoningCosts, string>
+  >(() => ({
+    fiveSkills: String(savedCosts.fiveSkills),
+    mount: String(savedCosts.mount),
+  }));
   const [notes, setNotes] = useState(entry?.notes ?? "");
   const [saving, setSaving] = useState(false);
   const [copying, setCopying] = useState(false);
   const [formError, setFormError] = useState("");
   const dirty =
     resourceKeys.some((key) => values[key] !== String(savedResources[key])) ||
+    costValues.fiveSkills !== String(savedCosts.fiveSkills) ||
+    costValues.mount !== String(savedCosts.mount) ||
     notes !== (entry?.notes ?? "");
   useEffect(() => {
     setValues(draftResources(entry?.resources ?? EMPTY_RESOURCES));
+    const costs = entry?.summoningCosts ?? EMPTY_SUMMONING_COSTS;
+    setCostValues({
+      fiveSkills: String(costs.fiveSkills),
+      mount: String(costs.mount),
+    });
     setNotes(entry?.notes ?? "");
     setFormError("");
   }, [selected.id, week, entry]);
@@ -1156,12 +1139,29 @@ function ResourceForm({
         values[key].trim() === "" ? 0 : Number(values[key]),
       ]),
     ) as ResourceValues;
+    const summoningCosts: SummoningCosts = {
+      fiveSkills:
+        costValues.fiveSkills.trim() === "" ? 0 : Number(costValues.fiveSkills),
+      mount: costValues.mount.trim() === "" ? 0 : Number(costValues.mount),
+    };
+    const invalidResource = RESOURCE_FIELDS.find(({ key }) => {
+      const value = resources[key as ResourceKey];
+      return (
+        !Number.isInteger(value) ||
+        value < 0 ||
+        value > resourceMaximum(key as ResourceKey)
+      );
+    });
+    if (invalidResource) {
+      setFormError(
+        `${invalidResource.label}: enter a whole number between 0 and ${numberFormat(resourceMaximum(invalidResource.key as ResourceKey))}.`,
+      );
+      return;
+    }
     if (
-      resourceKeys.some(
-        (key) =>
-          !Number.isInteger(resources[key]) ||
-          resources[key] < 0 ||
-          resources[key] > 1_000_000_000,
+      Object.values(summoningCosts).some(
+        (value) =>
+          !Number.isInteger(value) || value < 0 || value > 1_000_000_000,
       )
     ) {
       setFormError("Enter whole numbers between 0 and 1,000,000,000.");
@@ -1176,6 +1176,7 @@ function ResourceForm({
           week,
           memberId: selected.id,
           resources,
+          summoningCosts,
           notes,
         }),
       });
@@ -1193,7 +1194,7 @@ function ResourceForm({
     if (
       (dirty || entry) &&
       !window.confirm(
-        "Replace this form with your previous week’s resources? This will also save the copied entry for this week.",
+        "Replace this form with your previous week’s resources and summoning costs? This will also save the copied entry for this week.",
       )
     )
       return;
@@ -1300,63 +1301,89 @@ function ResourceForm({
           The essentials
         </h3>
         <div className="essential-inputs">
-          {essentials.map(({ key, label, icon: InputIcon, color }) => (
-            <label key={key}>
-              <span>
-                <InputIcon size={15} />
-                {label}
-              </span>
-              <div className={`number-input ${color}`}>
-                <input
-                  aria-label={label}
-                  type="number"
-                  inputMode="numeric"
-                  min="0"
-                  max="1000000000"
-                  step="1"
-                  value={values[key]}
-                  onChange={(e) => update(key, e.target.value)}
-                />
+          {essentials.map(({ key, label, icon: InputIcon, color }) => {
+            const costField =
+              key === "skillTickets"
+                ? {
+                    key: "fiveSkills" as const,
+                    label: "Cost of summoning 5 skills",
+                  }
+                : key === "mountKeys"
+                  ? {
+                      key: "mount" as const,
+                      label: "Cost per mount summon",
+                    }
+                  : null;
+            return (
+              <div className="essential-field" key={key}>
+                <label>
+                  <span>
+                    <InputIcon size={15} />
+                    {label}
+                  </span>
+                  <div className={`number-input ${color}`}>
+                    <input
+                      aria-label={label}
+                      type="number"
+                      inputMode="numeric"
+                      min="0"
+                      max={resourceMaximum(key)}
+                      step="1"
+                      value={values[key]}
+                      onChange={(e) => update(key, e.target.value)}
+                    />
+                  </div>
+                </label>
+                {costField && (
+                  <label className="summoning-cost-field">
+                    <span>{costField.label}</span>
+                    <input
+                      aria-label={costField.label}
+                      aria-describedby={`summoning-cost-help-${costField.key}`}
+                      type="number"
+                      inputMode="numeric"
+                      min="0"
+                      max="1000000000"
+                      step="1"
+                      value={costValues[costField.key]}
+                      onChange={(e) =>
+                        setCostValues((existing) => ({
+                          ...existing,
+                          [costField.key]: e.target.value,
+                        }))
+                      }
+                    />
+                    <small id={`summoning-cost-help-${costField.key}`}>
+                      Whole numbers only. Blank saves as 0.
+                    </small>
+                  </label>
+                )}
               </div>
-            </label>
-          ))}
+            );
+          })}
         </div>
       </section>
-      <div className="form-rarity-grid">
-        {(["eggs", "pets"] as const).map((type) => (
-          <section className="panel form-section" key={type}>
-            <h3>
-              {type === "eggs" ? <Egg size={19} /> : <PawPrint size={19} />}
-              {type === "eggs" ? "Eggs to Hatch" : "Pets to Merge"}
-            </h3>
-            <p className="form-section-subtitle">
-              {type === "eggs"
-                ? "Companions waiting to be discovered."
-                : "Companions ready for their next evolution."}
-            </p>
-            <div className="rarity-inputs">
-              {RARITIES.map((rarity) => (
-                <label key={rarity}>
-                  <span className={`rarity-name ${rarity.toLowerCase()}`}>
-                    <i />
-                    {rarity}
-                  </span>
-                  <input
-                    aria-label={`${rarity} ${type === "eggs" ? "Eggs" : "Pets"}`}
-                    type="number"
-                    inputMode="numeric"
-                    min="0"
-                    max="1000000000"
-                    step="1"
-                    value={values[`${type}${rarity}`]}
-                    onChange={(e) => update(`${type}${rarity}`, e.target.value)}
-                  />
-                </label>
-              ))}
-            </div>
-          </section>
-        ))}
-      </div>
+      <section className="panel form-section eggs-pets-form">
+        <h3>
+          <Egg size={19} />Eggs and pets
+        </h3>
+        <p className="form-section-subtitle">
+          Enter one combined count for all your eggs and pets.
+        </p>
+        <label className="eggs-pets-input">
+          <span>Total eggs/pets</span>
+          <input
+            aria-label="Total eggs/pets"
+            type="number"
+            inputMode="numeric"
+            min="0"
+            max={resourceMaximum("eggsPetsTotal")}
+            step="1"
+            value={values.eggsPetsTotal}
+            onChange={(e) => update("eggsPetsTotal", e.target.value)}
+          />
+        </label>
+      </section>
       <section className="panel form-section">
         <h3>
           <Clipboard size={19} />A note for the clan{" "}
@@ -1763,10 +1790,7 @@ function DashboardSkeleton() {
           <div className="skeleton skeleton-stat" key={item.key} />
         ))}
       </div>
-      <div className="rarity-grid">
-        <div className="skeleton skeleton-rarity" />
-        <div className="skeleton skeleton-rarity" />
-      </div>
+      <div className="skeleton skeleton-eggs-pets" />
     </div>
   );
 }

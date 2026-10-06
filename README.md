@@ -9,6 +9,8 @@ To host it for your clan, follow the [beginner hosting guide](HOSTING-GUIDE.md) 
 - Discord-only authentication with a configurable server membership requirement and optional required role.
 - Weekly personal entries with instant save confirmation, notes, and a copy-from-previous-week action.
 - Clan totals, a detailed member table, historical weeks, CSV export, and copy-to-clipboard.
+- One combined Total eggs/pets quantity, with existing egg and pet rarity entries carried forward automatically.
+- Weekly personal summoning costs, with whole-number skill and mount summon totals calculated per member.
 - Admin tools to edit any member's entry, promote or demote admins, and deactivate or reactivate members.
 - Turmoil server nicknames and server avatars, last updated timestamps, and the identity of the member who last edited an entry.
 - Persistent PostgreSQL storage in production, with a durable local PGlite database for development.
@@ -105,21 +107,27 @@ For manual database initialization, run the idempotent migration:
 npm run db:migrate
 ```
 
-Database initialization also runs on first application access. Migrations create the application's tables and constraints and add profile columns to existing member tables without resetting data. The configured PostgreSQL role needs permission to create and alter these tables and indexes because initialization also runs at application startup. The migration uses the same database configuration as the app.
+Database initialization also runs on first application access. Migrations create the application's tables and constraints, add profile columns to existing member tables, and add weekly summoning costs to existing resource entries without resetting data. The configured PostgreSQL role needs permission to create and alter these tables and indexes because initialization also runs at application startup. The migration uses the same database configuration as the app.
 
 The schema has three tables:
 
 | Table | Stored data |
 | --- | --- |
 | `app_members` | Unique Discord user ID, raw account username, displayed clan name/avatar, global name/avatar fallbacks, Admin/Member role, active status, join time, and most recent resource update time. |
-| `resource_entries` | One entry per member and week, resource quantities in a JSONB object, optional notes, last update time, and the member who last edited it. |
+| `resource_entries` | One entry per member and week, resource quantities in `resources` JSONB, personal skill/mount costs in `summoning_costs` JSONB, optional notes, last update time, and the member who last edited it. |
 | `auth_sessions` | Session-token hashes, member association, expiration, encrypted Discord OAuth tokens, and membership-check timestamps. |
 
-Weeks start on **Monday at 00:00 UTC** and are stored using the Monday's `YYYY-MM-DD` date. Each entry contains Skill Tickets; Common, Rare, Epic, Legendary, Ultimate, and Mythic Eggs to Hatch; the same six Pets to Merge rarities; Mount Keys; Mounts to Merge; Hammers; and Potions. All quantities are nonnegative whole numbers and default to zero. Input boxes can be cleared while typing; saving an empty box stores zero. A uniqueness constraint keeps one entry per member per week. Saving an existing entry updates it.
+Weeks start on **Monday at 00:00 UTC** and are stored using the Monday's `YYYY-MM-DD` date. Each entry contains Skill Tickets, **Total eggs/pets**, Mount Keys, Mounts to Merge, Hammers, and Potions. Total eggs/pets combines all eggs to hatch and pets to merge into one quantity. Existing entries that stored twelve separate egg and pet rarity quantities are automatically added together when read; their other resources, costs, notes, and timestamps are preserved. An explicitly saved combined value, including zero, takes precedence over older rarity fields. All quantities are nonnegative whole numbers and default to zero. Input boxes can be cleared while typing; saving an empty box stores zero. A uniqueness constraint keeps one entry per member per week. Saving an existing entry updates it.
 
 Members can edit only their own entries; admins can edit any active member's entry. The database preserves historical weeks. Clan totals sum active members' saved quantities for the selected week, and members with no submission contribute zero. Export and clipboard actions apply to the currently selected week.
 
-Choose a week, open **My Resources**, enter quantities, and select **Save resources** to persist the entry and update the clan totals. **Copy previous week** copies quantities and notes from the immediately preceding week and saves them in the selected week; it replaces any existing selected-week entry after confirmation. The **Weeks** view includes saved weeks, the current week, and your selected week. The date picker can open a week with no entry yet.
+Choose a week, open **My Resources**, enter quantities, and select **Save resources** to persist the entry and update the clan totals. Enter **Cost of summoning 5 skills** beneath Skill Tickets and **Cost per mount summon** beneath Mount Keys. Both costs accept whole numbers from 0 to 1,000,000,000; blanks save as zero. Costs belong to that member's selected week. Existing historical entries default to zero costs until edited.
+
+The Skill Tickets and Mount Keys dashboard cards include **Total skill summons** and **Total mount summons**. For each active member with a saved entry and a positive cost, skill summons are `skillTickets / fiveSkillsCost × 5` and mount summons are `mountKeys / mountCost`. The tracker adds everyone's exact results first, then rounds each clan total to the nearest whole number; a final `.5` rounds up. For example, members with 10 tickets at a cost of 3 and 5 tickets at a cost of 2 contribute approximately 16.667 and 12.5 skill summons, totaling approximately 29.167, displayed as **29**. The dashboard, member contributions table, CSV, and clipboard export use the same six resource quantities, including the combined Total eggs/pets. Summoning costs and calculated summon totals appear outside the member table and inventory exports.
+
+A blank or zero cost contributes zero summons for that resource, while the member's saved tickets and keys still count in the inventory totals. Each affected card shows how many members have positive inventory but a missing cost, so the clan knows its summon count is incomplete. Members with zero corresponding inventory or no saved entry do not trigger that notice. Submissions from older clients that omit the entire `summoningCosts` field preserve an entry's stored costs; explicitly submitting zero costs clears them.
+
+**Copy previous week** copies quantities, both summoning costs, and notes from the immediately preceding week and saves them in the selected week; it replaces any existing selected-week entry after confirmation. The **Weeks** view includes saved weeks, the current week, and your selected week. The date picker can open a week with no entry yet.
 
 ## Deploy to Vercel
 
@@ -145,7 +153,7 @@ npm run build
 
 `npm run dev` starts the development server. `npm run start` serves a production build. `npm run db:migrate` initializes the configured database. Real Discord login requires an OAuth application and an authorized Discord account; local demo checks do not substitute for that integration check.
 
-The browser suite covers desktop and mobile layouts, resource persistence, copying a previous week, totals, CSV export, and admin changes. Start the demo server in one terminal:
+The browser suite covers desktop and mobile layouts, resource and summoning-cost persistence, blank inputs, copying a previous week, per-member summon totals and missing-cost notices, CSV export, and admin changes. Start the demo server in one terminal:
 
 ```bash
 DEMO_MODE=true npm run dev

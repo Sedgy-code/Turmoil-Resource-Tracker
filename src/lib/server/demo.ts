@@ -64,18 +64,9 @@ export async function seedDemo(): Promise<void> {
             const values: ResourceValues = {
               ...EMPTY_RESOURCES,
               skillTickets: Math.floor((2100 + (index % 5) * 640) * multiplier),
-              eggsCommon: Math.floor(180 * multiplier),
-              eggsRare: Math.floor(68 * multiplier),
-              eggsEpic: Math.floor(34 * multiplier),
-              eggsLegendary: Math.floor(15 * multiplier),
-              eggsUltimate: Math.floor(5 * multiplier),
-              eggsMythic: Math.floor(2 * multiplier),
-              petsCommon: Math.floor(34 * multiplier),
-              petsRare: Math.floor(18 * multiplier),
-              petsEpic: Math.floor(9 * multiplier),
-              petsLegendary: Math.floor(5 * multiplier),
-              petsUltimate: index % 3,
-              petsMythic: index % 2,
+              eggsPetsTotal:
+                [180, 68, 34, 15, 5, 2, 34, 18, 9, 5].reduce((total, amount) => total + Math.floor(amount * multiplier), 0)
+                + index % 3 + index % 2,
               mountKeys: Math.floor(126 * multiplier),
               mountsToMerge: Math.floor(12 * multiplier),
               hammers: Math.floor(1240 * multiplier),

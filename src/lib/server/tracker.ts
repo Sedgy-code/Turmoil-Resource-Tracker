@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { EMPTY_RESOURCES, shiftWeek, type ResourceValues } from "../resources";
+import { EMPTY_RESOURCES, shiftWeek, type ResourceValues, type SummoningCosts } from "../resources";
 import type { DashboardResponse, Member, ResourceEntry } from "../types";
 import {
   database,
@@ -56,13 +56,14 @@ async function writeEntry(
   week: string,
   resources: ResourceValues,
   notes: string,
+  summoningCosts?: SummoningCosts,
 ): Promise<ResourceEntry> {
   const rows = await tx.query(
-    `INSERT INTO resource_entries (id,member_id,week_start,resources,notes,updated_by)
-    VALUES ($1,$2,$3,$4::jsonb,$5,$6)
-    ON CONFLICT (member_id,week_start) DO UPDATE SET resources = EXCLUDED.resources, notes = EXCLUDED.notes, updated_at = NOW(), updated_by = EXCLUDED.updated_by
+    `INSERT INTO resource_entries (id,member_id,week_start,resources,notes,updated_by,summoning_costs)
+    VALUES ($1,$2,$3,$4::jsonb,$5,$6,COALESCE($7::jsonb, '{}'::jsonb))
+    ON CONFLICT (member_id,week_start) DO UPDATE SET resources = EXCLUDED.resources, notes = EXCLUDED.notes, summoning_costs = COALESCE($7::jsonb, resource_entries.summoning_costs), updated_at = NOW(), updated_by = EXCLUDED.updated_by
     RETURNING *`,
-    [randomUUID(), memberId, week, JSON.stringify(resources), notes, actor.id],
+    [randomUUID(), memberId, week, JSON.stringify(resources), notes, actor.id, summoningCosts === undefined ? null : JSON.stringify(summoningCosts)],
   );
   await tx.query(
     "UPDATE app_members SET last_updated_at = NOW() WHERE id = $1",
@@ -77,6 +78,7 @@ export async function saveEntry(
     week: string;
     memberId?: string;
     resources: ResourceValues;
+    summoningCosts?: SummoningCosts;
     notes: string;
   },
   db?: Database,
@@ -94,6 +96,7 @@ export async function saveEntry(
       input.week,
       input.resources,
       input.notes,
+      input.summoningCosts,
     );
   });
 }
@@ -127,6 +130,7 @@ export async function copyPreviousEntry(
       input.week,
       entry.resources,
       entry.notes,
+      entry.summoningCosts,
     );
   });
 }
@@ -216,15 +220,30 @@ export async function dashboard(
   const members = memberRows.map(memberFromRow);
   const entries = entryRows.map(entryFromRow);
   const totals = { ...EMPTY_RESOURCES };
-  for (const entry of entries)
+  const summons = { skills: 0, mounts: 0, missingSkillCosts: 0, missingMountCosts: 0 };
+  for (const entry of entries) {
     for (const key of Object.keys(totals) as (keyof ResourceValues)[])
       totals[key] += entry.resources[key];
+    if (entry.summoningCosts.fiveSkills > 0) {
+      summons.skills += (entry.resources.skillTickets * 5) / entry.summoningCosts.fiveSkills;
+    } else if (entry.resources.skillTickets > 0) {
+      summons.missingSkillCosts++;
+    }
+    if (entry.summoningCosts.mount > 0) {
+      summons.mounts += entry.resources.mountKeys / entry.summoningCosts.mount;
+    } else if (entry.resources.mountKeys > 0) {
+      summons.missingMountCosts++;
+    }
+  }
+  summons.skills = Math.round(summons.skills);
+  summons.mounts = Math.round(summons.mounts);
   return {
     week,
     currentUser: actor,
     members,
     entries,
     totals,
+    summons,
     stats: {
       totalMembers: members.length,
       submittedMembers: entries.length,

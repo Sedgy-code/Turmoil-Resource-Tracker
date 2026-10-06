@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { RESOURCE_FIELDS, type ResourceValues } from "../resources";
+import { LEGACY_EGGS_PETS_KEYS, RESOURCE_FIELDS, normalizeResources, resourceMaximum } from "../resources";
 
 export const weekSchema = z.string().refine((value) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -16,20 +16,34 @@ export const weekSchema = z.string().refine((value) => {
 export const resourceSchema = z
   .object(
     Object.fromEntries(
-      RESOURCE_FIELDS.map(({ key }) => [
-        key,
-        z.number().int().min(0).max(1_000_000_000).default(0),
-      ]),
+      [
+        ...RESOURCE_FIELDS.map(({ key }) => [
+          key,
+          key === "eggsPetsTotal"
+            ? z.number().int().min(0).max(resourceMaximum(key)).optional()
+            : z.number().int().min(0).max(resourceMaximum(key)).default(0),
+        ]),
+        ...LEGACY_EGGS_PETS_KEYS.map((key) => [
+          key,
+          z.number().int().min(0).max(1_000_000_000).optional(),
+        ]),
+      ],
     ),
   )
   .strict()
-  .transform((value) => value as ResourceValues);
+  .transform(normalizeResources);
+
+export const summoningCostsSchema = z.object({
+  fiveSkills: z.number().int().min(0).max(1_000_000_000).default(0),
+  mount: z.number().int().min(0).max(1_000_000_000).default(0),
+}).strict();
 
 export const saveResourcesSchema = z
   .object({
     week: weekSchema,
     memberId: z.string().uuid().optional(),
     resources: resourceSchema,
+    summoningCosts: summoningCostsSchema.optional(),
     notes: z.string().trim().max(2000).default(""),
   })
   .strict();

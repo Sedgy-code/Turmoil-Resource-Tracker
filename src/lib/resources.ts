@@ -8,16 +8,7 @@ export const RARITIES = [
 ] as const;
 export const RESOURCE_FIELDS = [
   { key: "skillTickets", label: "Skill Tickets", category: "essentials" },
-  ...RARITIES.map((rarity) => ({
-    key: `eggs${rarity}`,
-    label: `${rarity} Eggs`,
-    category: "eggs",
-  })),
-  ...RARITIES.map((rarity) => ({
-    key: `pets${rarity}`,
-    label: `${rarity} Pets`,
-    category: "pets",
-  })),
+  { key: "eggsPetsTotal", label: "Total eggs/pets", category: "essentials" },
   { key: "mountKeys", label: "Mount Keys", category: "essentials" },
   { key: "mountsToMerge", label: "Mounts to Merge", category: "essentials" },
   { key: "hammers", label: "Hammers", category: "essentials" },
@@ -25,16 +16,44 @@ export const RESOURCE_FIELDS = [
 ] as const;
 export type ResourceKey =
   | "skillTickets"
-  | `eggs${(typeof RARITIES)[number]}`
-  | `pets${(typeof RARITIES)[number]}`
+  | "eggsPetsTotal"
   | "mountKeys"
   | "mountsToMerge"
   | "hammers"
   | "potions";
 export type ResourceValues = Record<ResourceKey, number>;
+export interface SummoningCosts {
+  fiveSkills: number;
+  mount: number;
+}
+export const EMPTY_SUMMONING_COSTS: SummoningCosts = { fiveSkills: 0, mount: 0 };
 export const EMPTY_RESOURCES = Object.fromEntries(
   RESOURCE_FIELDS.map(({ key }) => [key, 0]),
 ) as ResourceValues;
+type LegacyEggsPetsKey = `eggs${(typeof RARITIES)[number]}` | `pets${(typeof RARITIES)[number]}`;
+export const LEGACY_EGGS_PETS_KEYS = RARITIES.flatMap((rarity) => [
+  `eggs${rarity}`,
+  `pets${rarity}`,
+]) as LegacyEggsPetsKey[];
+export function resourceMaximum(key: ResourceKey): number {
+  return key === "eggsPetsTotal" ? 12_000_000_000 : 1_000_000_000;
+}
+export function normalizeResources(value: unknown): ResourceValues {
+  const stored = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  const numeric = (key: string): number => typeof stored[key] === "number" && Number.isFinite(stored[key]) ? stored[key] : 0;
+  const normalized = { ...EMPTY_RESOURCES };
+  for (const { key } of RESOURCE_FIELDS) {
+    normalized[key] = numeric(key);
+  }
+  // An explicit zero is authoritative; only legacy rows lacking a numeric
+  // combined field derive their total from the former rarity counts.
+  if (typeof stored.eggsPetsTotal !== "number" || !Number.isFinite(stored.eggsPetsTotal)) {
+    normalized.eggsPetsTotal = LEGACY_EGGS_PETS_KEYS.reduce((total, key) => total + numeric(key), 0);
+  }
+  return normalized;
+}
 export const numberFormat = (value: number) =>
   new Intl.NumberFormat("en-US").format(value);
 export function currentWeek(date = new Date()): string {

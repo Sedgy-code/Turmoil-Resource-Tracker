@@ -105,6 +105,10 @@ Follow the steps in order. Keep the Vercel, Neon, and Discord pages open in sepa
 
 The tracker uses each member's Turmoil server nickname and server avatar when available, with their global Discord profile as the fallback. Existing members pick up this profile when they next sign in or when their membership is rechecked while using the tracker (after five minutes). To refresh it immediately, sign out and sign in again. Resource boxes can be cleared while typing, and an empty box saves as zero.
 
+In **My Resources**, members can also enter **Cost of summoning 5 skills** beneath Skill Tickets and **Cost per mount summon** beneath Mount Keys. Use whole numbers; leaving either box blank saves zero. The dashboard adds each member's exact skill and mount summon calculations, then rounds the clan totals to the nearest whole number. If someone has tickets or keys but leaves the matching cost at zero, the card shows a missing-cost notice. These costs are saved for the selected week and included when you copy the previous week. Existing resources stay saved when this feature is deployed; there are no new environment variables to enter.
+
+Eggs and pets use one field called **Total eggs/pets**. Add all your eggs to hatch and pets to merge together and enter that number. The dashboard and member table use the same combined total. Previously saved rarity quantities are added together automatically, so members do not have to re-enter their old weeks.
+
 If you hit a problem, use these checks and then redeploy after correcting environment settings:
 
 | What you see | What to check |

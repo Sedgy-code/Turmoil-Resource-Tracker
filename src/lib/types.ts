@@ -1,4 +1,4 @@
-import type { ResourceValues } from "./resources";
+import type { ResourceValues, SummoningCosts } from "./resources";
 
 export type MemberRole = "ADMIN" | "MEMBER";
 
@@ -19,6 +19,7 @@ export interface ResourceEntry {
   memberId: string;
   week: string;
   resources: ResourceValues;
+  summoningCosts: SummoningCosts;
   notes: string;
   updatedAt: string;
   updatedBy: { id: string; username: string };
@@ -37,6 +38,12 @@ export interface DashboardResponse {
   members: Member[];
   entries: ResourceEntry[];
   totals: ResourceValues;
+  summons: {
+    skills: number;
+    mounts: number;
+    missingSkillCosts: number;
+    missingMountCosts: number;
+  };
   stats: {
     totalMembers: number;
     submittedMembers: number;
