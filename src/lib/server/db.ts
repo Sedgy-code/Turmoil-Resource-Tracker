@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
-import { Pool, type PoolClient } from "pg";
+import { Pool, types as pgTypes, type CustomTypesConfig, type PoolClient } from "pg";
 import { PGlite } from "@electric-sql/pglite";
 import { ApiError } from "./errors";
 import { isDemo } from "./config";
@@ -17,6 +17,17 @@ export interface Database extends SqlConnection {
   close(): Promise<void>;
   dialect: "postgres" | "pglite";
 }
+
+export const postgresTypes: CustomTypesConfig = {
+  getTypeParser(oid, format) {
+    // SQL DATE is a calendar date, not local midnight. Preserve Monday weeks in
+    // every host timezone while retaining pg's normal TIMESTAMPTZ parsing.
+    if (oid === pgTypes.builtins.DATE && format !== "binary") {
+      return (value: string) => value;
+    }
+    return pgTypes.getTypeParser(oid, format);
+  },
+};
 
 function pgConnection(client: Pool | PoolClient): SqlConnection {
   return {
@@ -37,6 +48,7 @@ export async function openDatabase(
       connectionString: options.url,
       max: 5,
       connectionTimeoutMillis: 10000,
+      types: postgresTypes,
     });
     const connection = pgConnection(pool);
     return {

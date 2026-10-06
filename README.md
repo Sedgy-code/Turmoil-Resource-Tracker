@@ -2,6 +2,8 @@
 
 A responsive, browser-based resource tracker for the Turmoil Forge Masters clan. Members sign in with Discord, record their weekly resources, and see the clan's combined inventory. The dark interface works on phones, tablets, and desktops; no native app is required.
 
+To host it for your clan, follow the [beginner hosting guide](HOSTING-GUIDE.md) for Vercel, Neon, and Discord. It includes Windows-friendly secret generation and the exact settings to enter.
+
 ## Features
 
 - Discord-only authentication with a configurable server membership requirement and optional required role.
@@ -88,7 +90,7 @@ Use a persistent secret across deployments. Rotating it invalidates encrypted Di
 
 Production uses a standard PostgreSQL connection and works with providers such as Neon, Supabase Postgres, or another managed PostgreSQL service. Provide the provider-supported connection URL and TLS settings; keep certificate verification enabled. Supabase's PostgreSQL connection URL is used directly—the app does not require a Supabase browser key or Supabase Auth.
 
-Run the idempotent migration explicitly when provisioning a database:
+For manual database initialization, run the idempotent migration:
 
 ```bash
 npm run db:migrate
@@ -116,7 +118,7 @@ Choose a week, open **My Resources**, enter quantities, and select **Save resour
 2. Import this repository into Vercel. Use the **Next.js** preset, Node.js 22 or 24, `npm ci` for installation, and `npm run build` for the build.
 3. Add the production environment variables from the table above. Set `DATABASE_URL`, a strong `AUTH_SECRET`, the Discord client/server settings, and `DEMO_MODE=false`. Set the optional role and initial-admin IDs as appropriate.
 4. Choose the production hostname and set `APP_URL` to its HTTPS origin. Add the corresponding full `/api/auth/callback` URL to the Discord application. Repeat these settings if you add a custom domain.
-5. From a trusted environment with the same database configuration, run `npm run db:migrate`. Protect connection credentials; do not paste them into source code or build commands.
+5. The app initializes its tables automatically on first database access. For optional manual initialization, run `npm run db:migrate` from a trusted environment with the same database configuration. Protect connection credentials; do not paste them into source code or build commands.
 6. Deploy. Open the application in a browser and log in as the designated initial admin, or let the first approved member establish the Admin account when no ID is designated.
 7. Verify that a second clan member can save a weekly entry and that the dashboard shows its quantities. Verify that a Discord account outside the configured server is denied.
 
