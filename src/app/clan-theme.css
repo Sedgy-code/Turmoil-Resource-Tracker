@@ -280,7 +280,8 @@ body {
 .stat-foot > span {
   background: var(--emerald);
 }
-.stat-summons {
+.stat-summons,
+.stat-war-points {
   display: flex;
   flex-direction: column;
   gap: 5px;
@@ -288,12 +289,14 @@ body {
   padding: 11px 0 5px;
   border-top: 1px solid #b4974933;
 }
-.summon-label {
+.summon-label,
+.war-points-label {
   color: #c6d5ca;
   font-size: 11px;
   line-height: 1.45;
 }
-.summon-total {
+.summon-total,
+.war-points-total {
   color: var(--gold);
   font-family: var(--heading);
   font-size: 21px;
@@ -303,12 +306,14 @@ body {
   overflow-wrap: anywhere;
 }
 .summon-note,
+.war-points-note,
 .summon-warning {
   font-size: 10px;
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
-.summon-note {
+.summon-note,
+.war-points-note {
   color: var(--muted);
 }
 .summon-warning {
@@ -787,10 +792,12 @@ body {
   .essential-inputs > .essential-field:last-child {
     grid-column: 1 / -1;
   }
-  .stat-card.has-summons {
+  .stat-card.has-summons,
+  .stat-card.has-war-points {
     min-height: 245px;
   }
-  .summon-total {
+  .summon-total,
+  .war-points-total {
     font-size: 20px;
   }
   .summoning-cost-field small {

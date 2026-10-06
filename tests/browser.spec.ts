@@ -208,6 +208,14 @@ test("desktop resources persist, copy from history, update totals, and export co
     ).toHaveText(
       new Intl.NumberFormat("en-US").format(copied.totals.skillTickets),
     );
+    await expect(
+      page.locator(".stat-card").filter({ hasText: "Skill Tickets" })
+        .locator(".war-points-total"),
+    ).toHaveText(new Intl.NumberFormat("en-US").format(copied.summons.skills * 225));
+    await expect(
+      page.locator(".stat-card").filter({ hasText: "Mounts to Merge" })
+        .locator(".war-points-total"),
+    ).toHaveText(new Intl.NumberFormat("en-US").format(copied.totals.mountsToMerge * 1_080));
     const downloadPromise = page.waitForEvent("download");
     await page.getByRole("button", { name: "Export CSV", exact: true }).click();
     const download = await downloadPromise;
@@ -336,7 +344,7 @@ test("resource fields can be cleared, typed without a leading zero, and saved bl
   }
 });
 
-test("weekly summoning costs persist, give per-member totals, and blank costs save as zero", async ({ page, request }) => {
+test("weekly summoning costs persist, are required, and accept explicit zero", async ({ page, request }) => {
   await demoSession(request);
   const original = await dashboard(request);
   const own = original.entries.find((entry) => entry.memberId === original.currentUser.id)!;
@@ -345,6 +353,10 @@ test("weekly summoning costs persist, give per-member totals, and blank costs sa
   expect(other).toBeTruthy();
   const skillCostLabel = "Cost of summoning 5 skills";
   const mountCostLabel = "Cost per mount summon";
+  let costSaves = 0;
+  page.on("request", (outgoing) => {
+    if (new URL(outgoing.url()).pathname === "/api/resources" && outgoing.method() === "PUT") costSaves++;
+  });
   try {
     const seeded = await request.put("/api/resources", {
       headers: { Origin: baseURL },
@@ -359,18 +371,21 @@ test("weekly summoning costs persist, give per-member totals, and blank costs sa
     const skillCost = page.getByLabel(skillCostLabel, { exact: true });
     const mountCost = page.getByLabel(mountCostLabel, { exact: true });
     for (const input of [skillCost, mountCost]) {
+      await expect(input).toHaveAttribute("required", "");
       for (const invalid of ["-1", "1.5", "1000000001"]) {
         await input.fill(invalid);
         expect(await input.evaluate((field: HTMLInputElement) => field.checkValidity())).toBeFalsy();
       }
       await input.fill("");
       await expect(input).toHaveValue("");
+      expect(await input.evaluate((field: HTMLInputElement) => field.checkValidity())).toBeFalsy();
     }
     await skillCost.pressSequentially("30");
     await mountCost.pressSequentially("2");
     await expect(page.locator(".save-bar")).toContainText("Unsaved changes");
     await page.getByRole("button", { name: "Save resources", exact: true }).click();
     await expect(page.getByRole("status")).toContainText("resources are saved");
+    expect(costSaves).toBe(1);
     await page.reload();
     await expect(page.getByLabel(skillCostLabel, { exact: true })).toHaveValue("30");
     await expect(page.getByLabel(mountCostLabel, { exact: true })).toHaveValue("2");
@@ -389,6 +404,7 @@ test("weekly summoning costs persist, give per-member totals, and blank costs sa
     const mountCard = page.locator(".stat-card").filter({ hasText: "Mount Keys" });
     await expect(skillCard.locator(".stat-summons")).toContainText("Total skill summons");
     await expect(skillCard.locator(".summon-total")).toHaveText(new Intl.NumberFormat("en-US").format(saved.summons.skills));
+    await expect(skillCard.locator(".war-points-total")).toHaveText(new Intl.NumberFormat("en-US").format(saved.summons.skills * 225));
     await expect(mountCard.locator(".stat-summons")).toContainText("Total mount summons");
     await expect(mountCard.locator(".summon-total")).toHaveText(new Intl.NumberFormat("en-US").format(saved.summons.mounts));
     const headers = page.getByRole("table").locator("thead");
@@ -398,7 +414,16 @@ test("weekly summoning costs persist, give per-member totals, and blank costs sa
     await page.getByLabel(mountCostLabel, { exact: true }).fill("");
     await page.getByLabel("Total eggs/pets", { exact: true }).fill("");
     await page.getByRole("button", { name: "Save resources", exact: true }).click();
+    await expect(page.getByLabel(skillCostLabel, { exact: true })).toBeFocused();
+    expect(costSaves).toBe(1);
+    const blocked = await dashboard(request, original.week);
+    expect(blocked.entries.find((entry) => entry.memberId === own.memberId)?.summoningCosts)
+      .toEqual({ fiveSkills: 30, mount: 2 });
+    await page.getByLabel(skillCostLabel, { exact: true }).fill("0");
+    await page.getByLabel(mountCostLabel, { exact: true }).fill("0");
+    await page.getByRole("button", { name: "Save resources", exact: true }).click();
     await expect(page.getByRole("status")).toContainText("resources are saved");
+    expect(costSaves).toBe(2);
     const cleared = await dashboard(request, original.week);
     expect(cleared.entries.find((entry) => entry.memberId === own.memberId)?.summoningCosts).toEqual(EMPTY_SUMMONING_COSTS);
     expect(cleared.entries.find((entry) => entry.memberId === own.memberId)?.resources.eggsPetsTotal).toBe(0);
@@ -412,6 +437,7 @@ test("weekly summoning costs persist, give per-member totals, and blank costs sa
     await expect(page.getByLabel("Total eggs/pets", { exact: true })).toHaveValue("0");
     await page.getByRole("link", { name: "Dashboard", exact: true }).click();
     await expect(skillCard.locator(".summon-warning")).toContainText(String(cleared.summons.missingSkillCosts));
+    await expect(skillCard.locator(".war-points-total")).toHaveText(new Intl.NumberFormat("en-US").format(cleared.summons.skills * 225));
     await expect(mountCard.locator(".summon-warning")).toContainText(String(cleared.summons.missingMountCosts));
   } finally {
     for (const entry of [own, other]) {
@@ -639,6 +665,7 @@ test("mobile dashboard, menu, complete resource form, and week navigation fit th
   await page.getByRole("button", { name: "Open navigation", exact: true }).click();
   await page.getByRole("link", { name: "Dashboard", exact: true }).click();
   await expect(page.locator(".stat-summons")).toHaveCount(2);
+  await expect(page.locator(".stat-war-points")).toHaveCount(2);
   await noPageOverflow(page);
   expect(errors).toEqual([]);
 });

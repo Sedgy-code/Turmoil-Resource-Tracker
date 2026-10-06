@@ -34,8 +34,8 @@ export const resourceSchema = z
   .transform(normalizeResources);
 
 export const summoningCostsSchema = z.object({
-  fiveSkills: z.number().int().min(0).max(1_000_000_000).default(0),
-  mount: z.number().int().min(0).max(1_000_000_000).default(0),
+  fiveSkills: z.number().int().min(0).max(1_000_000_000),
+  mount: z.number().int().min(0).max(1_000_000_000),
 }).strict();
 
 export const saveResourcesSchema = z

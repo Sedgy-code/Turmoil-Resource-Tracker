@@ -57,14 +57,22 @@ async function addMember(
 }
 
 test("summoning costs accept whole numbers from zero through one billion", () => {
-  assert.deepEqual(summoningCostsSchema.parse({}), EMPTY_SUMMONING_COSTS);
+  assert.deepEqual(summoningCostsSchema.parse({ fiveSkills: 0, mount: 0 }), EMPTY_SUMMONING_COSTS);
+  for (const suppliedCosts of [{}, { fiveSkills: 0 }, { mount: 0 }]) {
+    assert.equal(summoningCostsSchema.safeParse(suppliedCosts).success, false);
+    assert.equal(saveResourcesSchema.safeParse({
+      week: WEEK,
+      resources: {},
+      summoningCosts: suppliedCosts,
+    }).success, false);
+  }
   assert.deepEqual(
-    summoningCostsSchema.parse({ fiveSkills: 0, mount: 1_000_000_000 }),
-    { fiveSkills: 0, mount: 1_000_000_000 },
+    summoningCostsSchema.parse({ fiveSkills: 1_000_000_000, mount: 1_000_000_000 }),
+    { fiveSkills: 1_000_000_000, mount: 1_000_000_000 },
   );
   for (const key of ["fiveSkills", "mount"]) {
-    for (const value of [-1, 0.5, NaN, Infinity, -Infinity, "10", null, 1_000_000_001]) {
-      assert.equal(summoningCostsSchema.safeParse({ [key]: value }).success, false);
+    for (const value of [-1, 0.5, NaN, Infinity, -Infinity, "", " ", "10", null, 1_000_000_001]) {
+      assert.equal(summoningCostsSchema.safeParse({ ...EMPTY_SUMMONING_COSTS, [key]: value }).success, false);
     }
   }
   assert.equal(
@@ -76,7 +84,7 @@ test("summoning costs accept whole numbers from zero through one billion", () =>
   const explicitZero = saveResourcesSchema.parse({
     week: WEEK,
     resources: {},
-    summoningCosts: {},
+    summoningCosts: { fiveSkills: 0, mount: 0 },
   });
   assert.deepEqual(explicitZero.summoningCosts, EMPTY_SUMMONING_COSTS);
 });

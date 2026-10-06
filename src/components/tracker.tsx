@@ -619,9 +619,21 @@ export default function Tracker({ view }: { view: View }) {
                             missing: data.summons?.missingMountCosts ?? 0,
                           }
                         : null;
+                  const warPoints =
+                    key === "skillTickets"
+                      ? {
+                          total: (data.summons?.skills ?? 0) * 225,
+                          note: "225 points per skill summon.",
+                        }
+                      : key === "mountsToMerge"
+                        ? {
+                            total: data.totals.mountsToMerge * 1_080,
+                            note: "1,080 points per mount to merge.",
+                          }
+                        : null;
                   return (
                     <article
-                      className={`stat-card ${summons ? "has-summons" : ""}`}
+                      className={`stat-card ${summons ? "has-summons" : ""} ${warPoints ? "has-war-points" : ""}`}
                       key={key}
                     >
                       <div className="stat-label">
@@ -652,6 +664,19 @@ export default function Tracker({ view }: { view: View }) {
                               missing a cost.
                             </p>
                           )}
+                        </div>
+                      )}
+                      {warPoints && (
+                        <div className="stat-war-points">
+                          <span className="war-points-label">
+                            Potential clan war points
+                          </span>
+                          <strong className="war-points-total">
+                            {numberFormat(warPoints.total)}
+                          </strong>
+                          <span className="war-points-note">
+                            {warPoints.note}
+                          </span>
                         </div>
                       )}
                       <span className="stat-foot">
@@ -1139,10 +1164,16 @@ function ResourceForm({
         values[key].trim() === "" ? 0 : Number(values[key]),
       ]),
     ) as ResourceValues;
+    if (
+      costValues.fiveSkills.trim() === "" ||
+      costValues.mount.trim() === ""
+    ) {
+      setFormError("Enter both summoning costs. Use 0 if the cost is unknown.");
+      return;
+    }
     const summoningCosts: SummoningCosts = {
-      fiveSkills:
-        costValues.fiveSkills.trim() === "" ? 0 : Number(costValues.fiveSkills),
-      mount: costValues.mount.trim() === "" ? 0 : Number(costValues.mount),
+      fiveSkills: Number(costValues.fiveSkills),
+      mount: Number(costValues.mount),
     };
     const invalidResource = RESOURCE_FIELDS.find(({ key }) => {
       const value = resources[key as ResourceKey];
@@ -1345,6 +1376,7 @@ function ResourceForm({
                       min="0"
                       max="1000000000"
                       step="1"
+                      required
                       value={costValues[costField.key]}
                       onChange={(e) =>
                         setCostValues((existing) => ({
@@ -1354,7 +1386,7 @@ function ResourceForm({
                       }
                     />
                     <small id={`summoning-cost-help-${costField.key}`}>
-                      Whole numbers only. Blank saves as 0.
+                      Required whole number. Enter 0 if unknown.
                     </small>
                   </label>
                 )}
