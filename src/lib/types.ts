@@ -5,6 +5,7 @@ export type MemberRole = "ADMIN" | "MEMBER";
 export interface Member {
   id: string;
   discordId: string;
+  /** Turmoil server nickname, Discord display name, or account username. */
   username: string;
   avatarUrl: string | null;
   role: MemberRole;

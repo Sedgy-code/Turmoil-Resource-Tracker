@@ -11,7 +11,7 @@ export function memberFromRow(row: Record<string, unknown>): Member {
   return {
     id: String(row.id),
     discordId: String(row.discord_id),
-    username: String(row.username),
+    username: String(row.display_name || row.username),
     avatarUrl: row.avatar_url ? String(row.avatar_url) : null,
     role: row.role as Member["role"],
     active: row.active === true,

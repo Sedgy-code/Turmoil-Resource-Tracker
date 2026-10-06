@@ -3,12 +3,18 @@ CREATE TABLE IF NOT EXISTS app_members (
   id TEXT PRIMARY KEY,
   discord_id TEXT NOT NULL UNIQUE,
   username TEXT NOT NULL,
+  display_name TEXT,
+  global_display_name TEXT,
   avatar_url TEXT,
+  global_avatar_url TEXT,
   role TEXT NOT NULL DEFAULT 'MEMBER' CHECK (role IN ('ADMIN', 'MEMBER')),
   active BOOLEAN NOT NULL DEFAULT TRUE,
   last_updated_at TIMESTAMPTZ,
   joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE app_members ADD COLUMN IF NOT EXISTS display_name TEXT;
+ALTER TABLE app_members ADD COLUMN IF NOT EXISTS global_display_name TEXT;
+ALTER TABLE app_members ADD COLUMN IF NOT EXISTS global_avatar_url TEXT;
 CREATE TABLE IF NOT EXISTS resource_entries (
   id TEXT PRIMARY KEY,
   member_id TEXT NOT NULL REFERENCES app_members(id),

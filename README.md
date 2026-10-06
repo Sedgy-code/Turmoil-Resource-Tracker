@@ -10,7 +10,7 @@ To host it for your clan, follow the [beginner hosting guide](HOSTING-GUIDE.md) 
 - Weekly personal entries with instant save confirmation, notes, and a copy-from-previous-week action.
 - Clan totals, a detailed member table, historical weeks, CSV export, and copy-to-clipboard.
 - Admin tools to edit any member's entry, promote or demote admins, and deactivate or reactivate members.
-- Discord avatars, last updated timestamps, and the identity of the member who last edited an entry.
+- Turmoil server nicknames and server avatars, last updated timestamps, and the identity of the member who last edited an entry.
 - Persistent PostgreSQL storage in production, with a durable local PGlite database for development.
 - Clan branding inspired by the Turmoil crest: charcoal surfaces, gold controls, emerald accents, and responsive logo artwork.
 
@@ -56,7 +56,9 @@ For real authentication, follow the Discord setup below, set `DEMO_MODE=false`, 
 6. If access should require a particular role, open **Server Settings → Roles**, copy the role's ID, and set `DISCORD_ROLE_ID`. Leave it empty to admit any member of the configured Turmoil server.
 7. Sign in with a Discord account that belongs to the configured server and, if enabled, has the required role.
 
-The app requests only `identify` and `guilds.members.read`. Discord server membership is always required; the role restriction is an additional check. No bot installation, privileged gateway intent, or Discord bot token is needed. The app stores Discord user ID, username, and avatar, then creates its own application session. Sessions expire after seven days. Membership and the required role are checked at login and rechecked on requests after five minutes; Discord OAuth tokens refresh automatically. Application Admin/Member permissions are separate from Discord roles.
+The app requests only `identify` and `guilds.members.read`. Discord server membership is always required; the role restriction is an additional check. No bot installation, privileged gateway intent, or Discord bot token is needed. The app stores the immutable Discord user ID and actual account username separately from the displayed clan profile, then creates its own application session. Sessions expire after seven days. Membership and the required role are checked at login and rechecked on requests after five minutes; Discord OAuth tokens refresh automatically. Application Admin/Member permissions are separate from Discord roles.
+
+Names shown throughout the tracker prefer the member's **Turmoil server nickname**, then their global Discord display name, then their account username. Server-specific avatars take priority over global or default Discord avatars. Profiles refresh at sign-in and during the membership checks; sign out and back in to pick up a change immediately. Removing a server nickname or avatar restores the global fallback. Existing members adopt their server profiles as they next sign in or use the tracker; changing a name does not create a new member or affect resource history and permissions.
 
 Register each actual callback you use. A changing Vercel preview domain needs its own registered redirect and matching `APP_URL`; use a stable staging domain for repeated OAuth testing.
 
@@ -103,17 +105,17 @@ For manual database initialization, run the idempotent migration:
 npm run db:migrate
 ```
 
-Database initialization also runs on first application access. Migrations create the application's tables and constraints without resetting existing data. The configured PostgreSQL role needs permission to create these tables and indexes because initialization also runs at application startup. The migration uses the same database configuration as the app.
+Database initialization also runs on first application access. Migrations create the application's tables and constraints and add profile columns to existing member tables without resetting data. The configured PostgreSQL role needs permission to create and alter these tables and indexes because initialization also runs at application startup. The migration uses the same database configuration as the app.
 
 The schema has three tables:
 
 | Table | Stored data |
 | --- | --- |
-| `app_members` | Unique Discord user ID, username, avatar, Admin/Member role, active status, join time, and most recent resource update time. |
+| `app_members` | Unique Discord user ID, raw account username, displayed clan name/avatar, global name/avatar fallbacks, Admin/Member role, active status, join time, and most recent resource update time. |
 | `resource_entries` | One entry per member and week, resource quantities in a JSONB object, optional notes, last update time, and the member who last edited it. |
 | `auth_sessions` | Session-token hashes, member association, expiration, encrypted Discord OAuth tokens, and membership-check timestamps. |
 
-Weeks start on **Monday at 00:00 UTC** and are stored using the Monday's `YYYY-MM-DD` date. Each entry contains Skill Tickets; Common, Rare, Epic, Legendary, Ultimate, and Mythic Eggs to Hatch; the same six Pets to Merge rarities; Mount Keys; Mounts to Merge; Hammers; and Potions. All quantities are nonnegative whole numbers and default to zero. A uniqueness constraint keeps one entry per member per week. Saving an existing entry updates it.
+Weeks start on **Monday at 00:00 UTC** and are stored using the Monday's `YYYY-MM-DD` date. Each entry contains Skill Tickets; Common, Rare, Epic, Legendary, Ultimate, and Mythic Eggs to Hatch; the same six Pets to Merge rarities; Mount Keys; Mounts to Merge; Hammers; and Potions. All quantities are nonnegative whole numbers and default to zero. Input boxes can be cleared while typing; saving an empty box stores zero. A uniqueness constraint keeps one entry per member per week. Saving an existing entry updates it.
 
 Members can edit only their own entries; admins can edit any active member's entry. The database preserves historical weeks. Clan totals sum active members' saved quantities for the selected week, and members with no submission contribute zero. Export and clipboard actions apply to the currently selected week.
 

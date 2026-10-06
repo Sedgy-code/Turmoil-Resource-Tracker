@@ -56,8 +56,8 @@ export async function GET(request: Request) {
       throw new ApiError(401, "The sign-in request expired.", "INVALID_STATE");
     const tokens = await exchangeCode(code, pending.verifier);
     const user = await fetchDiscordUser(tokens.access_token);
-    await assertGuildMembership(tokens.access_token);
-    const member = await registerDiscordMember(user);
+    const membership = await assertGuildMembership(tokens.access_token);
+    const member = await registerDiscordMember(user, undefined, membership);
     const session = await createSession(member, tokens);
     const response = NextResponse.redirect(`${appUrl()}/`);
     response.cookies.set(SESSION_COOKIE, session, {

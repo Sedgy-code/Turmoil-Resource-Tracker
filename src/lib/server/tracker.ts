@@ -110,7 +110,7 @@ export async function copyPreviousEntry(
     const memberId = input.memberId ?? actor.id;
     await authorizedTarget(tx, freshActor, memberId);
     const previous = await tx.query(
-      "SELECT e.*, m.username AS updated_by_username FROM resource_entries e JOIN app_members m ON m.id = e.updated_by WHERE e.member_id = $1 AND e.week_start = $2",
+      "SELECT e.*, COALESCE(NULLIF(m.display_name, ''), m.username) AS updated_by_username FROM resource_entries e JOIN app_members m ON m.id = e.updated_by WHERE e.member_id = $1 AND e.week_start = $2",
       [memberId, shiftWeek(input.week, -1)],
     );
     if (!previous.length)
@@ -202,10 +202,10 @@ export async function dashboard(
   const connection = db ?? (await database());
   const [memberRows, entryRows, weeks] = await Promise.all([
     connection.query(
-      "SELECT * FROM app_members WHERE active = TRUE ORDER BY LOWER(username)",
+      "SELECT * FROM app_members WHERE active = TRUE ORDER BY LOWER(COALESCE(NULLIF(display_name, ''), username))",
     ),
     connection.query(
-      `SELECT e.*, editor.username AS updated_by_username FROM resource_entries e
+      `SELECT e.*, COALESCE(NULLIF(editor.display_name, ''), editor.username) AS updated_by_username FROM resource_entries e
       JOIN app_members owner ON owner.id = e.member_id
       JOIN app_members editor ON editor.id = e.updated_by
       WHERE e.week_start = $1 AND owner.active = TRUE ORDER BY e.updated_at DESC`,
@@ -249,7 +249,7 @@ export async function listMembers(
     );
   return (
     await connection.query(
-      "SELECT * FROM app_members ORDER BY active DESC, role, LOWER(username)",
+      "SELECT * FROM app_members ORDER BY active DESC, role, LOWER(COALESCE(NULLIF(display_name, ''), username))",
     )
   ).map(memberFromRow);
 }

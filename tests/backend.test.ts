@@ -403,10 +403,12 @@ describe("Authentication boundaries", () => {
 });
 
 describe("Tracker permissions and persistence", () => {
-  test("bootstrap chooses one admin and stores actual Discord usernames", () => {
+  test("bootstrap chooses one admin and retains handles while showing display names", async () => {
     assert.equal(admin.role, "ADMIN");
     assert.equal(member.role, "MEMBER");
-    assert.equal(admin.username, "Admin");
+    assert.equal(admin.username, "Display Admin");
+    const rows = await db.query("SELECT username FROM app_members WHERE id = $1", [admin.id]);
+    assert.equal(rows[0].username, "Admin");
   });
   test("week history includes only persisted entries rather than selectable empty weeks", async () => {
     assert.deepEqual(await listWeeks(db), []);

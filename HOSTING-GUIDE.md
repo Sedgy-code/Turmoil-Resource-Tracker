@@ -103,6 +103,8 @@ Follow the steps in order. Keep the Vercel, Neon, and Discord pages open in sepa
 
 33. Share the **production website address from step 6** with your clan. Members only need their browser and Discord account. You can promote additional admins in **Manage Members**. Weekly entries stay in Neon across website redeployments.
 
+The tracker uses each member's Turmoil server nickname and server avatar when available, with their global Discord profile as the fallback. Existing members pick up this profile when they next sign in or when their membership is rechecked while using the tracker (after five minutes). To refresh it immediately, sign out and sign in again. Resource boxes can be cleared while typing, and an empty box saves as zero.
+
 If you hit a problem, use these checks and then redeploy after correcting environment settings:
 
 | What you see | What to check |

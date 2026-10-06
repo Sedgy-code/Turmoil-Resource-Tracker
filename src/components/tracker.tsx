@@ -143,6 +143,9 @@ function Avatar({
   small?: boolean;
 }) {
   const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    setFailed(false);
+  }, [member.avatarUrl]);
   const hue =
     [...member.username].reduce((acc, char) => acc + char.charCodeAt(0), 0) %
     360;
@@ -317,7 +320,10 @@ export default function Tracker({ view }: { view: View }) {
         error={session.error || params.get("error") || ""}
       />
     );
-  const user = session.user;
+  const user =
+    data?.currentUser.id === session.user.id
+      ? data.currentUser
+      : session.user;
   const denied = view === "members" && user.role !== "ADMIN";
   const ownEntry = data?.entries.find((entry) => entry.memberId === user.id);
   return (
@@ -1114,19 +1120,24 @@ function ResourceForm({
         data.currentUser)
       : data.currentUser;
   const entry = data.entries.find((item) => item.memberId === selected.id);
-  const [values, setValues] = useState<ResourceValues>(
-    entry?.resources ?? { ...EMPTY_RESOURCES },
+  const savedResources = entry?.resources ?? EMPTY_RESOURCES;
+  const resourceKeys = RESOURCE_FIELDS.map(({ key }) => key as ResourceKey);
+  const draftResources = (resources: ResourceValues) =>
+    Object.fromEntries(
+      resourceKeys.map((key) => [key, String(resources[key])]),
+    ) as Record<ResourceKey, string>;
+  const [values, setValues] = useState<Record<ResourceKey, string>>(() =>
+    draftResources(savedResources),
   );
   const [notes, setNotes] = useState(entry?.notes ?? "");
   const [saving, setSaving] = useState(false);
   const [copying, setCopying] = useState(false);
   const [formError, setFormError] = useState("");
   const dirty =
-    JSON.stringify(values) !==
-      JSON.stringify(entry?.resources ?? EMPTY_RESOURCES) ||
+    resourceKeys.some((key) => values[key] !== String(savedResources[key])) ||
     notes !== (entry?.notes ?? "");
   useEffect(() => {
-    setValues(entry?.resources ?? { ...EMPTY_RESOURCES });
+    setValues(draftResources(entry?.resources ?? EMPTY_RESOURCES));
     setNotes(entry?.notes ?? "");
     setFormError("");
   }, [selected.id, week, entry]);
@@ -1139,6 +1150,23 @@ function ResourceForm({
   }, [dirty]);
   async function save(event: FormEvent) {
     event.preventDefault();
+    const resources = Object.fromEntries(
+      resourceKeys.map((key) => [
+        key,
+        values[key].trim() === "" ? 0 : Number(values[key]),
+      ]),
+    ) as ResourceValues;
+    if (
+      resourceKeys.some(
+        (key) =>
+          !Number.isInteger(resources[key]) ||
+          resources[key] < 0 ||
+          resources[key] > 1_000_000_000,
+      )
+    ) {
+      setFormError("Enter whole numbers between 0 and 1,000,000,000.");
+      return;
+    }
     setSaving(true);
     setFormError("");
     try {
@@ -1147,7 +1175,7 @@ function ResourceForm({
         body: JSON.stringify({
           week,
           memberId: selected.id,
-          resources: values,
+          resources,
           notes,
         }),
       });
@@ -1189,7 +1217,7 @@ function ResourceForm({
   const update = (key: ResourceKey, value: string) =>
     setValues((existing) => ({
       ...existing,
-      [key]: value === "" ? 0 : Number(value),
+      [key]: value,
     }));
   return (
     <form className="resource-form" onSubmit={save}>
@@ -1286,7 +1314,6 @@ function ResourceForm({
                   min="0"
                   max="1000000000"
                   step="1"
-                  required
                   value={values[key]}
                   onChange={(e) => update(key, e.target.value)}
                 />
@@ -1321,7 +1348,6 @@ function ResourceForm({
                     min="0"
                     max="1000000000"
                     step="1"
-                    required
                     value={values[`${type}${rarity}`]}
                     onChange={(e) => update(`${type}${rarity}`, e.target.value)}
                   />

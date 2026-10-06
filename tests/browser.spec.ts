@@ -10,6 +10,7 @@ import type {
   Member,
   SessionResponse,
 } from "../src/lib/types";
+import { EMPTY_RESOURCES, RESOURCE_FIELDS } from "../src/lib/resources";
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
 const executablePath =
@@ -226,6 +227,163 @@ test("desktop resources persist, copy from history, update totals, and export co
     });
     expect(restored.ok(), await restored.text()).toBeTruthy();
   }
+});
+
+test("resource fields can be cleared, typed without a leading zero, and saved blank as zero", async ({
+  page,
+  request,
+}) => {
+  await demoSession(request);
+  const original = await dashboard(request);
+  const ownEntry = original.entries.find(
+    (entry) => entry.memberId === original.currentUser.id,
+  )!;
+  expect(ownEntry).toBeTruthy();
+  try {
+    const reset = await request.put("/api/resources", {
+      headers: { Origin: baseURL },
+      data: {
+        week: ownEntry.week,
+        memberId: ownEntry.memberId,
+        resources: EMPTY_RESOURCES,
+        notes: ownEntry.notes,
+      },
+    });
+    expect(reset.ok(), await reset.text()).toBeTruthy();
+    await page.goto(`/resources?week=${original.week}`);
+    for (const { label } of RESOURCE_FIELDS) {
+      const input = page.getByLabel(label, { exact: true });
+      await expect(input).toHaveValue("0");
+      await input.fill("");
+      await expect(input).toHaveValue("");
+    }
+    await expect(page.locator(".save-bar")).toContainText("Unsaved changes");
+    const tickets = page.getByLabel("Skill Tickets", { exact: true });
+    await tickets.pressSequentially("42");
+    await expect(tickets).toHaveValue("42");
+    const eggs = page.getByLabel("Common Eggs", { exact: true });
+    await eggs.pressSequentially("7");
+    await expect(eggs).toHaveValue("7");
+    const pets = page.getByLabel("Mythic Pets", { exact: true });
+    await pets.pressSequentially("3");
+    await expect(pets).toHaveValue("3");
+    for (const invalid of ["-1", "1.5", "1000000001"]) {
+      await tickets.fill(invalid);
+      expect(
+        await tickets.evaluate((input: HTMLInputElement) =>
+          input.checkValidity(),
+        ),
+      ).toBeFalsy();
+    }
+    await tickets.fill("42");
+    await page
+      .getByRole("button", { name: "Save resources", exact: true })
+      .click();
+    await expect(page.getByRole("status")).toContainText("resources are saved");
+    const expected = {
+      ...EMPTY_RESOURCES,
+      skillTickets: 42,
+      eggsCommon: 7,
+      petsMythic: 3,
+    };
+    const saved = await dashboard(request, original.week);
+    expect(
+      saved.entries.find((entry) => entry.memberId === ownEntry.memberId)
+        ?.resources,
+    ).toEqual(expected);
+    await page.reload();
+    for (const { key, label } of RESOURCE_FIELDS) {
+      await expect(page.getByLabel(label, { exact: true })).toHaveValue(
+        String(expected[key as keyof typeof expected]),
+      );
+    }
+    await expect(page.locator(".save-bar")).toContainText("All changes saved");
+  } finally {
+    const restored = await request.put("/api/resources", {
+      headers: { Origin: baseURL },
+      data: {
+        week: ownEntry.week,
+        memberId: ownEntry.memberId,
+        resources: ownEntry.resources,
+        notes: ownEntry.notes,
+      },
+    });
+    expect(restored.ok(), await restored.text()).toBeTruthy();
+  }
+});
+
+test("refreshed clan profile replaces the login snapshot and retries a changed avatar", async ({
+  page,
+  request,
+}) => {
+  const session = await demoSession(request);
+  const original = await dashboard(request);
+  const brokenAvatar = "/browser-avatar-missing.svg";
+  const updatedAvatar = "/browser-avatar-updated.svg";
+  await page.route("**/api/session", (route) =>
+    route.fulfill({
+      json: {
+        ...session,
+        user: {
+          ...original.currentUser,
+          username: "OldDiscordUsername",
+          avatarUrl: brokenAvatar,
+        },
+      },
+    }),
+  );
+  await page.route(`**${brokenAvatar}`, (route) =>
+    route.fulfill({ status: 404, body: "" }),
+  );
+  await page.route(`**${updatedAvatar}`, (route) =>
+    route.fulfill({
+      contentType: "image/svg+xml",
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="#4fc491"/></svg>',
+    }),
+  );
+  await page.route(/\/api\/dashboard(?:\?|$)/, (route) => {
+    const week =
+      new URL(route.request().url()).searchParams.get("week") || original.week;
+    const updated = week !== original.week;
+    const profile = {
+      ...original.currentUser,
+      username: updated ? "UpdatedClanNickname" : "CurrentClanNickname",
+      avatarUrl: updated ? updatedAvatar : brokenAvatar,
+    };
+    return route.fulfill({
+      json: {
+        ...original,
+        week,
+        currentUser: profile,
+        members: original.members.map((member) =>
+          member.id === profile.id ? profile : member,
+        ),
+      },
+    });
+  });
+  await page.goto(`/resources?week=${original.week}`);
+  const sidebarProfile = page.locator(".sidebar-profile");
+  await expect(sidebarProfile.locator("strong")).toHaveText(
+    "CurrentClanNickname",
+  );
+  await expect(sidebarProfile.locator(".avatar img")).toHaveCount(0);
+  await page.getByRole("button", { name: "Next week", exact: true }).click();
+  await expect(sidebarProfile.locator("strong")).toHaveText(
+    "UpdatedClanNickname",
+  );
+  const avatar = sidebarProfile.locator(".avatar img");
+  await expect(avatar).toHaveAttribute("src", updatedAvatar);
+  await expect
+    .poll(() =>
+      avatar.evaluate(
+        (image: HTMLImageElement) => image.complete && image.naturalWidth > 0,
+      ),
+    )
+    .toBeTruthy();
+  await expect(page.locator(".topbar-actions > .avatar img")).toHaveAttribute(
+    "src",
+    updatedAvatar,
+  );
 });
 
 test("admin can edit another member, promote, deactivate, and restore access", async ({

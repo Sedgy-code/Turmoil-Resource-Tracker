@@ -9,6 +9,12 @@ export interface DiscordUser {
   avatar: string | null;
   discriminator: string;
 }
+export interface DiscordMembership {
+  roles: string[];
+  nick?: string | null;
+  avatar?: string | null;
+  user?: DiscordUser;
+}
 export interface DiscordTokens {
   access_token: string;
   refresh_token: string;
@@ -135,7 +141,7 @@ export async function fetchDiscordUser(
 export async function assertGuildMembership(
   accessToken: string,
   fetcher: typeof fetch = fetch,
-): Promise<void> {
+): Promise<DiscordMembership> {
   const response = await discordRequest(
     `/users/@me/guilds/${encodeURIComponent(guildId())}/member`,
     accessToken,
@@ -159,8 +165,14 @@ export async function assertGuildMembership(
       "Discord membership verification is temporarily unavailable. Please try again.",
       "DISCORD_UNAVAILABLE",
     );
-  const membership = (await response.json()) as { roles?: string[] };
-  if (!Array.isArray(membership.roles))
+  const membership = (await response.json()) as Record<string, unknown>;
+  if (
+    !membership ||
+    !Array.isArray(membership.roles) ||
+    !membership.roles.every((role) => typeof role === "string") ||
+    (membership.nick !== undefined && membership.nick !== null && typeof membership.nick !== "string") ||
+    (membership.avatar !== undefined && membership.avatar !== null && typeof membership.avatar !== "string")
+  )
     throw new ApiError(
       503,
       "Discord returned an invalid membership response.",
@@ -175,6 +187,54 @@ export async function assertGuildMembership(
       "You need the required Turmoil Discord role to access the tracker.",
       "ROLE_REQUIRED",
     );
+  let user: DiscordUser | undefined;
+  if (membership.user !== undefined) {
+    const supplied = membership.user as Record<string, unknown> | null;
+    if (
+      !supplied ||
+      typeof supplied.id !== "string" ||
+      !/^\d+$/.test(supplied.id) ||
+      typeof supplied.username !== "string" ||
+      !supplied.username ||
+      (supplied.global_name !== undefined && supplied.global_name !== null && typeof supplied.global_name !== "string") ||
+      (supplied.avatar !== undefined && supplied.avatar !== null && typeof supplied.avatar !== "string") ||
+      (supplied.discriminator !== undefined && typeof supplied.discriminator !== "string")
+    ) {
+      throw new ApiError(503, "Discord returned an invalid membership profile.", "DISCORD_UNAVAILABLE");
+    }
+    user = {
+      id: supplied.id,
+      username: supplied.username,
+      global_name: supplied.global_name as string | null | undefined,
+      avatar: (supplied.avatar as string | null | undefined) ?? null,
+      discriminator: (supplied.discriminator as string | undefined) ?? "0",
+    };
+  }
+  return {
+    roles: membership.roles,
+    nick: membership.nick as string | null | undefined,
+    avatar: membership.avatar as string | null | undefined,
+    ...(user ? { user } : {}),
+  };
+}
+
+export function discordProfile(
+  user: DiscordUser,
+  membership?: Pick<DiscordMembership, "nick" | "avatar">,
+  storedGlobalAvatarUrl?: string,
+  storedGlobalDisplayName?: string | null,
+): { displayName: string; avatarUrl: string; globalAvatarUrl: string; globalDisplayName: string | null } {
+  const globalAvatarUrl = storedGlobalAvatarUrl ?? avatarUrl(user);
+  const globalDisplayName = (user.global_name ?? storedGlobalDisplayName)?.trim() || null;
+  const serverAvatar = membership?.avatar;
+  return {
+    displayName: membership?.nick?.trim() || globalDisplayName || user.username,
+    avatarUrl: serverAvatar
+      ? `https://cdn.discordapp.com/guilds/${encodeURIComponent(guildId())}/users/${user.id}/avatars/${encodeURIComponent(serverAvatar)}.${serverAvatar.startsWith("a_") ? "gif" : "png"}?size=128`
+      : globalAvatarUrl,
+    globalAvatarUrl,
+    globalDisplayName,
+  };
 }
 
 export function avatarUrl(user: DiscordUser): string {

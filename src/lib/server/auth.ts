@@ -6,8 +6,9 @@ import { decrypt, encrypt, hashToken, randomToken } from "./crypto";
 import { isDemo, requireConfiguration } from "./config";
 import {
   assertGuildMembership,
-  avatarUrl,
+  discordProfile,
   refreshTokens,
+  type DiscordMembership,
   type DiscordTokens,
   type DiscordUser,
 } from "./discord";
@@ -28,7 +29,12 @@ export const cookieOptions = () => ({
 export async function registerDiscordMember(
   user: DiscordUser,
   db: Database | undefined = undefined,
+  membership?: DiscordMembership,
 ): Promise<Member> {
+  if (membership?.user && membership.user.id !== user.id) {
+    throw new ApiError(401, "Your Discord identity could not be verified.", "DISCORD_AUTH_FAILED");
+  }
+  const profile = discordProfile(user, membership);
   db ??= await database();
   return db.transaction(async (tx) => {
     await lockAdministration(tx, db.dialect);
@@ -44,8 +50,8 @@ export async function registerDiscordMember(
           "ACCOUNT_INACTIVE",
         );
       const updated = await tx.query(
-        "UPDATE app_members SET username = $2, avatar_url = $3 WHERE id = $1 RETURNING *",
-        [existing[0].id, user.username, avatarUrl(user)],
+        "UPDATE app_members SET username = $2, display_name = $3, avatar_url = $4, global_avatar_url = $5, global_display_name = $6 WHERE id = $1 RETURNING *",
+        [existing[0].id, user.username, profile.displayName, profile.avatarUrl, profile.globalAvatarUrl, profile.globalDisplayName],
       );
       return memberFromRow(updated[0]);
     }
@@ -56,12 +62,15 @@ export async function registerDiscordMember(
     const initialAdmin =
       !administrators.length && (designated ? designated === user.id : true);
     const rows = await tx.query(
-      "INSERT INTO app_members (id,discord_id,username,avatar_url,role) VALUES ($1,$2,$3,$4,$5) RETURNING *",
+      "INSERT INTO app_members (id,discord_id,username,display_name,avatar_url,global_avatar_url,global_display_name,role) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",
       [
         randomUUID(),
         user.id,
         user.username,
-        avatarUrl(user),
+        profile.displayName,
+        profile.avatarUrl,
+        profile.globalAvatarUrl,
+        profile.globalDisplayName,
         initialAdmin ? "ADMIN" : "MEMBER",
       ],
     );
@@ -110,6 +119,18 @@ export async function authenticatedMember(
   const tokenHash = hashToken(token);
   const result = await db.transaction(
     async (tx): Promise<{ member: Member | null; error?: ApiError }> => {
+      // Deactivation locks the member before deleting its sessions. Match that
+      // order so an atomic profile refresh cannot deadlock with deactivation.
+      const bindings = await tx.query(
+        "SELECT member_id FROM auth_sessions WHERE token_hash = $1 AND expires_at > NOW()",
+        [tokenHash],
+      );
+      if (!bindings.length) return { member: null };
+      const activeMembers = await tx.query(
+        "SELECT id FROM app_members WHERE id = $1 AND active = TRUE FOR UPDATE",
+        [bindings[0].member_id],
+      );
+      if (!activeMembers.length) return { member: null };
       // Serialize refreshes so concurrent requests cannot rotate the same refresh token twice.
       const sessions = await tx.query(
         "SELECT s.*, m.* FROM auth_sessions s JOIN app_members m ON m.id = s.member_id WHERE s.token_hash = $1 AND s.expires_at > NOW() AND m.active = TRUE FOR UPDATE OF s",
@@ -143,7 +164,33 @@ export async function authenticatedMember(
             ],
           );
         }
-        await assertGuildMembership(accessToken, dependencies.fetcher);
+        const membership = await assertGuildMembership(accessToken, dependencies.fetcher);
+        if (membership.user && membership.user.id !== String(session.discord_id)) {
+          throw new ApiError(401, "Your Discord identity could not be verified.", "DISCORD_AUTH_FAILED");
+        }
+        const profileUser = membership.user ?? {
+          id: String(session.discord_id),
+          username: String(session.username),
+          avatar: null,
+          discriminator: "0",
+        };
+        const previousGlobalAvatar = session.global_avatar_url
+          ? String(session.global_avatar_url)
+          : session.avatar_url && !String(session.avatar_url).includes("/guilds/")
+            ? String(session.avatar_url)
+            : undefined;
+        const profile = discordProfile(
+          profileUser,
+          membership,
+          membership.user ? undefined : previousGlobalAvatar,
+          membership.user ? undefined : session.global_display_name ? String(session.global_display_name) : null,
+        );
+        const updatedMembers = await tx.query(
+          "UPDATE app_members SET username = $2, display_name = $3, avatar_url = $4, global_avatar_url = $5, global_display_name = $6 WHERE id = $1 AND active = TRUE RETURNING *",
+          [session.member_id, profileUser.username, profile.displayName, profile.avatarUrl, profile.globalAvatarUrl, profile.globalDisplayName],
+        );
+        if (!updatedMembers.length) return { member: null };
+        Object.assign(session, updatedMembers[0]);
         await tx.query(
           "UPDATE auth_sessions SET membership_checked_at = NOW() WHERE token_hash = $1",
           [tokenHash],
