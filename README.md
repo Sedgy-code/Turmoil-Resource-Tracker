@@ -12,8 +12,15 @@ To host it for your clan, follow the [beginner hosting guide](HOSTING-GUIDE.md) 
 - Admin tools to edit any member's entry, promote or demote admins, and deactivate or reactivate members.
 - Discord avatars, last updated timestamps, and the identity of the member who last edited an entry.
 - Persistent PostgreSQL storage in production, with a durable local PGlite database for development.
+- Clan branding inspired by the Turmoil crest: charcoal surfaces, gold controls, emerald accents, and responsive logo artwork.
 
 The stack is Next.js 16, React 19, TypeScript, and PostgreSQL. Discord OAuth is implemented on the server with authorization-code exchange and encrypted, expiring state validation. Session tokens live in HTTP-only cookies; privileged operations are checked on the server. The OAuth requests also include S256 challenge parameters, but Discord's documented flow does not guarantee provider-enforced PKCE.
+
+## Clan branding
+
+The full crest is stored in `public/turmoil-crest.png` and is optimized for each screen by Next Image. A simplified emerald-and-gold emblem is used in navigation (`public/clan-emblem.svg`) and the browser tab (`src/app/icon.svg`). `src/components/clan-brand.tsx` renders both logo variants.
+
+The core palette is defined at the beginning of `src/app/globals.css`; clan-specific surfaces, controls, and responsive crest layouts are in `src/app/clan-theme.css`. Publishing design changes to the GitHub branch connected to Vercel triggers a new website deployment. Editing the downloaded Windows folder updates only the local copy.
 
 ## Run locally
 

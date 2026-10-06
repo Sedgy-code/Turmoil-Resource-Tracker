@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ClanBrand } from "./clan-brand";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   useCallback,
@@ -166,100 +167,6 @@ function Avatar({
     </span>
   );
 }
-function ForgeArt() {
-  return (
-    <svg
-      className="forge-art"
-      viewBox="0 0 480 250"
-      fill="none"
-      aria-hidden="true"
-    >
-      <defs>
-        <linearGradient
-          id="metal"
-          x1="172"
-          y1="130"
-          x2="305"
-          y2="231"
-          gradientUnits="userSpaceOnUse"
-        >
-          <stop stopColor="#d1b098" />
-          <stop offset=".48" stopColor="#78665b" />
-          <stop offset="1" stopColor="#3b302a" />
-        </linearGradient>
-        <linearGradient
-          id="fire"
-          x1="260"
-          y1="32"
-          x2="260"
-          y2="153"
-          gradientUnits="userSpaceOnUse"
-        >
-          <stop stopColor="#ffcc7e" />
-          <stop offset=".6" stopColor="#f47842" />
-          <stop offset="1" stopColor="#98412b" />
-        </linearGradient>
-        <radialGradient id="glow">
-          <stop stopColor="#c46b32" stopOpacity=".4" />
-          <stop offset="1" stopColor="#c46b32" stopOpacity="0" />
-        </radialGradient>
-      </defs>
-      <circle cx="274" cy="130" r="135" fill="url(#glow)" />
-      <circle cx="274" cy="130" r="105" stroke="#a7633c" strokeOpacity=".18" />
-      <circle
-        cx="274"
-        cy="130"
-        r="88"
-        stroke="#a7633c"
-        strokeOpacity=".15"
-        strokeDasharray="2 8"
-      />
-      <path
-        d="m148 58 135 174M150 57l17 7-8 13-11-19ZM132 73l31-24M277 228l13-8"
-        stroke="#8b7361"
-        strokeWidth="7"
-        strokeLinecap="round"
-      />
-      <path
-        d="m377 51-139 181M377 51l-17 8 9 12 8-20ZM390 70l-32-23M244 233l-12-10"
-        stroke="#8b7361"
-        strokeWidth="7"
-        strokeLinecap="round"
-      />
-      <path
-        d="M233 141c-37-18-30-45-10-64-3 18 9 17 12 5 5-22-4-29 17-51-4 33 27 35 29 61 5-10 9-12 15-16 21 32 20 55-7 66Z"
-        fill="url(#fire)"
-      />
-      <path
-        d="M249 140c-15-12-15-26-2-46 1 12 6 15 10 17 7-10 7-15 8-23 19 24 26 39 9 53Z"
-        fill="#ffd29b"
-      />
-      <path
-        d="M180 140h145l22 22-60 13-15 16 10 22h28v14H207v-14h28l13-22-20-16-48-6-36-18Z"
-        fill="url(#metal)"
-      />
-      <path d="M181 140h144l22 22-60 13H228l-48-6-36-18Z" fill="#b3947e" />
-      <path
-        d="M144 151h164M229 176h58M209 219h100"
-        stroke="#f3c49b"
-        strokeOpacity=".3"
-        strokeWidth="2"
-      />
-      <path d="m250 155 9 9 9-9-9-9-9 9Z" stroke="#e6ae7d" strokeWidth="2" />
-      <path
-        d="M188 233h143"
-        stroke="#71543e"
-        strokeWidth="3"
-        strokeLinecap="round"
-      />
-      <circle cx="334" cy="81" r="2" fill="#e1a666" />
-      <circle cx="206" cy="42" r="2" fill="#e1a666" />
-      <circle cx="309" cy="45" r="1.5" fill="#e1a666" />
-      <path d="m358 128 4 4-4 4-4-4Z" fill="#b27645" />
-      <path d="m197 102 3 3-3 3-3-3Z" fill="#b27645" />
-    </svg>
-  );
-}
 function DiscordIcon() {
   return (
     <svg
@@ -382,7 +289,7 @@ export default function Tracker({ view }: { view: View }) {
     return (
       <div className="initial-loading">
         <span className="brand-mark">
-          <Flame size={28} />
+          <ClanBrand decorative />
         </span>
         {sessionError ? (
           <>
@@ -425,7 +332,7 @@ export default function Tracker({ view }: { view: View }) {
       <aside className={`sidebar ${mobileOpen ? "open" : ""}`}>
         <Link className="brand" href="/">
           <span className="brand-mark">
-            <Flame size={26} strokeWidth={2.3} />
+            <ClanBrand decorative />
           </span>
           <span>
             <strong>TURMOIL</strong>
@@ -621,7 +528,7 @@ export default function Tracker({ view }: { view: View }) {
                   </span>
                   <h2>Stronger, together.</h2>
                   <p>
-                    Your resources are the clan’s next advantage.
+                    Your resources are the clan’s next advantage.{" "}
                     <br />
                     Track your arsenal. Prepare for what’s ahead.
                   </p>
@@ -633,7 +540,13 @@ export default function Tracker({ view }: { view: View }) {
                     <ArrowRight size={16} />
                   </Link>
                 </div>
-                <ForgeArt />
+                <ClanBrand
+                  variant="full"
+                  className="hero-crest"
+                  size={360}
+                  sizes="(max-width: 650px) 125px, (max-width: 1100px) 260px, 360px"
+                  decorative
+                />
                 <span className="hero-tag">
                   <Sparkles size={13} />
                   THE TURMOIL WAY
@@ -766,7 +679,7 @@ export default function Tracker({ view }: { view: View }) {
               <X size={20} />
             </button>
             <span className="brand-mark">
-              <Flame size={28} />
+              <ClanBrand decorative />
             </span>
             <h2>Your clan’s resource hub.</h2>
             <p>
@@ -841,50 +754,58 @@ function Login({ configured, error }: { configured: boolean; error: string }) {
       <div className="login-grid" />
       <div className="login-brand">
         <span className="brand-mark">
-          <Flame size={28} />
+          <ClanBrand decorative />
         </span>
         <strong>TURMOIL</strong>
       </div>
-      <section className="login-card">
+      <div className="login-stage">
         <div className="login-art">
-          <ForgeArt />
+          <ClanBrand
+            variant="full"
+            className="login-crest"
+            size={480}
+            sizes="(max-width: 650px) 195px, (max-width: 900px) 340px, 480px"
+          />
+          <span className="crest-caption">FORGED IN UNITY</span>
         </div>
-        <div className="eyebrow">THE TURMOIL RESOURCE TRACKER</div>
-        <h1>
-          One clan.
-          <br />
-          <span>Endless potential.</span>
-        </h1>
-        <p>
-          Your Forge Masters arsenal, united.
-          <br />
-          Sign in to track resources and prepare together.
-        </p>
-        {message && (
-          <div className="error-banner" role="alert">
-            {message}
-          </div>
-        )}
-        <a
-          className={`button discord-button ${!configured ? "disabled" : ""}`}
-          href={configured ? "/api/auth/login" : undefined}
-          aria-disabled={!configured}
-        >
-          <DiscordIcon />
-          Continue with Discord
-          <ArrowRight size={17} />
-        </a>
-        <div className="login-security">
-          <ShieldCheck size={15} />
-          Exclusively for members of the Turmoil clan
-        </div>
-        {!configured && (
-          <p className="login-config">
-            Discord login is awaiting configuration. Follow the repository setup
-            guide to connect your Discord application.
+        <section className="login-card">
+          <div className="eyebrow">THE TURMOIL RESOURCE TRACKER</div>
+          <h1>
+            One clan.
+            <br />
+            <span>Endless potential.</span>
+          </h1>
+          <p>
+            Your Forge Masters arsenal, united.
+            <br />
+            Sign in to track resources and prepare together.
           </p>
-        )}
-      </section>
+          {message && (
+            <div className="error-banner" role="alert">
+              {message}
+            </div>
+          )}
+          <a
+            className={`button discord-button ${!configured ? "disabled" : ""}`}
+            href={configured ? "/api/auth/login" : undefined}
+            aria-disabled={!configured}
+          >
+            <DiscordIcon />
+            Continue with Discord
+            <ArrowRight size={17} />
+          </a>
+          <div className="login-security">
+            <ShieldCheck size={15} />
+            Exclusively for members of the Turmoil clan
+          </div>
+          {!configured && (
+            <p className="login-config">
+              Discord login is awaiting configuration. Follow the repository setup
+              guide to connect your Discord application.
+            </p>
+          )}
+        </section>
+      </div>
       <footer>Plan together. Forge ahead.</footer>
     </main>
   );
