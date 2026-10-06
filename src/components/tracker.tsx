@@ -47,11 +47,16 @@ import {
 import {
   EMPTY_RESOURCES,
   EMPTY_SUMMONING_COSTS,
+  MOUNT_SUMMON_COST_MIN,
+  MOUNT_SUMMON_COST_MAX,
+  SKILL_SUMMON_COST_MIN,
+  SKILL_SUMMON_COST_MAX,
   RESOURCE_FIELDS,
   currentWeek,
   formatWeek,
   numberFormat,
   resourceMaximum,
+  skillCostHasValidPrecision,
   shiftWeek,
   type ResourceKey,
   type ResourceValues,
@@ -1168,7 +1173,7 @@ function ResourceForm({
       costValues.fiveSkills.trim() === "" ||
       costValues.mount.trim() === ""
     ) {
-      setFormError("Enter both summoning costs. Use 0 if the cost is unknown.");
+      setFormError("Enter both summoning costs.");
       return;
     }
     const summoningCosts: SummoningCosts = {
@@ -1190,12 +1195,22 @@ function ResourceForm({
       return;
     }
     if (
-      Object.values(summoningCosts).some(
-        (value) =>
-          !Number.isInteger(value) || value < 0 || value > 1_000_000_000,
-      )
+      !Number.isFinite(summoningCosts.fiveSkills) ||
+      summoningCosts.fiveSkills < SKILL_SUMMON_COST_MIN ||
+      summoningCosts.fiveSkills > SKILL_SUMMON_COST_MAX ||
+      !skillCostHasValidPrecision(summoningCosts.fiveSkills)
     ) {
-      setFormError("Enter whole numbers between 0 and 1,000,000,000.");
+      setFormError(
+        "Cost of summoning 5 skills must be between 150 and 200, with at most one decimal place.",
+      );
+      return;
+    }
+    if (
+      !Number.isFinite(summoningCosts.mount) ||
+      summoningCosts.mount < MOUNT_SUMMON_COST_MIN ||
+      summoningCosts.mount > MOUNT_SUMMON_COST_MAX
+    ) {
+      setFormError("Cost per mount summon must be between 37.5 and 50.");
       return;
     }
     setSaving(true);
@@ -1305,7 +1320,7 @@ function ResourceForm({
       <div className="section-heading">
         <div>
           <h2>Your weekly inventory</h2>
-          <p>Whole numbers only. Leave anything you don’t have at zero.</p>
+          <p>Use whole numbers for resources and the ranges shown for costs.</p>
         </div>
         <button
           className="button secondary"
@@ -1338,11 +1353,19 @@ function ResourceForm({
                 ? {
                     key: "fiveSkills" as const,
                     label: "Cost of summoning 5 skills",
+                    min: SKILL_SUMMON_COST_MIN,
+                    max: SKILL_SUMMON_COST_MAX,
+                    step: "0.1",
+                    help: "Required: 150–200, up to one decimal place.",
                   }
                 : key === "mountKeys"
                   ? {
                       key: "mount" as const,
                       label: "Cost per mount summon",
+                      min: MOUNT_SUMMON_COST_MIN,
+                      max: MOUNT_SUMMON_COST_MAX,
+                      step: "any",
+                      help: "Required: 37.5–50. Decimals allowed.",
                     }
                   : null;
             return (
@@ -1372,10 +1395,10 @@ function ResourceForm({
                       aria-label={costField.label}
                       aria-describedby={`summoning-cost-help-${costField.key}`}
                       type="number"
-                      inputMode="numeric"
-                      min="0"
-                      max="1000000000"
-                      step="1"
+                      inputMode="decimal"
+                      min={costField.min}
+                      max={costField.max}
+                      step={costField.step}
                       required
                       value={costValues[costField.key]}
                       onChange={(e) =>
@@ -1386,7 +1409,7 @@ function ResourceForm({
                       }
                     />
                     <small id={`summoning-cost-help-${costField.key}`}>
-                      Required whole number. Enter 0 if unknown.
+                      {costField.help}
                     </small>
                   </label>
                 )}

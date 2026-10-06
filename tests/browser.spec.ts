@@ -10,7 +10,7 @@ import type {
   Member,
   SessionResponse,
 } from "../src/lib/types";
-import { EMPTY_RESOURCES, EMPTY_SUMMONING_COSTS, RESOURCE_FIELDS } from "../src/lib/resources";
+import { EMPTY_RESOURCES, RESOURCE_FIELDS } from "../src/lib/resources";
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
 const executablePath =
@@ -66,7 +66,7 @@ async function noPageOverflow(page: Page) {
 test.beforeAll(async ({ request }) => {
   await demoSession(request);
   // A persisted demo database may have crossed into a new week since it was seeded.
-  // Add missing demo fixtures rather than depending on the date of its first startup.
+  // Keep required demo fixtures and their cost ranges usable across app updates.
   const current = await dashboard(request);
   const previousDate = new Date(`${current.week}T00:00:00Z`);
   previousDate.setUTCDate(previousDate.getUTCDate() - 7);
@@ -87,17 +87,26 @@ test.beforeAll(async ({ request }) => {
     [current, target!.id],
     [previous, current.currentUser.id],
   ] as const) {
-    if (data.entries.some((entry) => entry.memberId === memberId)) continue;
+    const existing = data.entries.find((entry) => entry.memberId === memberId);
+    const skillCost = existing?.summoningCosts.fiveSkills ?? 0;
+    const mountCost = existing?.summoningCosts.mount ?? 0;
+    const validSkillCost = skillCost >= 150 && skillCost <= 200 && Number.isInteger(skillCost * 10);
+    const validMountCost = mountCost >= 37.5 && mountCost <= 50;
+    if (existing && validSkillCost && validMountCost) continue;
     const response = await request.put("/api/resources", {
       headers: { Origin: baseURL },
       data: {
         week: data.week,
         memberId,
-        resources: {
+        resources: existing?.resources ?? {
           skillTickets: data.week === current.week ? 321 : 125,
           hammers: 25,
         },
-        notes: "Demo browser-test fixture.",
+        summoningCosts: {
+          fiveSkills: validSkillCost ? skillCost : 150,
+          mount: validMountCost ? mountCost : 37.5,
+        },
+        notes: existing?.notes ?? "Demo browser-test fixture.",
       },
     });
     expect(response.ok(), await response.text()).toBeTruthy();
@@ -127,7 +136,7 @@ test("desktop resources persist, copy from history, update totals, and export co
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("dialog", (dialog) => dialog.accept());
   try {
-    const previousCosts = { fiveSkills: 25, mount: 5 };
+    const previousCosts = { fiveSkills: 175.5, mount: 37.5 };
     const seededPrevious = await request.put("/api/resources", {
       headers: { Origin: baseURL },
       data: { week: previousEntry.week, memberId: previousEntry.memberId,
@@ -153,8 +162,8 @@ test("desktop resources persist, copy from history, update totals, and export co
       String(ownEntry.resources.eggsPetsTotal),
     );
     await page.getByLabel("Skill Tickets", { exact: true }).fill("54321");
-    await page.getByLabel("Cost of summoning 5 skills", { exact: true }).fill("100");
-    await page.getByLabel("Cost per mount summon", { exact: true }).fill("4");
+    await page.getByLabel("Cost of summoning 5 skills", { exact: true }).fill("185.5");
+    await page.getByLabel("Cost per mount summon", { exact: true }).fill("45.25");
     await page.getByLabel("Total eggs/pets", { exact: true }).fill("16");
     await page
       .getByLabel("Notes", { exact: true })
@@ -168,8 +177,8 @@ test("desktop resources persist, copy from history, update totals, and export co
       "54321",
     );
     await expect(page.getByLabel("Total eggs/pets", { exact: true })).toHaveValue("16");
-    await expect(page.getByLabel("Cost of summoning 5 skills", { exact: true })).toHaveValue("100");
-    await expect(page.getByLabel("Cost per mount summon", { exact: true })).toHaveValue("4");
+    await expect(page.getByLabel("Cost of summoning 5 skills", { exact: true })).toHaveValue("185.5");
+    await expect(page.getByLabel("Cost per mount summon", { exact: true })).toHaveValue("45.25");
     await expect(page.getByLabel("Notes", { exact: true })).toHaveValue(
       "Browser verification — saved and reloaded.",
     );
@@ -188,8 +197,8 @@ test("desktop resources persist, copy from history, update totals, and export co
     const copied = await dashboard(request);
     expect(copied.entries.find((entry) => entry.memberId === copied.currentUser.id)?.summoningCosts)
       .toEqual(previousCosts);
-    await expect(page.getByLabel("Cost of summoning 5 skills", { exact: true })).toHaveValue("25");
-    await expect(page.getByLabel("Cost per mount summon", { exact: true })).toHaveValue("5");
+    await expect(page.getByLabel("Cost of summoning 5 skills", { exact: true })).toHaveValue("175.5");
+    await expect(page.getByLabel("Cost per mount summon", { exact: true })).toHaveValue("37.5");
     expect(
       copied.entries.find((entry) => entry.memberId === copied.currentUser.id)
         ?.resources,
@@ -344,7 +353,7 @@ test("resource fields can be cleared, typed without a leading zero, and saved bl
   }
 });
 
-test("weekly summoning costs persist, are required, and accept explicit zero", async ({ page, request }) => {
+test("weekly summoning costs persist and enforce required decimal ranges", async ({ page, request }) => {
   await demoSession(request);
   const original = await dashboard(request);
   const own = original.entries.find((entry) => entry.memberId === original.currentUser.id)!;
@@ -361,44 +370,52 @@ test("weekly summoning costs persist, are required, and accept explicit zero", a
     const seeded = await request.put("/api/resources", {
       headers: { Origin: baseURL },
       data: { week: other.week, memberId: other.memberId,
-        resources: { ...EMPTY_RESOURCES, skillTickets: 150, mountKeys: 18 },
-        summoningCosts: { fiveSkills: 50, mount: 3 }, notes: other.notes },
+        resources: { ...EMPTY_RESOURCES, skillTickets: 600, mountKeys: 90 },
+        summoningCosts: { fiveSkills: 150, mount: 45 }, notes: other.notes },
     });
     expect(seeded.ok(), await seeded.text()).toBeTruthy();
     await page.goto(`/resources?week=${original.week}`);
-    await page.getByLabel("Skill Tickets", { exact: true }).fill("120");
-    await page.getByLabel("Mount Keys", { exact: true }).fill("14");
+    await page.getByLabel("Skill Tickets", { exact: true }).fill("702");
+    await page.getByLabel("Mount Keys", { exact: true }).fill("75");
     const skillCost = page.getByLabel(skillCostLabel, { exact: true });
     const mountCost = page.getByLabel(mountCostLabel, { exact: true });
-    for (const input of [skillCost, mountCost]) {
+    for (const [input, invalidValues, validValues] of [
+      [skillCost, ["0", "149.9", "200.1", "175.55"], ["150", "150.1", "175.5", "200"]],
+      [mountCost, ["0", "37.49", "50.01"], ["37.5", "45.25", "50"]],
+    ] as const) {
       await expect(input).toHaveAttribute("required", "");
-      for (const invalid of ["-1", "1.5", "1000000001"]) {
+      await expect(input).toHaveAttribute("inputmode", "decimal");
+      for (const invalid of invalidValues) {
         await input.fill(invalid);
         expect(await input.evaluate((field: HTMLInputElement) => field.checkValidity())).toBeFalsy();
+      }
+      for (const valid of validValues) {
+        await input.fill(valid);
+        expect(await input.evaluate((field: HTMLInputElement) => field.checkValidity())).toBeTruthy();
       }
       await input.fill("");
       await expect(input).toHaveValue("");
       expect(await input.evaluate((field: HTMLInputElement) => field.checkValidity())).toBeFalsy();
     }
-    await skillCost.pressSequentially("30");
-    await mountCost.pressSequentially("2");
+    await skillCost.pressSequentially("175.5");
+    await mountCost.pressSequentially("37.5");
     await expect(page.locator(".save-bar")).toContainText("Unsaved changes");
     await page.getByRole("button", { name: "Save resources", exact: true }).click();
     await expect(page.getByRole("status")).toContainText("resources are saved");
     expect(costSaves).toBe(1);
     await page.reload();
-    await expect(page.getByLabel(skillCostLabel, { exact: true })).toHaveValue("30");
-    await expect(page.getByLabel(mountCostLabel, { exact: true })).toHaveValue("2");
+    await expect(page.getByLabel(skillCostLabel, { exact: true })).toHaveValue("175.5");
+    await expect(page.getByLabel(mountCostLabel, { exact: true })).toHaveValue("37.5");
     const saved = await dashboard(request, original.week);
     expect(saved.entries.find((entry) => entry.memberId === own.memberId)?.summoningCosts)
-      .toEqual({ fiveSkills: 30, mount: 2 });
+      .toEqual({ fiveSkills: 175.5, mount: 37.5 });
     const baseline = original.entries.filter((entry) => entry.memberId !== own.memberId && entry.memberId !== other.memberId);
     const baselineSkills = baseline.reduce((sum, entry) => sum + (entry.summoningCosts.fiveSkills > 0
       ? entry.resources.skillTickets * 5 / entry.summoningCosts.fiveSkills : 0), 0);
     const baselineMounts = baseline.reduce((sum, entry) => sum + (entry.summoningCosts.mount > 0
       ? entry.resources.mountKeys / entry.summoningCosts.mount : 0), 0);
-    expect(saved.summons.skills).toBe(Math.round(baselineSkills + 35));
-    expect(saved.summons.mounts).toBe(Math.round(baselineMounts + 13));
+    expect(saved.summons.skills).toBe(Math.round(baselineSkills + 40));
+    expect(saved.summons.mounts).toBe(Math.round(baselineMounts + 4));
     await page.getByRole("link", { name: "Dashboard", exact: true }).click();
     const skillCard = page.locator(".stat-card").filter({ hasText: "Skill Tickets" });
     const mountCard = page.locator(".stat-card").filter({ hasText: "Mount Keys" });
@@ -418,27 +435,40 @@ test("weekly summoning costs persist, are required, and accept explicit zero", a
     expect(costSaves).toBe(1);
     const blocked = await dashboard(request, original.week);
     expect(blocked.entries.find((entry) => entry.memberId === own.memberId)?.summoningCosts)
-      .toEqual({ fiveSkills: 30, mount: 2 });
+      .toEqual({ fiveSkills: 175.5, mount: 37.5 });
     await page.getByLabel(skillCostLabel, { exact: true }).fill("0");
     await page.getByLabel(mountCostLabel, { exact: true }).fill("0");
+    for (const label of [skillCostLabel, mountCostLabel]) {
+      expect(await page.getByLabel(label, { exact: true }).evaluate((field: HTMLInputElement) => field.checkValidity())).toBeFalsy();
+    }
+    await page.getByLabel(skillCostLabel, { exact: true }).fill("200");
+    await page.getByLabel(mountCostLabel, { exact: true }).fill("50");
     await page.getByRole("button", { name: "Save resources", exact: true }).click();
     await expect(page.getByRole("status")).toContainText("resources are saved");
     expect(costSaves).toBe(2);
     const cleared = await dashboard(request, original.week);
-    expect(cleared.entries.find((entry) => entry.memberId === own.memberId)?.summoningCosts).toEqual(EMPTY_SUMMONING_COSTS);
+    expect(cleared.entries.find((entry) => entry.memberId === own.memberId)?.summoningCosts).toEqual({ fiveSkills: 200, mount: 50 });
     expect(cleared.entries.find((entry) => entry.memberId === own.memberId)?.resources.eggsPetsTotal).toBe(0);
-    expect(cleared.summons.skills).toBe(Math.round(baselineSkills + 15));
-    expect(cleared.summons.mounts).toBe(Math.round(baselineMounts + 6));
-    expect(cleared.summons.missingSkillCosts).toBe(saved.summons.missingSkillCosts + 1);
-    expect(cleared.summons.missingMountCosts).toBe(saved.summons.missingMountCosts + 1);
+    expect(cleared.summons.skills).toBe(Math.round(baselineSkills + 37.55));
+    expect(cleared.summons.mounts).toBe(Math.round(baselineMounts + 3.5));
+    expect(cleared.summons.missingSkillCosts).toBe(saved.summons.missingSkillCosts);
+    expect(cleared.summons.missingMountCosts).toBe(saved.summons.missingMountCosts);
     await page.reload();
-    await expect(page.getByLabel(skillCostLabel, { exact: true })).toHaveValue("0");
-    await expect(page.getByLabel(mountCostLabel, { exact: true })).toHaveValue("0");
+    await expect(page.getByLabel(skillCostLabel, { exact: true })).toHaveValue("200");
+    await expect(page.getByLabel(mountCostLabel, { exact: true })).toHaveValue("50");
     await expect(page.getByLabel("Total eggs/pets", { exact: true })).toHaveValue("0");
     await page.getByRole("link", { name: "Dashboard", exact: true }).click();
-    await expect(skillCard.locator(".summon-warning")).toContainText(String(cleared.summons.missingSkillCosts));
+    if (cleared.summons.missingSkillCosts > 0) {
+      await expect(skillCard.locator(".summon-warning")).toContainText(String(cleared.summons.missingSkillCosts));
+    } else {
+      await expect(skillCard.locator(".summon-warning")).toHaveCount(0);
+    }
     await expect(skillCard.locator(".war-points-total")).toHaveText(new Intl.NumberFormat("en-US").format(cleared.summons.skills * 225));
-    await expect(mountCard.locator(".summon-warning")).toContainText(String(cleared.summons.missingMountCosts));
+    if (cleared.summons.missingMountCosts > 0) {
+      await expect(mountCard.locator(".summon-warning")).toContainText(String(cleared.summons.missingMountCosts));
+    } else {
+      await expect(mountCard.locator(".summon-warning")).toHaveCount(0);
+    }
   } finally {
     for (const entry of [own, other]) {
       const restored = await request.put("/api/resources", {

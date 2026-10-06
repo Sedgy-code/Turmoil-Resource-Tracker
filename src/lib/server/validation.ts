@@ -1,5 +1,15 @@
 import { z } from "zod";
-import { LEGACY_EGGS_PETS_KEYS, RESOURCE_FIELDS, normalizeResources, resourceMaximum } from "../resources";
+import {
+  LEGACY_EGGS_PETS_KEYS,
+  MOUNT_SUMMON_COST_MIN,
+  MOUNT_SUMMON_COST_MAX,
+  SKILL_SUMMON_COST_MIN,
+  SKILL_SUMMON_COST_MAX,
+  RESOURCE_FIELDS,
+  normalizeResources,
+  resourceMaximum,
+  skillCostHasValidPrecision,
+} from "../resources";
 
 export const weekSchema = z.string().refine((value) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -33,10 +43,19 @@ export const resourceSchema = z
   .strict()
   .transform(normalizeResources);
 
-export const summoningCostsSchema = z.object({
-  fiveSkills: z.number().int().min(0).max(1_000_000_000),
-  mount: z.number().int().min(0).max(1_000_000_000),
-}).strict();
+export const summoningCostsSchema = z
+  .object({
+    fiveSkills: z
+      .number()
+      .min(SKILL_SUMMON_COST_MIN)
+      .max(SKILL_SUMMON_COST_MAX)
+      .refine(
+        skillCostHasValidPrecision,
+        "Skill summon cost can have at most one decimal place.",
+      ),
+    mount: z.number().min(MOUNT_SUMMON_COST_MIN).max(MOUNT_SUMMON_COST_MAX),
+  })
+  .strict();
 
 export const saveResourcesSchema = z
   .object({

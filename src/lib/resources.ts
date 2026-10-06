@@ -27,6 +27,13 @@ export interface SummoningCosts {
   mount: number;
 }
 export const EMPTY_SUMMONING_COSTS: SummoningCosts = { fiveSkills: 0, mount: 0 };
+export const MOUNT_SUMMON_COST_MIN = 37.5;
+export const MOUNT_SUMMON_COST_MAX = 50;
+export const SKILL_SUMMON_COST_MIN = 150;
+export const SKILL_SUMMON_COST_MAX = 200;
+export function skillCostHasValidPrecision(value: number): boolean {
+  return Number.isInteger(value * 10);
+}
 export const EMPTY_RESOURCES = Object.fromEntries(
   RESOURCE_FIELDS.map(({ key }) => [key, 0]),
 ) as ResourceValues;

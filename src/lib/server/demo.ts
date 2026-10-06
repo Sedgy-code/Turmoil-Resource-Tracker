@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import {
   EMPTY_RESOURCES,
+  MOUNT_SUMMON_COST_MIN,
+  SKILL_SUMMON_COST_MIN,
   currentWeek,
   shiftWeek,
   type ResourceValues,
@@ -76,7 +78,7 @@ export async function seedDemo(): Promise<void> {
               Date.now() - (index * 37 + 7) * 60 * 1000 + offset * 7 * 86400000,
             ).toISOString();
             await tx.query(
-              "INSERT INTO resource_entries (id,member_id,week_start,resources,notes,updated_at,updated_by) VALUES ($1,$2,$3,$4::jsonb,$5,$6,$2)",
+              "INSERT INTO resource_entries (id,member_id,week_start,resources,notes,updated_at,updated_by,summoning_costs) VALUES ($1,$2,$3,$4::jsonb,$5,$6,$2,$7::jsonb)",
               [
                 randomUUID(),
                 id,
@@ -88,6 +90,10 @@ export async function seedDemo(): Promise<void> {
                     ? `${name} is ready for the next push.`
                     : "",
                 updated,
+                JSON.stringify({
+                  fiveSkills: SKILL_SUMMON_COST_MIN + (index % 6) * 10,
+                  mount: MOUNT_SUMMON_COST_MIN + (index % 6) * 2.5,
+                }),
               ],
             );
             if (offset === 0)

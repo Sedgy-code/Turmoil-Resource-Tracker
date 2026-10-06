@@ -4,6 +4,10 @@ import { test } from "node:test";
 import {
   EMPTY_RESOURCES,
   EMPTY_SUMMONING_COSTS,
+  MOUNT_SUMMON_COST_MIN,
+  MOUNT_SUMMON_COST_MAX,
+  SKILL_SUMMON_COST_MIN,
+  SKILL_SUMMON_COST_MAX,
   type ResourceValues,
 } from "../src/lib/resources";
 import type { Member } from "../src/lib/types";
@@ -56,9 +60,17 @@ async function addMember(
   return memberFromRow(rows[0]);
 }
 
-test("summoning costs accept whole numbers from zero through one billion", () => {
-  assert.deepEqual(summoningCostsSchema.parse({ fiveSkills: 0, mount: 0 }), EMPTY_SUMMONING_COSTS);
-  for (const suppliedCosts of [{}, { fiveSkills: 0 }, { mount: 0 }]) {
+test("skill costs allow one decimal from 150 to 200 and mount costs allow decimals from 37.5 to 50", () => {
+  const minimums = { fiveSkills: SKILL_SUMMON_COST_MIN, mount: MOUNT_SUMMON_COST_MIN };
+  const maximums = { fiveSkills: SKILL_SUMMON_COST_MAX, mount: MOUNT_SUMMON_COST_MAX };
+  assert.deepEqual(summoningCostsSchema.parse(minimums), { fiveSkills: 150, mount: 37.5 });
+  assert.deepEqual(summoningCostsSchema.parse(maximums), { fiveSkills: 200, mount: 50 });
+  assert.deepEqual(summoningCostsSchema.parse({ fiveSkills: 175, mount: 43.875 }), { fiveSkills: 175, mount: 43.875 });
+  for (let tenths = 1500; tenths <= 2000; tenths++) {
+    assert.equal(summoningCostsSchema.safeParse({ fiveSkills: tenths / 10, mount: 37.5 }).success, true);
+  }
+  assert.deepEqual(summoningCostsSchema.parse({ fiveSkills: 175.5, mount: 43.875 }), { fiveSkills: 175.5, mount: 43.875 });
+  for (const suppliedCosts of [{}, { fiveSkills: 150 }, { mount: 37.5 }]) {
     assert.equal(summoningCostsSchema.safeParse(suppliedCosts).success, false);
     assert.equal(saveResourcesSchema.safeParse({
       week: WEEK,
@@ -66,27 +78,23 @@ test("summoning costs accept whole numbers from zero through one billion", () =>
       summoningCosts: suppliedCosts,
     }).success, false);
   }
-  assert.deepEqual(
-    summoningCostsSchema.parse({ fiveSkills: 1_000_000_000, mount: 1_000_000_000 }),
-    { fiveSkills: 1_000_000_000, mount: 1_000_000_000 },
-  );
-  for (const key of ["fiveSkills", "mount"]) {
-    for (const value of [-1, 0.5, NaN, Infinity, -Infinity, "", " ", "10", null, 1_000_000_001]) {
-      assert.equal(summoningCostsSchema.safeParse({ ...EMPTY_SUMMONING_COSTS, [key]: value }).success, false);
-    }
+  for (const value of [-1, 0, 149.9, 175.55, 200.1, NaN, Infinity, -Infinity, "", " ", "175.5", null]) {
+    assert.equal(summoningCostsSchema.safeParse({ ...minimums, fiveSkills: value }).success, false);
+  }
+  for (const value of [-1, 0, 37.499, 50.001, 51, NaN, Infinity, -Infinity, "", " ", "37.5", null]) {
+    assert.equal(summoningCostsSchema.safeParse({ ...minimums, mount: value }).success, false);
   }
   assert.equal(
-    summoningCostsSchema.safeParse({ fiveSkills: 5, mount: 1, skillTickets: 10 }).success,
+    summoningCostsSchema.safeParse({ ...minimums, skillTickets: 10 }).success,
     false,
   );
   const oldClient = saveResourcesSchema.parse({ week: WEEK, resources: {} });
   assert.equal(oldClient.summoningCosts, undefined);
-  const explicitZero = saveResourcesSchema.parse({
+  assert.equal(saveResourcesSchema.safeParse({
     week: WEEK,
     resources: {},
     summoningCosts: { fiveSkills: 0, mount: 0 },
-  });
-  assert.deepEqual(explicitZero.summoningCosts, EMPTY_SUMMONING_COSTS);
+  }).success, false);
 });
 
 test("new entries default costs to zero and older-client saves preserve stored costs", async () => {
@@ -101,7 +109,7 @@ test("new entries default costs to zero and older-client saves preserve stored c
     const priced = await saveEntry(member, {
       week: WEEK,
       resources: initial.resources,
-      summoningCosts: { fiveSkills: 50, mount: 2 },
+      summoningCosts: { fiveSkills: 175.5, mount: 43.875 },
       notes: "Costs supplied",
     }, db);
     const oldClient = await saveEntry(member, {
@@ -110,16 +118,21 @@ test("new entries default costs to zero and older-client saves preserve stored c
       notes: "Inventory updated by an older client",
     }, db);
     assert.equal(oldClient.id, priced.id);
-    assert.deepEqual(oldClient.summoningCosts, { fiveSkills: 50, mount: 2 });
-    const cleared = await saveEntry(member, {
+    assert.deepEqual(oldClient.summoningCosts, { fiveSkills: 175.5, mount: 43.875 });
+    const corrected = await saveEntry(member, {
       week: WEEK,
       resources: oldClient.resources,
-      summoningCosts: { fiveSkills: 0, mount: 0 },
+      summoningCosts: { fiveSkills: 150, mount: 37.5 },
       notes: oldClient.notes,
     }, db);
-    assert.deepEqual(cleared.summoningCosts, EMPTY_SUMMONING_COSTS);
-    assert.deepEqual(cleared.resources, oldClient.resources);
-    const saved = await db.query("SELECT summoning_costs FROM resource_entries WHERE id = $1", [cleared.id]);
+    assert.deepEqual(corrected.summoningCosts, { fiveSkills: 150, mount: 37.5 });
+    assert.deepEqual(corrected.resources, oldClient.resources);
+    // Historical missing prices stay readable and are preserved by clients
+    // that omit the entire cost object; new supplied zero prices are rejected.
+    await db.query("UPDATE resource_entries SET summoning_costs = $2::jsonb WHERE id = $1", [corrected.id, JSON.stringify(EMPTY_SUMMONING_COSTS)]);
+    const legacy = await saveEntry(member, { week: WEEK, resources: corrected.resources, notes: corrected.notes }, db);
+    assert.deepEqual(legacy.summoningCosts, EMPTY_SUMMONING_COSTS);
+    const saved = await db.query("SELECT summoning_costs FROM resource_entries WHERE id = $1", [legacy.id]);
     assert.deepEqual(saved[0].summoning_costs, { fiveSkills: 0, mount: 0 });
   });
 });
@@ -129,8 +142,8 @@ test("costs persist per week, and copying includes both costs without changing h
     const member = await addMember(db, "Nyx");
     const original = await saveEntry(member, {
       week: WEEK,
-      resources: inventory({ skillTickets: 500, mountKeys: 40 }),
-      summoningCosts: { fiveSkills: 50, mount: 4 },
+      resources: inventory({ skillTickets: 1200, mountKeys: 400 }),
+      summoningCosts: { fiveSkills: 150, mount: 40 },
       notes: "Ready for the clan event",
     }, db);
     const copied = await copyPreviousEntry(member, { week: NEXT_WEEK }, db);
@@ -141,17 +154,17 @@ test("costs persist per week, and copying includes both costs without changing h
     await saveEntry(member, {
       week: NEXT_WEEK,
       resources: copied.resources,
-      summoningCosts: { fiveSkills: 100, mount: 8 },
+      summoningCosts: { fiveSkills: 200, mount: 50 },
       notes: "Next week's new prices",
     }, db);
     const earlier = await dashboard(member, WEEK, db);
     const later = await dashboard(member, NEXT_WEEK, db);
-    assert.deepEqual(earlier.entries[0].summoningCosts, { fiveSkills: 50, mount: 4 });
-    assert.deepEqual(later.entries[0].summoningCosts, { fiveSkills: 100, mount: 8 });
-    assert.equal(earlier.summons.skills, 50);
-    assert.equal(later.summons.skills, 25);
+    assert.deepEqual(earlier.entries[0].summoningCosts, { fiveSkills: 150, mount: 40 });
+    assert.deepEqual(later.entries[0].summoningCosts, { fiveSkills: 200, mount: 50 });
+    assert.equal(earlier.summons.skills, 40);
+    assert.equal(later.summons.skills, 30);
     assert.equal(earlier.summons.mounts, 10);
-    assert.equal(later.summons.mounts, 5);
+    assert.equal(later.summons.mounts, 8);
   });
 });
 
@@ -164,37 +177,37 @@ test("summoning costs use the same ownership, admin, and active-member permissio
       week: WEEK,
       memberId: admin.id,
       resources,
-      summoningCosts: { fiveSkills: 10, mount: 1 },
+      summoningCosts: { fiveSkills: 150, mount: 40 },
       notes: "Forbidden",
     }, db), apiFailure("FORBIDDEN"));
     const own = await saveEntry(member, {
       week: WEEK,
       resources,
-      summoningCosts: { fiveSkills: 20, mount: 2 },
+      summoningCosts: { fiveSkills: 160, mount: 42.5 },
       notes: "My prices",
     }, db);
     const edited = await saveEntry(admin, {
       week: WEEK,
       memberId: member.id,
       resources,
-      summoningCosts: { fiveSkills: 25, mount: 5 },
+      summoningCosts: { fiveSkills: 200, mount: 50 },
       notes: "Admin correction",
     }, db);
     assert.equal(edited.id, own.id);
     assert.equal(edited.updatedBy.id, admin.id);
-    assert.deepEqual(edited.summoningCosts, { fiveSkills: 25, mount: 5 });
+    assert.deepEqual(edited.summoningCosts, { fiveSkills: 200, mount: 50 });
     await updateMember(admin, member.id, { active: false }, db);
     await assert.rejects(saveEntry(member, {
       week: WEEK,
       resources,
-      summoningCosts: EMPTY_SUMMONING_COSTS,
+      summoningCosts: { fiveSkills: 150, mount: 40 },
       notes: "Stale member write",
     }, db), apiFailure("ACCOUNT_INACTIVE"));
     await assert.rejects(saveEntry(admin, {
       week: WEEK,
       memberId: member.id,
       resources,
-      summoningCosts: EMPTY_SUMMONING_COSTS,
+      summoningCosts: { fiveSkills: 150, mount: 40 },
       notes: "Inactive target",
     }, db), apiFailure("MEMBER_NOT_FOUND"));
     await assert.rejects(copyPreviousEntry(member, { week: NEXT_WEEK }, db), apiFailure("ACCOUNT_INACTIVE"));
@@ -211,25 +224,28 @@ test("summon totals use each active member's selected-week prices and count only
     const empty = await addMember(db, "No inventory");
     const inactive = await addMember(db, "Inactive");
     const fixtures = [
-      { member: first, tickets: 500, keys: 40, skillCost: 50, mountCost: 4 },
-      { member: second, tickets: 600, keys: 30, skillCost: 100, mountCost: 5 },
-      { member: ticketsMissing, tickets: 100, keys: 0, skillCost: 0, mountCost: 0 },
-      { member: mountsMissing, tickets: 0, keys: 10, skillCost: 0, mountCost: 0 },
+      { member: first, tickets: 1500, keys: 400, skillCost: 150, mountCost: 40 },
+      { member: second, tickets: 1200, keys: 300, skillCost: 200, mountCost: 50 },
+      { member: ticketsMissing, tickets: 100, keys: 0, skillCost: 0, mountCost: 40 },
+      { member: mountsMissing, tickets: 0, keys: 100, skillCost: 150, mountCost: 0 },
       { member: empty, tickets: 0, keys: 0, skillCost: 0, mountCost: 0 },
-      { member: inactive, tickets: 10_000, keys: 10_000, skillCost: 1, mountCost: 1 },
+      { member: inactive, tickets: 10_000, keys: 10_000, skillCost: 150, mountCost: 37.5 },
     ];
     for (const fixture of fixtures) {
-      await saveEntry(fixture.member, {
+      const entry = await saveEntry(fixture.member, {
         week: WEEK,
         resources: inventory({ skillTickets: fixture.tickets, mountKeys: fixture.keys }),
-        summoningCosts: { fiveSkills: fixture.skillCost, mount: fixture.mountCost },
+        ...(fixture.skillCost && fixture.mountCost ? { summoningCosts: { fiveSkills: fixture.skillCost, mount: fixture.mountCost } } : {}),
         notes: "",
       }, db);
+      if (!fixture.skillCost || !fixture.mountCost) {
+        await db.query("UPDATE resource_entries SET summoning_costs = $2::jsonb WHERE id = $1", [entry.id, JSON.stringify({ fiveSkills: fixture.skillCost, mount: fixture.mountCost })]);
+      }
     }
     await saveEntry(first, {
       week: NEXT_WEEK,
       resources: inventory({ skillTickets: 10_000, mountKeys: 10_000 }),
-      summoningCosts: { fiveSkills: 1, mount: 1 },
+      summoningCosts: { fiveSkills: 150, mount: 37.5 },
       notes: "Different week must not leak into totals",
     }, db);
     await updateMember(admin, inactive.id, { active: false }, db);
@@ -240,8 +256,8 @@ test("summon totals use each active member's selected-week prices and count only
       missingSkillCosts: 1,
       missingMountCosts: 1,
     });
-    assert.equal(result.totals.skillTickets, 1200);
-    assert.equal(result.totals.mountKeys, 80);
+    assert.equal(result.totals.skillTickets, 2800);
+    assert.equal(result.totals.mountKeys, 800);
     assert.equal(result.entries.length, 5);
     const emptyWeek = await dashboard(admin, "2026-09-28", db);
     assert.deepEqual(emptyWeek.summons, { skills: 0, mounts: 0, missingSkillCosts: 0, missingMountCosts: 0 });
@@ -294,14 +310,14 @@ test("exact member summons are added before rounding clan totals down, up, or ha
     const second = await addMember(db, "Second");
     await saveEntry(first, {
       week: WEEK,
-      resources: inventory({ skillTickets: 10, mountKeys: 5 }),
-      summoningCosts: { fiveSkills: 3, mount: 2 },
+      resources: inventory({ skillTickets: 500, mountKeys: 100 }),
+      summoningCosts: { fiveSkills: 150, mount: 40 },
       notes: "",
     }, db);
     await saveEntry(second, {
       week: WEEK,
-      resources: inventory({ skillTickets: 5, mountKeys: 5 }),
-      summoningCosts: { fiveSkills: 2, mount: 3 },
+      resources: inventory({ skillTickets: 500, mountKeys: 75 }),
+      summoningCosts: { fiveSkills: 200, mount: 45 },
       notes: "",
     }, db);
     const result = await dashboard(first, WEEK, db);
@@ -315,14 +331,14 @@ test("exact member summons are added before rounding clan totals down, up, or ha
     });
     await saveEntry(first, {
       week: NEXT_WEEK,
-      resources: inventory({ skillTickets: 10, mountKeys: 5 }),
-      summoningCosts: { fiveSkills: 3, mount: 2 },
+      resources: inventory({ skillTickets: 500, mountKeys: 100 }),
+      summoningCosts: { fiveSkills: 150, mount: 40 },
       notes: "",
     }, db);
     await saveEntry(second, {
       week: NEXT_WEEK,
-      resources: inventory({ skillTickets: 13, mountKeys: 7 }),
-      summoningCosts: { fiveSkills: 5, mount: 3 },
+      resources: inventory({ skillTickets: 520, mountKeys: 105 }),
+      summoningCosts: { fiveSkills: 200, mount: 45 },
       notes: "",
     }, db);
     const roundsUp = await dashboard(first, NEXT_WEEK, db);
@@ -330,8 +346,8 @@ test("exact member summons are added before rounding clan totals down, up, or ha
     assert.equal(roundsUp.summons.mounts, 5);
     await saveEntry(first, {
       week: "2026-10-19",
-      resources: inventory({ skillTickets: 5, mountKeys: 5 }),
-      summoningCosts: { fiveSkills: 2, mount: 2 },
+      resources: inventory({ skillTickets: 500, mountKeys: 100 }),
+      summoningCosts: { fiveSkills: 200, mount: 40 },
       notes: "Halfway results round up",
     }, db);
     const halfway = await dashboard(first, "2026-10-19", db);
@@ -339,8 +355,8 @@ test("exact member summons are added before rounding clan totals down, up, or ha
     assert.equal(halfway.summons.mounts, 3);
     await saveEntry(first, {
       week: "2026-10-26",
-      resources: inventory({ skillTickets: 21, mountKeys: 0 }),
-      summoningCosts: { fiveSkills: 5, mount: 0 },
+      resources: inventory({ skillTickets: 630, mountKeys: 0 }),
+      summoningCosts: { fiveSkills: 150, mount: 37.5 },
       notes: "Exact whole skill total",
     }, db);
     assert.equal((await dashboard(first, "2026-10-26", db)).summons.skills, 21);
