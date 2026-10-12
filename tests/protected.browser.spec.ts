@@ -32,7 +32,7 @@ test("every unauthenticated browser route shows the Discord login screen", async
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  for (const path of ["/", "/resources", "/members", "/weeks", "/war-points", "/snipes", "/dew-store"]) {
+  for (const path of ["/", "/resources", "/members", "/weeks", "/war-points", "/snipes", "/reward-shop", "/dew-store"]) {
     await page.goto(path);
     await expect(
       page.getByRole("heading", { name: "One clan. Endless potential." }),
@@ -88,6 +88,7 @@ test("protected APIs deny unauthenticated reads and writes without touching the 
     ["POST", "/api/snipes"],
     ["PATCH", "/api/snipes/00000000-0000-4000-8000-000000000000"],
     ["POST", "/api/snipes/00000000-0000-4000-8000-000000000000/response"],
+    ["POST", "/api/snipes/00000000-0000-4000-8000-000000000000/attendance"],
     ["POST", "/api/dew/purchase"],
     ["POST", "/api/dew/equip"],
   ] as const) {

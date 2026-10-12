@@ -60,20 +60,41 @@ export const summoningCostsSchema = z
   })
   .strict();
 
+const extraChancePercent = z.number().min(0).max(1000).refine(
+  value => Math.abs(value * 100 - Math.round(value * 100)) < 1e-8,
+  "Extra summon chance can have at most two decimal places.",
+);
 export const planningDetailsSchema = z.object({
+  skillLevel: z.number().int().min(0).max(1_000_000_000).default(0),
+  mountLevel: z.number().int().min(0).max(1_000_000_000).default(0),
+  eggLevel: z.number().int().min(0).max(1_000_000_000).default(0),
+  // Keep prior action counts readable and accepted from older open clients.
+  newMountMerges: z.number().int().min(0).max(1_000_000).default(0),
+  eggMerges: z.number().int().min(0).max(1_000_000).default(0),
+  eggSummonMerges: z.number().int().min(0).max(1_000_000).default(0),
+  extraMountChancePercent: extraChancePercent.optional(),
+  extraPetSummonPercent: extraChancePercent.optional(),
+  calculationVersion: z.literal(2).optional(),
+}).strict();
+
+const completeBankResourcesSchema = z.object(Object.fromEntries(
+  RESOURCE_FIELDS.map(({ key }) => [key, z.number().int().min(0).max(resourceMaximum(key))]),
+)).strict().transform(normalizeResources);
+
+const completePlanningDetailsSchema = planningDetailsSchema.extend({
   skillLevel: z.number().int().min(0).max(1_000_000_000),
   mountLevel: z.number().int().min(0).max(1_000_000_000),
   eggLevel: z.number().int().min(0).max(1_000_000_000),
-  newMountMerges: z.number().int().min(0).max(1_000_000),
-  eggMerges: z.number().int().min(0).max(1_000_000),
-  eggSummonMerges: z.number().int().min(0).max(1_000_000),
-}).strict();
+  extraMountChancePercent: extraChancePercent,
+  extraPetSummonPercent: extraChancePercent,
+  calculationVersion: z.literal(2).default(2),
+});
 
 export const saveBankSchema = z.object({
   memberId: z.string().uuid().optional(),
-  resources: resourceSchema,
-  summoningCosts: summoningCostsSchema.optional(),
-  planningDetails: planningDetailsSchema.optional(),
+  resources: completeBankResourcesSchema,
+  summoningCosts: summoningCostsSchema,
+  planningDetails: completePlanningDetailsSchema,
   notes: z.string().trim().max(2000).default(""),
 }).strict();
 
@@ -98,7 +119,14 @@ export const createSnipeSchema = z.object({
 export const updateSnipeSchema = createSnipeSchema.partial().extend({ archived: z.boolean().optional() }).strict().refine(value => Object.keys(value).length > 0, "Choose a change to save.");
 export const snipeResponseSchema = z.object({ answer: z.enum(["yes", "no"]) }).strict();
 export const purchaseDewSchema = z.object({ itemId: z.string().min(1).max(64) }).strict();
-export const equipDewSchema = z.object({ itemId: z.string().min(1).max(64).nullable() }).strict();
+export const equipDewSchema = z.object({
+  itemId: z.string().min(1).max(64).nullable(),
+  category: z.enum(["badge", "title", "accent", "frame"]).optional(),
+}).strict();
+export const snipeAttendanceSchema = z.object({
+  memberId: z.string().uuid(),
+  attended: z.literal(true),
+}).strict();
 
 export const saveResourcesSchema = z
   .object({

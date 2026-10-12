@@ -958,3 +958,139 @@ body {
 @media (max-height: 820px) {
   .sidebar .game-card { display: none; }
 }
+
+/* A balanced arsenal: five inventories and one combined estimate. */
+.arsenal-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  align-items: stretch;
+}
+.arsenal-grid .arsenal-card,
+.arsenal-grid .arsenal-card:last-child {
+  display: flex;
+  flex-direction: column;
+  grid-column: auto;
+  gap: 0;
+  min-width: 0;
+  min-height: 0;
+  padding: 19px 20px;
+  border-radius: 12px;
+}
+.arsenal-grid .stat-label {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  color: #bfd0c2;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: normal;
+}
+.arsenal-grid .resource-icon { width: 34px; height: 34px; border-radius: 9px; }
+.arsenal-grid .stat-number,
+.arsenal-grid .arsenal-card:last-child .stat-number {
+  grid-column: auto;
+  grid-row: auto;
+  align-self: auto;
+  text-align: left;
+  color: #f0f5f1;
+  font-size: clamp(27px, 2.3vw, 34px);
+  line-height: 1.15;
+  margin: 17px 0 13px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.arsenal-details { margin-bottom: 14px; }
+.arsenal-metric {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  color: #a7bcad;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.arsenal-metric strong {
+  color: #e7efe9;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.arsenal-note {
+  margin: 7px 0 0;
+  color: #91a797;
+  font-size: 11px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.arsenal-grid .stat-war-points {
+  margin-top: auto;
+  padding: 13px 0 0;
+  gap: 6px;
+  border-top-color: #9aae8b2c;
+}
+.arsenal-grid .war-points-label { color: #bed0c3; font-size: 11px; }
+.arsenal-grid .war-points-total { font-size: 25px; letter-spacing: -0.4px; }
+.arsenal-grid .war-points-note { font-size: 10px; color: #92a697; line-height: 1.6; }
+.arsenal-grid .summon-warning { font-size: 10px; margin: 7px 0 0; }
+.war-point-range { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; min-width: 0; }
+.war-point-range > div { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.war-point-range > div > span { font-size: 10px; color: #9fb1a4; }
+.war-point-range strong { font-family: var(--heading); color: var(--gold); font-size: clamp(18px, 1.6vw, 24px); line-height: 1.2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.arsenal-grid .arsenal-summary { background: radial-gradient(ellipse at top right, #ae8d2a1c, transparent 70%), linear-gradient(145deg, #1d291f, #121c15); border-color: #b69e565f; }
+.arsenal-summary-copy { font-size: 11px; line-height: 1.5; color: #a7bcad; margin: 16px 0 15px; }
+.arsenal-summary .war-point-range strong { font-size: clamp(21px, 1.8vw, 28px); }
+.arsenal-summary-footer { margin-top: auto; padding-top: 20px; }
+.arsenal-summary-tag { display: inline-flex; align-items: center; gap: 6px; color: #d4c589; font-size: 10px; }
+.arsenal-planner-link { display: inline-flex; align-items: center; gap: 7px; margin-top: 14px; color: #e7ce88; font-size: 11px; font-weight: 600; }
+.arsenal-planner-link:hover { color: #ffe3a2; }
+.bank-completeness { display: flex; gap: 11px; align-items: flex-start; margin: 0 0 18px; padding: 15px 17px; border: 1px solid #be9e4145; background: #96722110; border-radius: 9px; }
+.bank-completeness > svg { flex-shrink: 0; margin-top: 2px; color: #e2c676; }
+.bank-completeness strong { font-size: 12px; color: #e0d3a5; }
+.bank-completeness p { font-size: 11px; color: #b5bfad; line-height: 1.6; margin: 5px 0 0; }
+.bank-completeness .bank-missing-fields { color: #ead195; }
+.bank-completeness.complete { border-color: #4e9d624d; background: #2b7e3512; }
+.bank-completeness.complete strong, .bank-completeness.complete > svg { color: #a7dfb3; }
+.eggs-bank-inputs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.eggs-bank-inputs .eggs-pets-input { max-width: none; }
+
+/* Independent reward slots preserve the member's Discord identity. */
+.member-name,
+.sidebar-profile strong > .member-name { display: inline; margin: 0; font-size: inherit; color: inherit; }
+.member-name > .member-cosmetic,
+.sidebar-profile .member-name > .member-cosmetic { display: inline; margin: 0 0 0 5px; font-size: 14px; color: inherit; }
+.member-title,
+.sidebar-profile .member-title,
+.table-member > div > .member-title { display: block; margin-top: 3px; color: #d1bd7b; font-size: 10px; line-height: 1.5; font-weight: 500; }
+.member-name.cosmetic-accent-emerald,
+.sidebar-profile strong > .cosmetic-accent-emerald { color: #92e8ae; }
+.member-name.cosmetic-accent-frost,
+.sidebar-profile strong > .cosmetic-accent-frost { color: #9ed9ff; }
+.member-name.cosmetic-accent-ember,
+.sidebar-profile strong > .cosmetic-accent-ember { color: #ffb184; }
+.member-name.cosmetic-accent-royal,
+.sidebar-profile strong > .cosmetic-accent-royal { color: #d6b8ff; }
+.member-name.cosmetic-accent-celestial,
+.sidebar-profile strong > .cosmetic-accent-celestial { color: #ffe7a6; text-shadow: 0 0 9px #edce7140; }
+.avatar.cosmetic-frame-emerald { border: 2px solid #7bde97; box-shadow: 0 0 0 2px #264c32; }
+.avatar.cosmetic-frame-frost { border: 2px solid #a0d9fc; box-shadow: 0 0 0 2px #2a495e; }
+.avatar.cosmetic-frame-gold { border: 2px solid #e7c779; box-shadow: 0 0 0 2px #65532c; }
+.avatar.cosmetic-frame-phoenix { border: 2px solid #f5aa72; box-shadow: 0 0 0 2px #683927, 0 0 11px #ed803134; }
+.avatar.cosmetic-frame-celestial { border: 2px solid #fff0b6; box-shadow: 0 0 0 2px #796439, 0 0 12px #e9d49845; }
+@media (max-width: 1100px) { .arsenal-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 650px) {
+  .arsenal-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .arsenal-grid .arsenal-card, .arsenal-grid .arsenal-card:last-child { padding: 18px; }
+  .arsenal-grid .stat-number { font-size: 31px; }
+  .arsenal-grid .war-points-total { font-size: 24px; }
+  .war-point-range strong, .arsenal-summary .war-point-range strong { font-size: 24px; }
+  .eggs-bank-inputs { grid-template-columns: minmax(0, 1fr); gap: 15px; }
+  .bank-completeness { padding: 13px 14px; }
+}
+@media (max-width: 420px) {
+  .war-point-range { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .war-point-range > div { flex-direction: row; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .war-point-range > div > span { flex-shrink: 0; }
+  .war-point-range strong, .arsenal-summary .war-point-range strong { font-size: 21px; text-align: right; }
+}

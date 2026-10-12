@@ -13,6 +13,7 @@ export interface Member {
   lastUpdatedAt: string | null;
   joinedAt: string;
   badge?: string | null;
+  cosmetics?: EquippedCosmetics;
 }
 
 export interface ResourceEntry {
@@ -94,16 +95,32 @@ export interface SnipePlan {
   createdBy: string;
   createdAt: string;
   responses: { memberId: string; answer: "yes" | "no"; updatedAt: string }[];
+  attendees?: { memberId: string; confirmedBy: string; confirmedAt: string; member?: Member }[];
   participants: { member: Member; estimate: WarEstimate }[];
   counts: { yes: number; no: number; unanswered: number };
   estimate: WarEstimate;
 }
 export interface SnipesResponse { plans: SnipePlan[] }
-export interface DewItem { id: string; name: string; symbol: string; cost: number }
+export type CosmeticCategory = "badge" | "title" | "accent" | "frame";
+export type EquippedCosmetics = Record<CosmeticCategory, string | null>;
+export interface DewItem {
+  id: string;
+  name: string;
+  symbol: string;
+  cost: number;
+  category: CosmeticCategory;
+  /** Visual treatment for accents and frames; always selected from the catalog. */
+  style?: string;
+  legacy?: boolean;
+}
 export interface DewResponse {
   balance: number;
   earnedToday: boolean;
+  resourceRewardEarned: boolean;
+  snipeRewardEarned: boolean;
+  rewardWeek: string;
   equipped: string | null;
+  equippedCosmetics: EquippedCosmetics;
   owned: string[];
   items: DewItem[];
 }

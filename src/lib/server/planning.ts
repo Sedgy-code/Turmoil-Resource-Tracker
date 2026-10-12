@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { DEW_ITEMS } from "../dew";
+import { COSMETIC_CATEGORIES, DEW_ITEMS, equippedCosmetics } from "../dew";
 import { currentWeek } from "../resources";
-import type { DewResponse, Member, ResourceEntry, SnipePlan, SnipesResponse, WarActivity, WarRates } from "../types";
+import type { CosmeticCategory, DewResponse, Member, ResourceEntry, SnipePlan, SnipesResponse, WarActivity, WarRates } from "../types";
 import { estimateWar, WAR_ACTIVITIES } from "../war";
 import { database, lockAdministration, type Database, type SqlConnection } from "./db";
 import { ApiError } from "./errors";
@@ -61,6 +61,9 @@ async function planFromRow(tx: SqlConnection, row: Record<string, unknown>, cont
   const activities = jsonValue<WarActivity[]>(row.activities);
   const activeIds = new Set(live.members.map((member) => member.id));
   const responseRows = await tx.query("SELECT member_id, answer, updated_at FROM snipe_responses WHERE snipe_id = $1 ORDER BY member_id", [row.id]);
+  const attendeeRows = await tx.query(`SELECT attendance.member_id, attendance.confirmed_by, attendance.confirmed_at, member.*
+    FROM snipe_attendance attendance JOIN app_members member ON member.id = attendance.member_id
+    WHERE attendance.snipe_id = $1 ORDER BY attendance.confirmed_at, attendance.member_id`, [row.id]);
   const responses: SnipePlan["responses"] = responseRows.filter((response) => activeIds.has(String(response.member_id))).map((response) => ({
     memberId: String(response.member_id), answer: response.answer as "yes" | "no", updatedAt: iso(response.updated_at)!,
   }));
@@ -72,6 +75,7 @@ async function planFromRow(tx: SqlConnection, row: Record<string, unknown>, cont
     id: String(row.id), title: String(row.title), startsAt: iso(row.starts_at)!, activities,
     archived: row.archived === true, createdBy: String(row.created_by), createdAt: iso(row.created_at)!,
     responses, participants,
+    attendees: attendeeRows.map((attendee) => ({ memberId: String(attendee.member_id), confirmedBy: String(attendee.confirmed_by), confirmedAt: iso(attendee.confirmed_at)!, member: memberFromRow(attendee) })),
     counts: { yes: participants.length, no: responses.filter((response) => response.answer === "no").length, unanswered: live.members.length - responses.length },
     estimate: estimateWar(live.entries.filter((entry) => participantIds.has(entry.memberId)), live.rates, activities),
   };
@@ -152,11 +156,46 @@ export async function respondToSnipe(actor: Member, id: string, input: { answer:
   });
 }
 
+/** Attendance is an administrator's record of actual participation, separate from an RSVP. */
+export async function confirmSnipeAttendance(actor: Member, id: string, input: { memberId: string; attended: true }, db?: Database): Promise<SnipePlan> {
+  const connection = db ?? await database();
+  return connection.transaction(async (tx) => {
+    await lockAdministration(tx, connection.dialect);
+    const freshActor = await activeActor(tx, actor.id);
+    requireAdministrator(freshActor);
+    const row = await findPlan(tx, id);
+    requireOpen(row);
+    if (input.attended !== true) throw new ApiError(400, "Confirm actual attendance for this member.", "INVALID_SNIPE_ATTENDANCE");
+    const startsAt = new Date(iso(row.starts_at)!);
+    const now = new Date();
+    if (startsAt.getTime() > now.getTime()) throw new ApiError(409, "Confirm attendance after this snipe has started.", "SNIPE_NOT_STARTED");
+    const target = await tx.query("SELECT id FROM app_members WHERE id = $1 AND active = TRUE FOR UPDATE", [input.memberId]);
+    if (!target.length) throw new ApiError(404, "Choose an active clan member to confirm attendance.", "MEMBER_NOT_FOUND");
+    await tx.query(`INSERT INTO snipe_attendance (snipe_id, member_id, confirmed_by)
+      VALUES ($1, $2, $3) ON CONFLICT (snipe_id, member_id) DO NOTHING`, [id, input.memberId, freshActor.id]);
+    // Older plans can retain an attendance record, but cannot generate this week's reward.
+    if (currentWeek(startsAt) === currentWeek(now)) await awardWeeklyDew(tx, input.memberId, "snipe", currentWeek(now));
+    return planFromRow(tx, row);
+  });
+}
+
 async function dewResponse(tx: SqlConnection, actor: Member): Promise<DewResponse> {
+  const rewardWeek = currentWeek();
   const balances = await tx.query("SELECT balance FROM dew_balances WHERE member_id = $1", [actor.id]);
   const earnings = await tx.query("SELECT member_id FROM dew_earnings WHERE member_id = $1 AND earned_on = (NOW() AT TIME ZONE 'UTC')::date", [actor.id]);
+  const weeklyEarnings = await tx.query("SELECT reason, earned_at FROM dew_weekly_earnings WHERE member_id = $1 AND week_start = $2", [actor.id, rewardWeek]);
   const owned = await tx.query("SELECT item_id FROM dew_owned WHERE member_id = $1 ORDER BY purchased_at, item_id", [actor.id]);
-  return { balance: Number(balances[0]?.balance ?? 0), earnedToday: earnings.length > 0, equipped: actor.badge ?? null, owned: owned.map((row) => String(row.item_id)), items: DEW_ITEMS.map((item) => ({ ...item })) };
+  const cosmetics = equippedCosmetics(actor);
+  return {
+    balance: Number(balances[0]?.balance ?? 0),
+    // Keep the older response field meaningful for browser tabs opened before this release.
+    earnedToday: earnings.length > 0 || weeklyEarnings.some((row) => row.reason === "resources" && iso(row.earned_at)?.slice(0, 10) === new Date().toISOString().slice(0, 10)),
+    rewardWeek,
+    resourceRewardEarned: weeklyEarnings.some((row) => row.reason === "resources"),
+    snipeRewardEarned: weeklyEarnings.some((row) => row.reason === "snipe"),
+    equipped: cosmetics.badge, equippedCosmetics: cosmetics,
+    owned: owned.map((row) => String(row.item_id)), items: DEW_ITEMS.map((item) => ({ ...item })),
+  };
 }
 
 export async function getDew(actor: Member, db?: Database): Promise<DewResponse> {
@@ -167,13 +206,18 @@ export async function getDew(actor: Member, db?: Database): Promise<DewResponse>
   });
 }
 
-/** Call inside the changed self-bank update transaction; one reward per UTC day. */
-export async function awardDewForBankUpdate(tx: SqlConnection, memberId: string): Promise<void> {
-  const awarded = await tx.query(`INSERT INTO dew_earnings (member_id, earned_on)
-    SELECT id, (NOW() AT TIME ZONE 'UTC')::date FROM app_members WHERE id = $1 AND active = TRUE
-    ON CONFLICT (member_id, earned_on) DO NOTHING RETURNING member_id`, [memberId]);
-  if (awarded.length) await tx.query(`INSERT INTO dew_balances (member_id, balance) VALUES ($1, 1)
-    ON CONFLICT (member_id) DO UPDATE SET balance = dew_balances.balance + 1`, [memberId]);
+async function awardWeeklyDew(tx: SqlConnection, memberId: string, reason: "resources" | "snipe", week: string): Promise<void> {
+  const amount = reason === "resources" ? 20 : 10;
+  const awarded = await tx.query(`INSERT INTO dew_weekly_earnings (member_id, week_start, reason, amount)
+    SELECT id, $2::date, $3, $4 FROM app_members WHERE id = $1 AND active = TRUE
+    ON CONFLICT (member_id, week_start, reason) DO NOTHING RETURNING member_id`, [memberId, week, reason, amount]);
+  if (awarded.length) await tx.query(`INSERT INTO dew_balances (member_id, balance) VALUES ($1, $2)
+    ON CONFLICT (member_id) DO UPDATE SET balance = dew_balances.balance + EXCLUDED.balance`, [memberId, amount]);
+}
+
+/** Call only inside a complete, validated self-bank save; unchanged saves can qualify once a week. */
+export async function awardDewForBankUpdate(tx: SqlConnection, memberId: string, week = currentWeek()): Promise<void> {
+  await awardWeeklyDew(tx, memberId, "resources", week);
 }
 
 export async function purchaseDewItem(actor: Member, itemId: string, db?: Database): Promise<DewResponse> {
@@ -182,28 +226,34 @@ export async function purchaseDewItem(actor: Member, itemId: string, db?: Databa
     await lockAdministration(tx, connection.dialect);
     const freshActor = await activeActor(tx, actor.id);
     const item = DEW_ITEMS.find((candidate) => candidate.id === itemId);
-    if (!item) throw new ApiError(404, "This Dew reward could not be found.", "DEW_ITEM_NOT_FOUND");
+    if (!item) throw new ApiError(404, "This reward could not be found.", "DEW_ITEM_NOT_FOUND");
     const alreadyOwned = await tx.query("SELECT item_id FROM dew_owned WHERE member_id = $1 AND item_id = $2", [freshActor.id, itemId]);
     // Retried purchases are safe: owning a reward never charges a second time.
     if (alreadyOwned.length) return dewResponse(tx, freshActor);
     const paid = await tx.query("UPDATE dew_balances SET balance = balance - $2 WHERE member_id = $1 AND balance >= $2 RETURNING balance", [freshActor.id, item.cost]);
-    if (!paid.length) throw new ApiError(409, "You need more Dew to unlock this reward.", "INSUFFICIENT_DEW");
+    if (!paid.length) throw new ApiError(409, "You need more Dew Points to unlock this reward.", "INSUFFICIENT_DEW");
     await tx.query("INSERT INTO dew_owned (member_id, item_id) VALUES ($1, $2)", [freshActor.id, itemId]);
     return dewResponse(tx, freshActor);
   });
 }
 
-export async function equipDewItem(actor: Member, itemId: string | null, db?: Database): Promise<DewResponse> {
+export async function equipDewItem(actor: Member, itemId: string | null, db?: Database, category?: CosmeticCategory): Promise<DewResponse> {
   const connection = db ?? await database();
   return connection.transaction(async (tx) => {
     await lockAdministration(tx, connection.dialect);
     const freshActor = await activeActor(tx, actor.id);
-    if (itemId !== null) {
-      if (!DEW_ITEMS.some((item) => item.id === itemId)) throw new ApiError(404, "This Dew reward could not be found.", "DEW_ITEM_NOT_FOUND");
-      const owned = await tx.query("SELECT item_id FROM dew_owned WHERE member_id = $1 AND item_id = $2", [freshActor.id, itemId]);
-      if (!owned.length) throw new ApiError(403, "Unlock this badge before equipping it.", "DEW_ITEM_NOT_OWNED");
+    const item = itemId === null ? undefined : DEW_ITEMS.find((candidate) => candidate.id === itemId);
+    if (itemId !== null && !item) throw new ApiError(404, "This reward could not be found.", "DEW_ITEM_NOT_FOUND");
+    const slot = category ?? item?.category ?? "badge";
+    if (!COSMETIC_CATEGORIES.includes(slot) || (item && item.category !== slot)) {
+      throw new ApiError(400, "Choose the matching cosmetic category for this reward.", "INVALID_COSMETIC_CATEGORY");
     }
-    const rows = await tx.query("UPDATE app_members SET badge = $2 WHERE id = $1 RETURNING *", [freshActor.id, itemId]);
+    if (itemId !== null) {
+      const owned = await tx.query("SELECT item_id FROM dew_owned WHERE member_id = $1 AND item_id = $2", [freshActor.id, itemId]);
+      if (!owned.length) throw new ApiError(403, "Unlock this reward before equipping it.", "DEW_ITEM_NOT_OWNED");
+    }
+    const columns: Record<CosmeticCategory, string> = { badge: "badge", title: "cosmetic_title", accent: "cosmetic_accent", frame: "cosmetic_frame" };
+    const rows = await tx.query(`UPDATE app_members SET ${columns[slot]} = $2 WHERE id = $1 RETURNING *`, [freshActor.id, itemId]);
     return dewResponse(tx, memberFromRow(rows[0]));
   });
 }

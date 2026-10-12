@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { DEW_ITEMS } from "../src/lib/dew";
-import { currentWeek, EMPTY_PLANNING_DETAILS, EMPTY_RESOURCES, shiftWeek } from "../src/lib/resources";
+import { CHANCE_PLANNING_DETAILS, currentWeek, EMPTY_RESOURCES, shiftWeek } from "../src/lib/resources";
 import { authenticatedMember, createSession, SESSION_SECONDS } from "../src/lib/server/auth";
 import { bankHistory, captureSnapshot, historicalBankDashboard, liveDashboard, saveBank } from "../src/lib/server/banks";
 import { decrypt, hashToken } from "../src/lib/server/crypto";
 import { initializeSchema, openDatabase, type Database } from "../src/lib/server/db";
 import { ApiError } from "../src/lib/server/errors";
 import { memberFromRow } from "../src/lib/server/mappers";
-import { createSnipe, equipDewItem, getDew, listSnipes, purchaseDewItem, respondToSnipe, updateSnipe } from "../src/lib/server/planning";
+import { confirmSnipeAttendance, createSnipe, equipDewItem, getDew, listSnipes, purchaseDewItem, respondToSnipe, updateSnipe } from "../src/lib/server/planning";
 import { listWeeks, updateMember } from "../src/lib/server/tracker";
 
 const failure = (code: string) => (error: unknown) => error instanceof ApiError && error.code === code;
@@ -90,6 +90,7 @@ test("PostgreSQL preserves legacy data, live banks, snapshots, planning, rewards
     assert.equal(retained.week_start, latestWeek);
     assert.equal(typeof retained.week_start, "string");
     assert.equal((retained.resources as { potions: number }).potions, 99);
+    assert.equal("eggshellsTotal" in (retained.resources as object), false);
     assert.deepEqual(await listWeeks(db), [week, latestWeek, oldWeek]);
     const [leaderRow, memberRow] = await Promise.all([
       db.query("SELECT * FROM app_members WHERE id=$1", [leaderId]),
@@ -100,12 +101,14 @@ test("PostgreSQL preserves legacy data, live banks, snapshots, planning, rewards
     const migratedLive = await liveDashboard(leader, db);
     assert.equal(migratedLive.totals.hammers, 82);
     assert.equal(migratedLive.totals.eggsPetsTotal, 5);
+    assert.equal(migratedLive.totals.eggshellsTotal, 0);
     assert.equal(migratedLive.summons.missingSkillCosts, 1);
     assert.deepEqual(migratedLive.entries.find((entry) => entry.memberId === memberId)?.summoningCosts, { fiveSkills: 0, mount: 0 });
     const initialHistory = await bankHistory(leader, db);
     const oldSnapshot = initialHistory.snapshots.find((snapshot) => snapshot.week === oldWeek);
     assert.equal(oldSnapshot?.totals.hammers, 6);
     assert.equal(oldSnapshot?.entries[0].notes, "Older submission");
+    assert.equal(oldSnapshot?.totals.eggshellsTotal, 0);
     const completeLegacySnapshot = initialHistory.snapshots.find((snapshot) => snapshot.week === latestWeek);
     assert.equal(completeLegacySnapshot?.totals.hammers, 19);
     assert.equal(completeLegacySnapshot?.entries.length, 2);
@@ -114,11 +117,16 @@ test("PostgreSQL preserves legacy data, live banks, snapshots, planning, rewards
 
     const inventory = { ...EMPTY_RESOURCES, skillTickets: 159, mountKeys: 79, hammers: 20, eggsPetsTotal: 30 };
     const costs = { fiveSkills: 200, mount: 40 };
-    const details = { ...EMPTY_PLANNING_DETAILS, skillLevel: 46, mountLevel: 72, eggMerges: 4, newMountMerges: 1 };
+    const details = { ...CHANCE_PLANNING_DETAILS, skillLevel: 46, mountLevel: 72, extraMountChancePercent: 20, extraPetSummonPercent: 25 };
+    const versionsBeforeRejectedSave = (await db.query("SELECT id FROM bank_versions WHERE member_id=$1", [memberId])).length;
+    await assert.rejects(saveBank(member, { resources: inventory, notes: "Legacy costs and missing chances are incomplete" }, db), failure("BANK_INCOMPLETE"));
+    assert.equal((await db.query("SELECT id FROM bank_versions WHERE member_id=$1", [memberId])).length, versionsBeforeRejectedSave);
+    assert.equal((await getDew(member, db)).balance, 0);
+    assert.equal(new Date(String((await db.query("SELECT last_updated_at FROM app_members WHERE id=$1", [memberId]))[0].last_updated_at)).toISOString(), latestUpdatedAt.replace("Z", ".000Z"));
     const saved = await saveBank(member, { resources: inventory, summoningCosts: costs, planningDetails: details, notes: "Live inventory" }, db);
     assert.deepEqual(saved.summoningCosts, costs);
     assert.deepEqual(saved.planningDetails, details);
-    assert.equal((await getDew(member, db)).balance, 1);
+    assert.equal((await getDew(member, db)).balance, 20);
     const firstManual = await captureSnapshot(leader, db);
     await Promise.all([
       saveBank(member, { resources: { ...inventory, hammers: 25 }, notes: "Updated inventory" }, db),
@@ -130,8 +138,9 @@ test("PostgreSQL preserves legacy data, live banks, snapshots, planning, rewards
     assert.equal(current.summons.mounts, 1);
     assert.deepEqual(current.entries.find((entry) => entry.memberId === memberId)?.summoningCosts, costs);
     assert.deepEqual(current.entries.find((entry) => entry.memberId === memberId)?.planningDetails, details);
-    assert.equal((await getDew(member, db)).balance, 1);
-    assert.equal((await db.query("SELECT member_id FROM dew_earnings WHERE member_id=$1", [memberId])).length, 1);
+    assert.equal((await getDew(member, db)).balance, 20);
+    assert.equal((await db.query("SELECT member_id FROM dew_weekly_earnings WHERE member_id=$1 AND reason='resources'", [memberId])).length, 1);
+    assert.equal((await db.query("SELECT member_id FROM dew_earnings WHERE member_id=$1", [memberId])).length, 0);
     const secondManual = await captureSnapshot(leader, db);
     assert.notEqual(firstManual.id, secondManual.id);
     assert.equal((await historicalBankDashboard(leader, week, db, firstManual.id)).totals.hammers, 90);
@@ -181,11 +190,20 @@ test("PostgreSQL preserves legacy data, live banks, snapshots, planning, rewards
     assert.deepEqual(attendance.counts, { yes: 1,no: 0,unanswered: 1 });
     assert.equal(attendance.estimate.minimum, 50);
     assert.equal(attendance.estimate.maximum, 125);
+    assert.equal((await getDew(member, db)).snipeRewardEarned, false);
+    const startedAt = new Date(Math.max(Date.now() - 1000, new Date(`${week}T00:00:00Z`).getTime())).toISOString();
+    await db.query("UPDATE snipe_plans SET starts_at=$2 WHERE id=$1", [plan.id, startedAt]);
+    const confirmed = await confirmSnipeAttendance(leader, plan.id, { memberId, attended: true }, db);
+    assert.equal(confirmed.attendees?.[0].member?.username, "Returning member");
+    assert.equal((await getDew(member, db)).balance, 30);
+    await confirmSnipeAttendance(leader, plan.id, { memberId, attended: true }, db);
+    assert.equal((await getDew(member, db)).balance, 30);
     const archive = await updateSnipe(leader, plan.id, { archived: true }, db);
     assert.equal(archive.participants[0].member.username, "Returning member");
     assert.equal(archive.archived, true);
 
     const reward = DEW_ITEMS[0];
+    await db.query("UPDATE dew_balances SET balance=0 WHERE member_id=$1", [memberId]);
     await assert.rejects(purchaseDewItem(member, reward.id, db), failure("INSUFFICIENT_DEW"));
     await db.query("UPDATE dew_balances SET balance=$2 WHERE member_id=$1", [memberId, reward.cost]);
     const purchases = await Promise.all([purchaseDewItem(member, reward.id, db), purchaseDewItem(member, reward.id, db)]);

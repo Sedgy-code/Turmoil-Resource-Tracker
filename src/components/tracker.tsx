@@ -6,8 +6,9 @@ import { BankHistory } from "./bank-history";
 import { WarPlanner } from "./war-planner";
 import { SnipePlanner } from "./snipe-planner";
 import { DewStore } from "./dew-store";
-import { DEW_ITEMS } from "@/lib/dew";
-import { DEFAULT_WAR_RATES, estimateWar } from "@/lib/war";
+import { MemberAvatar as Avatar, MemberName, MemberTitle } from "./member-identity";
+import { DEFAULT_WAR_RATES, WAR_ACTIVITIES, estimateWar } from "@/lib/war";
+import { assessBankCompleteness } from "@/lib/completeness";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   useCallback,
@@ -44,7 +45,6 @@ import {
   LoaderCircle,
   LogOut,
   Menu,
-  PawPrint,
   Search,
   ShieldCheck,
   Sparkles,
@@ -56,6 +56,7 @@ import {
 import {
   EMPTY_RESOURCES,
   EMPTY_PLANNING_DETAILS,
+  CHANCE_PLANNING_DETAILS,
   EMPTY_SUMMONING_COSTS,
   MOUNT_SUMMON_COST_MIN,
   MOUNT_SUMMON_COST_MAX,
@@ -80,6 +81,8 @@ import type {
   Member,
   MembersResponse,
   SessionResponse,
+  WarEstimate,
+  WarRates,
 } from "@/lib/types";
 
 type View = "dashboard" | "resources" | "members" | "weeks" | "war" | "snipes" | "store";
@@ -95,14 +98,14 @@ const viewNames = {
   weeks: "Weekly History",
   war: "Estimated War Points",
   snipes: "Snipe Plans",
-  store: "Dew Store",
+  store: "Reward Shop",
 };
 const navigation: { view: View; href: string; icon: Icon }[] = [
   { view: "dashboard", href: "/", icon: LayoutDashboard },
   { view: "resources", href: "/resources", icon: Backpack },
   { view: "war", href: "/war-points", icon: Swords },
   { view: "snipes", href: "/snipes", icon: Target },
-  { view: "store", href: "/dew-store", icon: Droplets },
+  { view: "store", href: "/reward-shop", icon: Droplets },
   { view: "members", href: "/members", icon: Users },
   { view: "weeks", href: "/weeks", icon: CalendarDays },
 ];
@@ -153,10 +156,6 @@ function ago(date: string | null) {
   if (minutes < 1440) return `${Math.floor(minutes / 60)}h ago`;
   return `${Math.floor(minutes / 1440)}d ago`;
 }
-function MemberBadge({ member }: { member: Member }) {
-  const badge = DEW_ITEMS.find((item) => item.id === member.badge);
-  return badge ? <span className="member-cosmetic" title={badge.name} aria-label={badge.name}>{badge.symbol}</span> : null;
-}
 function freshness(date: string | null) {
   if (!date) return { color: "stale", label: "Never updated" };
   const elapsed = Math.max(0, Date.now() - new Date(date).getTime());
@@ -181,41 +180,6 @@ function validWeekFromQuery(value: string | null): string {
     date.toISOString().slice(0, 10) === value
     ? currentWeek(date)
     : currentWeek();
-}
-function Avatar({
-  member,
-  small = false,
-}: {
-  member: Pick<Member, "username" | "avatarUrl">;
-  small?: boolean;
-}) {
-  const [failed, setFailed] = useState(false);
-  useEffect(() => {
-    setFailed(false);
-  }, [member.avatarUrl]);
-  const hue =
-    [...member.username].reduce((acc, char) => acc + char.charCodeAt(0), 0) %
-    360;
-  return (
-    <span
-      className={`avatar ${small ? "small" : ""}`}
-      style={{
-        background: `hsl(${hue} 22% 25%)`,
-        color: `hsl(${hue} 55% 80%)`,
-      }}
-    >
-      {member.avatarUrl && !failed ? (
-        <img
-          src={member.avatarUrl}
-          alt=""
-          referrerPolicy="no-referrer"
-          onError={() => setFailed(true)}
-        />
-      ) : (
-        member.username.slice(0, 2).toUpperCase()
-      )}
-    </span>
-  );
 }
 function DiscordIcon() {
   return (
@@ -429,7 +393,7 @@ export default function Tracker({ view }: { view: View }) {
   let dashboardWar: ReturnType<typeof estimateWar> | null = null;
   let warEstimateError = "";
   if (data) {
-    try { dashboardWar = estimateWar(data.entries, warRates, ["hammers", "skillSummons", "mountSummons", "mountMerges"]); }
+    try { dashboardWar = estimateWar(data.entries, warRates, WAR_ACTIVITIES.map(({ key }) => key), data.live === false ? "historical" : "current"); }
     catch (e) { warEstimateError = (e as Error).message; }
   }
   return (
@@ -489,7 +453,8 @@ export default function Tracker({ view }: { view: View }) {
           <div className="sidebar-profile">
             <Avatar member={user} />
             <div>
-              <strong>{user.username}<MemberBadge member={user} /></strong>
+              <strong><MemberName member={user} /></strong>
+              <MemberTitle member={user} />
               <span>
                 {user.role === "ADMIN" ? "Clan admin" : "Clan member"}
               </span>
@@ -583,7 +548,7 @@ export default function Tracker({ view }: { view: View }) {
                       ? "A stronger clan starts with the people behind it."
                       : view === "war" ? "Choose activities and estimate the clan’s next battle."
                         : view === "snipes" ? "Organise events, share availability, and prepare together."
-                          : view === "store" ? "Earn Dew for keeping your bank current. Wear your clan rewards."
+                          : view === "store" ? "Earn Dew Points for complete weekly updates and confirmed snipe participation."
                             : "Fixed weekly snapshots and changes in the clan’s resources."}
               </p>
             </div>
@@ -713,98 +678,7 @@ export default function Tracker({ view }: { view: View }) {
                 </div>
               </div>
               {warEstimateError && <div className="error-banner" role="alert">War estimate unavailable: {warEstimateError}</div>}
-              <div className="stat-grid">
-                {dashboardResources.map(({ key, label, icon: StatIcon, color }) => {
-                  if (key === "eggsPetsTotal") {
-                    return <EggsPetsCard key={key} total={data.totals.eggsPetsTotal} />;
-                  }
-                  const summons =
-                    key === "skillTickets"
-                      ? {
-                          label: "Total skill summons",
-                          total: dashboardWar?.rows.find((row) => row.activity === "skillSummons")?.quantity ?? 0,
-                          missing: data.summons?.missingSkillCosts ?? 0,
-                        }
-                      : key === "mountKeys"
-                        ? {
-                            label: "Total mount summons",
-                            total: dashboardWar?.rows.find((row) => row.activity === "mountSummons")?.quantity ?? 0,
-                            missing: data.summons?.missingMountCosts ?? 0,
-                          }
-                        : null;
-                  const warPoints =
-                    key === "skillTickets"
-                      ? {
-                          total: warEstimateError ? "--" : numberFormat(dashboardWar?.rows.find((row) => row.activity === "skillSummons")?.minimum ?? 0),
-                          note: `${numberFormat(warRates.skillSummons)} points per skill summon.`,
-                        }
-                      : key === "mountsToMerge"
-                        ? {
-                            total: warEstimateError ? "--" : numberFormat(dashboardWar?.rows.find((row) => row.activity === "mountMerges")?.minimum ?? 0),
-                            note: `${numberFormat(warRates.mountMerges)} points per mount to merge.`,
-                          }
-                        : key === "hammers"
-                          ? {
-                              total: warEstimateError ? "--" : `${numberFormat(data.totals.hammers * warRates.hammersMin)}–${numberFormat(data.totals.hammers * warRates.hammersMax)}`,
-                              note: `${numberFormat(warRates.hammersMin)}–${numberFormat(warRates.hammersMax)} points per hammer.`,
-                            }
-                          : null;
-                  return (
-                    <article
-                      className={`stat-card ${summons ? "has-summons" : ""} ${warPoints ? "has-war-points" : ""}`}
-                      key={key}
-                    >
-                      <div className="stat-label">
-                        <span className={`resource-icon ${color}`}>
-                          <StatIcon size={20} strokeWidth={1.8} />
-                        </span>
-                        <span>{label}</span>
-                      </div>
-                      <strong className="stat-number">
-                        {numberFormat(data.totals[key])}
-                      </strong>
-                      {summons && (
-                        <div className="stat-summons">
-                          <span className="summon-label">{summons.label}</span>
-                          <strong className="summon-total">
-                            {warEstimateError ? "--" : new Intl.NumberFormat("en-US", {
-                              minimumFractionDigits: 0,
-                              maximumFractionDigits: 0,
-                            }).format(summons.total)}
-                          </strong>
-                          <span className="summon-note">
-                            Whole summons calculated per member.
-                          </span>
-                          {summons.missing > 0 && (
-                            <p className="summon-warning">
-                              Incomplete: {summons.missing}{" "}
-                              {summons.missing === 1 ? "member" : "members"}{" "}
-                              missing a cost.
-                            </p>
-                          )}
-                        </div>
-                      )}
-                      {warPoints && (
-                        <div className="stat-war-points">
-                          <span className="war-points-label">
-                            Potential clan war points
-                          </span>
-                          <strong className="war-points-total">
-                            {warPoints.total}
-                          </strong>
-                          <span className="war-points-note">
-                            {warPoints.note}
-                          </span>
-                        </div>
-                      )}
-                      <span className="stat-foot">
-                        <span />
-                        Ready for the clan
-                      </span>
-                    </article>
-                  );
-                })}
-              </div>
+              <ClanArsenal data={data} estimate={dashboardWar} rates={warRates} estimateError={warEstimateError} snapshotId={snapshotId} />
               <MemberResources
                 data={data}
                 week={week}
@@ -1008,28 +882,80 @@ function Login({ configured, error }: { configured: boolean; error: string }) {
   );
 }
 
-function EggsPetsCard({ total }: { total: number }) {
+function WarPointRange({ minimum, maximum }: { minimum: number | null; maximum: number | null }) {
   return (
-    <article className="stat-card eggs-pets-card">
-      <div className="eggs-pets-heading">
-        <div className="eggs-pets-icons" aria-hidden="true">
-          <span className="resource-icon gold">
-            <Egg size={21} />
-          </span>
-          <span className="resource-icon green">
-            <PawPrint size={19} />
-          </span>
+    <div className="war-point-range">
+      <div><span>Low estimate</span><strong>{minimum === null ? "--" : numberFormat(minimum)}</strong></div>
+      <div><span>High estimate</span><strong>{maximum === null ? "--" : numberFormat(maximum)}</strong></div>
+    </div>
+  );
+}
+
+function ClanArsenal({ data, estimate, rates, estimateError, snapshotId }: { data: DashboardResponse; estimate: WarEstimate | null; rates: WarRates; estimateError: string; snapshotId: string | null }) {
+  const quantity = (activity: WarEstimate["rows"][number]["activity"]) => estimate?.rows.find((row) => row.activity === activity)?.quantity ?? 0;
+  const points = (...activities: WarEstimate["rows"][number]["activity"][]) => estimate?.rows.filter((row) => activities.includes(row.activity)).reduce((total, row) => total + row.minimum, 0) ?? 0;
+  const expected = (value: number) => new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 }).format(value);
+  const live = data.live !== false;
+  const chanceEntries = data.entries.filter((entry) => entry.planningDetails?.calculationVersion === 2 || entry.planningDetails?.extraMountChancePercent !== undefined || entry.planningDetails?.extraPetSummonPercent !== undefined).length;
+  const chanceHistory = live || chanceEntries > 0;
+  const mixedHistory = !live && chanceEntries > 0 && chanceEntries < data.entries.length;
+  const missingMountChances = live ? data.entries.filter((entry) => entry.resources.mountKeys > 0 && entry.planningDetails?.extraMountChancePercent === undefined).length : 0;
+  const missingPetChances = live ? data.entries.filter((entry) => entry.resources.eggshellsTotal > 0 && entry.planningDetails?.extraPetSummonPercent === undefined).length : 0;
+  return (
+    <div className="stat-grid arsenal-grid">
+      {dashboardResources.map(({ key, label, icon: StatIcon, color }) => {
+        const cardPoints = key === "skillTickets" ? points("skillSummons")
+          : key === "mountKeys" ? points("mountSummons", "newMountMerges")
+            : key === "eggsPetsTotal" ? points("eggMerges", "eggSummonMerges")
+              : key === "mountsToMerge" ? points("mountMerges") : points("hammers");
+        const missingCosts = key === "skillTickets" ? data.summons.missingSkillCosts : key === "mountKeys" ? data.summons.missingMountCosts : 0;
+        const missingChances = key === "mountKeys" ? missingMountChances : key === "eggsPetsTotal" ? missingPetChances : 0;
+        return (
+          <article className={`stat-card arsenal-card arsenal-${key}`} key={key}>
+            <div className="stat-label"><span className={`resource-icon ${color}`}><StatIcon size={19} strokeWidth={1.8} /></span><span>{label}</span></div>
+            <strong className="stat-number">{numberFormat(data.totals[key])}</strong>
+            <div className="arsenal-details">
+              {key === "skillTickets" && <div className="arsenal-metric"><span>Total skill summons</span><strong>{estimateError ? "--" : numberFormat(quantity("skillSummons"))}</strong></div>}
+              {key === "mountKeys" && <>
+                <div className="arsenal-metric"><span>Total mount summons</span><strong>{estimateError ? "--" : numberFormat(quantity("mountSummons"))}</strong></div>
+                <div className="arsenal-metric"><span>{mixedHistory ? "Bonus / planned new merges" : chanceHistory ? "Expected bonus merges" : "Planned new merges"}</span><strong>{estimateError ? "--" : expected(quantity("newMountMerges"))}</strong></div>
+              </>}
+              {key === "eggsPetsTotal" && <>
+                <div className="arsenal-metric"><span>Eggshells total</span><strong>{numberFormat(data.totals.eggshellsTotal)}</strong></div>
+                {!live && <div className="arsenal-metric"><span>Saved existing merges</span><strong>{estimateError ? "--" : numberFormat(quantity("eggMerges"))}</strong></div>}
+                <div className="arsenal-metric"><span>{mixedHistory ? "Extra / planned pet merges" : chanceHistory ? "Expected extra pet merges" : "Planned summon/merge actions"}</span><strong>{estimateError ? "--" : expected(quantity("eggSummonMerges"))}</strong></div>
+              </>}
+              {key === "mountsToMerge" && <p className="arsenal-note">Existing mounts only. Bonus mounts are counted with Mount Keys.</p>}
+              {key === "hammers" && <p className="arsenal-note">A range of {numberFormat(rates.hammersMin)}–{numberFormat(rates.hammersMax)} points per hammer.</p>}
+              {(key === "skillTickets" || key === "mountKeys") && <p className="arsenal-note">Whole summons calculated per member.{key === "mountKeys" && chanceHistory ? " Bonus merges use each member’s extra mount chance." : ""}</p>}
+              {key === "eggsPetsTotal" && <p className="arsenal-note">{mixedHistory ? "Original manual counts are preserved; newer banks use eggs/pets totals and extra chances." : chanceHistory ? "All eggs/pets are available to merge. Extra pets use eggshells ÷ 100 × each member’s chance." : "Saved manual merge counts are preserved in this history."}</p>}
+              {missingCosts > 0 && <p className="summon-warning">Incomplete: {missingCosts} {missingCosts === 1 ? "member" : "members"} missing a summon cost.</p>}
+              {missingChances > 0 && <p className="summon-warning">Extra chance needed for {missingChances} {missingChances === 1 ? "member" : "members"}; bonus points are incomplete.</p>}
+            </div>
+            <div className="stat-war-points">
+              <span className="war-points-label">Potential clan war points</span>
+              {key === "hammers" ? <WarPointRange minimum={estimateError ? null : cardPoints} maximum={estimateError ? null : estimate?.rows.find((row) => row.activity === "hammers")?.maximum ?? 0} /> : <strong className="war-points-total">{estimateError ? "--" : numberFormat(cardPoints)}</strong>}
+              <span className="war-points-note">{key === "skillTickets" ? `${numberFormat(rates.skillSummons)} points per skill summon.`
+                : key === "mountKeys" ? `Summons ${numberFormat(rates.mountSummons)} + bonus merges ${numberFormat(rates.newMountMerges)} points each.`
+                  : key === "eggsPetsTotal" ? `Existing merges ${numberFormat(rates.eggMerges)} + extra pet merges ${numberFormat(rates.eggSummonMerges)} points each.`
+                    : key === "mountsToMerge" ? `${numberFormat(rates.mountMerges)} points per existing mount merge.` : "Hammer totals include both ends of the estimate."}</span>
+            </div>
+          </article>
+        );
+      })}
+      <article className="stat-card arsenal-card arsenal-summary">
+        <div className="stat-label"><span className="resource-icon gold"><Sparkles size={19} /></span><span>Total Potential War Points</span></div>
+        <p className="arsenal-summary-copy">The clan’s combined battle estimate</p>
+        <WarPointRange minimum={estimateError ? null : estimate?.minimum ?? 0} maximum={estimateError ? null : estimate?.maximum ?? 0} />
+        <div className="arsenal-summary-footer">
+          <span className="arsenal-summary-tag"><Swords size={13} />All seven scoring activities</span>
+          <p className="arsenal-note">Adds the five resource cards once. Fractional bonus actions are expected values; points are rounded per activity.</p>
+          {!!estimate?.missingCosts && <p className="summon-warning">Some summon costs are missing. This total is incomplete.</p>}
+          {(missingMountChances > 0 || missingPetChances > 0) && <p className="summon-warning">Add missing extra chances to include all bonus points.</p>}
+          <Link className="arsenal-planner-link" href={`/war-points${data.live === false ? `?week=${data.week}${snapshotId ? `&snapshot=${encodeURIComponent(snapshotId)}` : ""}` : ""}`}>View war calculator <ArrowRight size={14} /></Link>
         </div>
-        <div className="eggs-pets-copy">
-          <h3>Total eggs/pets</h3>
-          <p>All eggs and pets combined across the clan.</p>
-        </div>
-      </div>
-      <div className="eggs-pets-total">
-        <strong>{numberFormat(total)}</strong>
-        <span>Ready for the clan</span>
-      </div>
-    </article>
+      </article>
+    </div>
   );
 }
 
@@ -1121,7 +1047,7 @@ function MemberResources({
               <th className="sticky-member" aria-sort={sortOrder("username")}><button className="column-sort" onClick={() => changeSort("username")}>Member {sortIcon("username")}</button></th>
               {RESOURCE_FIELDS.map(({ key, label }) => {
                 const FieldIcon =
-                  key === "eggsPetsTotal"
+                  key === "eggsPetsTotal" || key === "eggshellsTotal"
                     ? Egg
                     : (essentials.find((field) => field.key === key)?.icon ??
                       Backpack);
@@ -1151,11 +1077,12 @@ function MemberResources({
                       <Avatar member={member} small />
                       <div>
                         <strong>
-                          {member.username}<MemberBadge member={member} />
+                          <MemberName member={member} />
                           {member.id === data.currentUser.id && (
                             <span className="you-badge">you</span>
                           )}
                         </strong>
+                        <MemberTitle member={member} />
                         <span>
                           <i
                             className={entry ? "updated-dot" : "pending-dot"}
@@ -1262,16 +1189,25 @@ function ResourceForm({
   const savedCosts = entry?.summoningCosts ?? EMPTY_SUMMONING_COSTS;
   const savedPlanning = entry?.planningDetails ?? EMPTY_PLANNING_DETAILS;
   const readOnly = data.live === false;
-  const planningMaximum = (key: keyof PlanningDetails) => key.endsWith("Level") ? 1_000_000_000 : 1_000_000;
-  const planningFields: { key: keyof PlanningDetails; label: string; help: string }[] = [
+  const legacyHistory = readOnly && savedPlanning.calculationVersion !== 2 && savedPlanning.extraMountChancePercent === undefined && savedPlanning.extraPetSummonPercent === undefined;
+  type PlanningFieldKey = Exclude<keyof PlanningDetails, "calculationVersion">;
+  const isChance = (key: PlanningFieldKey) => key === "extraMountChancePercent" || key === "extraPetSummonPercent";
+  const planningMaximum = (key: PlanningFieldKey) => isChance(key) ? 1000 : key.endsWith("Level") ? 1_000_000_000 : 1_000_000;
+  const planningFields: { key: PlanningFieldKey; label: string; help: string }[] = [
     { key: "skillLevel", label: "Skill level", help: "Saved for reference; costs are entered separately." },
     { key: "mountLevel", label: "Mount level", help: "Saved for reference; costs are entered separately." },
-    { key: "eggLevel", label: "Egg/pet level", help: "Saved for reference; action counts are entered separately." },
-    { key: "newMountMerges", label: "Newly summoned mount merges", help: "Merges planned from future mount summons; exclude existing mounts." },
-    { key: "eggMerges", label: "Existing egg/pet merges", help: "Merges using eggs/pets already in your bank." },
-    { key: "eggSummonMerges", label: "Egg/pet summon then merge", help: "Separate actions from future summons; exclude existing egg/pet merges." },
+    { key: "eggLevel", label: "Egg/pet level", help: legacyHistory ? "Saved for reference alongside the original planned actions." : "Saved for reference; all existing eggs/pets are available to merge." },
+    ...(legacyHistory ? [
+      { key: "newMountMerges" as const, label: "Newly summoned mount merges", help: "Original planned merge count saved in this snapshot." },
+      { key: "eggMerges" as const, label: "Existing egg/pet merges", help: "Original existing merge count saved in this snapshot." },
+      { key: "eggSummonMerges" as const, label: "Egg/pet summon then merge", help: "Original future summon/merge count saved in this snapshot." },
+    ] : [
+      { key: "extraMountChancePercent" as const, label: "Extra mount chance %", help: "Bonus merges = whole mount summons × this percentage. Enter 0 if you have no extra chance." },
+      { key: "extraPetSummonPercent" as const, label: "Extra pet summon %", help: "Extra pet merges = eggshells ÷ 100 × this percentage. Enter 0 if you have no extra chance." },
+    ]),
   ];
-  const draftPlanning = (details: PlanningDetails) => Object.fromEntries(planningFields.map(({ key }) => [key, String(details[key])])) as Record<keyof PlanningDetails, string>;
+  const planningText = (details: PlanningDetails, key: PlanningFieldKey) => details[key] === undefined || (!entry && !readOnly && key.endsWith("Level")) ? "" : String(details[key]);
+  const draftPlanning = (details: PlanningDetails) => Object.fromEntries(planningFields.map(({ key }) => [key, planningText(details, key)])) as Record<PlanningFieldKey, string>;
   const [planningValues, setPlanningValues] = useState(() => draftPlanning(savedPlanning));
   const resourceKeys = RESOURCE_FIELDS.map(({ key }) => key as ResourceKey);
   const draftResources = (resources: ResourceValues) =>
@@ -1294,7 +1230,7 @@ function ResourceForm({
     resourceKeys.some((key) => values[key] !== String(savedResources[key])) ||
     costValues.fiveSkills !== String(savedCosts.fiveSkills) ||
     costValues.mount !== String(savedCosts.mount) ||
-    planningFields.some(({ key }) => planningValues[key] !== String(savedPlanning[key])) ||
+    planningFields.some(({ key }) => planningValues[key] !== planningText(savedPlanning, key)) ||
     notes !== (entry?.notes ?? "");
   useEffect(() => {
     setValues(draftResources(entry?.resources ?? EMPTY_RESOURCES));
@@ -1314,21 +1250,22 @@ function ResourceForm({
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty, readOnly]);
+  const enteredNumber = (value: string | undefined) => !value?.trim() ? Number.NaN : Number(value);
+  const draftBank = {
+    resources: Object.fromEntries(resourceKeys.map((key) => [key, enteredNumber(values[key])])) as ResourceValues,
+    summoningCosts: { fiveSkills: enteredNumber(costValues.fiveSkills), mount: enteredNumber(costValues.mount) },
+    planningDetails: { ...CHANCE_PLANNING_DETAILS, ...savedPlanning, ...Object.fromEntries(planningFields.map(({ key }) => [key, enteredNumber(planningValues[key])])), calculationVersion: 2 as const },
+  };
+  const completeness = assessBankCompleteness(draftBank);
   async function save(event: FormEvent) {
     event.preventDefault();
     if (readOnly) return;
-    const planningDetails = Object.fromEntries(planningFields.map(({ key }) => [key, Number(planningValues[key])])) as unknown as PlanningDetails;
-    const invalidPlanning = planningFields.find(({ key }) => !Number.isInteger(planningDetails[key]) || planningDetails[key] < 0 || planningDetails[key] > planningMaximum(key));
-    if (invalidPlanning) {
-      setFormError(`${invalidPlanning.label}: enter a whole number between 0 and ${numberFormat(planningMaximum(invalidPlanning.key))}.`);
+    if (!completeness.complete) {
+      setFormError(`Complete all resource totals, summon costs, levels, and extra summon chances before saving to earn 20 Dew Points this week. Check: ${completeness.missing.join(", ")}.`);
       return;
     }
-    const resources = Object.fromEntries(
-      resourceKeys.map((key) => [
-        key,
-        values[key].trim() === "" ? 0 : Number(values[key]),
-      ]),
-    ) as ResourceValues;
+    const planningDetails = draftBank.planningDetails;
+    const resources = draftBank.resources;
     if (
       costValues.fiveSkills.trim() === "" ||
       costValues.mount.trim() === ""
@@ -1407,11 +1344,12 @@ function ResourceForm({
         <Avatar member={selected} />
         <div>
           <strong>
-            {selected.username}
+            <MemberName member={selected} />
             <span className="role-badge">
               {selected.role === "ADMIN" ? "Admin" : "Member"}
             </span>
           </strong>
+          <MemberTitle member={selected} />
           <p>
             {entry
               ? `Last updated ${ago(entry.updatedAt)} by ${entry.updatedBy.username}`
@@ -1460,6 +1398,14 @@ function ResourceForm({
         </div>
         {readOnly && <Link className="button primary" href={`/resources${selected.id !== data.currentUser.id ? `?member=${selected.id}` : ""}`}>Return to live bank <ArrowRight size={15} /></Link>}
       </div>
+      {!readOnly && <div className={`bank-completeness ${completeness.complete ? "complete" : "incomplete"}`} role="status">
+        <ShieldCheck size={17} />
+        <div><strong>{completeness.complete ? "Bank information is complete" : "Complete every field before saving"}</strong>
+          <p>Complete all resource totals, summon costs, levels, and extra summon chances before saving to earn 20 Dew Points this week. Zero totals, levels, and chances are valid.</p>
+          {!completeness.complete && <p className="bank-missing-fields">Check: {completeness.missing.join(", ")}.</p>}
+          {selected.id !== data.currentUser.id && <p>Editing another member’s bank does not earn your weekly reward.</p>}
+        </div>
+      </div>}
       {formError && (
         <div className="error-banner" role="alert">
           {formError}
@@ -1508,6 +1454,7 @@ function ResourceForm({
                       min="0"
                       max={resourceMaximum(key)}
                       step="1"
+                      required
                       value={values[key]}
                       onChange={(e) => update(key, e.target.value)}
                     />
@@ -1548,9 +1495,9 @@ function ResourceForm({
           <Egg size={19} />Eggs and pets
         </h3>
         <p className="form-section-subtitle">
-          Enter one combined count for all your eggs and pets.
+          Existing eggs/pets become merge actions. Eggshells supply future pet summons at 100 shells each.
         </p>
-        <label className="eggs-pets-input">
+        <div className="eggs-bank-inputs"><label className="eggs-pets-input">
           <span>Total eggs/pets</span>
           <input
             aria-label="Total eggs/pets"
@@ -1559,18 +1506,23 @@ function ResourceForm({
             min="0"
             max={resourceMaximum("eggsPetsTotal")}
             step="1"
+            required
             value={values.eggsPetsTotal}
             onChange={(e) => update("eggsPetsTotal", e.target.value)}
           />
         </label>
+        <label className="eggs-pets-input">
+          <span>Eggshells total</span>
+          <input aria-label="Eggshells total" type="number" inputMode="numeric" min="0" max={resourceMaximum("eggshellsTotal")} step="1" required value={values.eggshellsTotal} onChange={(event) => update("eggshellsTotal", event.target.value)} />
+        </label></div>
       </section>
       <section className="panel form-section planning-bank-section">
-        <h3><Swords size={19} />Levels and planned actions</h3>
-        <p className="form-section-subtitle">Levels are kept for reference. Enter action counts directly; they are not inferred from levels or the combined eggs/pets total. Keep existing merges separate from newly summoned merges so the same action is counted once.</p>
+        <h3><Swords size={19} />{legacyHistory ? "Saved levels and planned actions" : "Levels and extra summon chances"}</h3>
+        <p className="form-section-subtitle">{legacyHistory ? "This snapshot retains its original manual action counts. Current banks use extra summon percentages instead." : "Enter the extra chances shown in the game; the calculator does the maths. We assume all existing eggs/pets will ascend and merge when the clan needs them. Existing mounts stay separate from bonus summons."}</p>
         <div className="planning-bank-grid">
           {planningFields.map(({ key, label, help }) => <label key={key}>
             <span>{label}</span>
-            <input aria-label={label} aria-describedby={`planning-help-${key}`} type="number" inputMode="numeric" min="0" max={planningMaximum(key)} step="1" value={planningValues[key]} onChange={(e) => setPlanningValues((old) => ({ ...old, [key]: e.target.value }))} />
+            <input aria-label={label} aria-describedby={`planning-help-${key}`} type="number" inputMode={isChance(key) ? "decimal" : "numeric"} min="0" max={planningMaximum(key)} step={isChance(key) ? "0.01" : "1"} required placeholder={isChance(key) ? "Enter 0 if none" : "Enter your level"} value={planningValues[key]} onChange={(e) => setPlanningValues((old) => ({ ...old, [key]: e.target.value }))} />
             <small id={`planning-help-${key}`}>{help}</small>
           </label>)}
         </div>
@@ -1592,8 +1544,10 @@ function ResourceForm({
       </section>
       </fieldset>
       {!readOnly && <div className="save-bar">
-        <span className={dirty ? "unsaved" : "saved"}>
-          {dirty ? (
+        <span className={!completeness.complete || dirty ? "unsaved" : "saved"}>
+          {!completeness.complete ? (
+            <><CircleHelp size={16} />Complete your bank to save</>
+          ) : dirty ? (
             <>
               <span />
               Unsaved changes
@@ -1613,7 +1567,7 @@ function ResourceForm({
         <button
           className="button primary"
           type="submit"
-          disabled={saving}
+          disabled={saving || !completeness.complete}
         >
           {saving ? (
             <LoaderCircle size={17} className="spin" />
@@ -1823,11 +1777,12 @@ function MembersManager({
                       <Avatar member={member} />
                       <div>
                         <strong>
-                          {member.username}<MemberBadge member={member} />
+                          <MemberName member={member} />
                           {member.id === currentUser.id && (
                             <span className="you-badge">you</span>
                           )}
                         </strong>
+                        <MemberTitle member={member} />
                         <span>Discord · {member.discordId}</span>
                       </div>
                     </div>
@@ -2028,8 +1983,8 @@ function DashboardSkeleton() {
       aria-busy="true"
     >
       <div className="skeleton skeleton-hero" />
-      <div className="stat-grid">
-        {dashboardResources.map((item) => (
+      <div className="stat-grid arsenal-grid">
+        {[...dashboardResources, { key: "war-summary" }].map((item) => (
           <div className="skeleton skeleton-stat" key={item.key} />
         ))}
       </div>

@@ -114,7 +114,7 @@ test("war estimates count affordable summons per member and keep all activities 
     { fiveSkills: 200, mount: 50 },
     { newMountMerges: 1, eggMerges: 1, eggSummonMerges: 3 },
   );
-  const result = estimateWar([first, second], DEFAULT_WAR_RATES, ALL_ACTIVITIES);
+  const result = estimateWar([first, second], DEFAULT_WAR_RATES, ALL_ACTIVITIES, "historical");
   const quantities = Object.fromEntries(result.rows.map((row) => [row.activity, row.quantity]));
   assert.deepEqual(quantities, {
     hammers: 7,
@@ -145,7 +145,7 @@ test("war estimates include only selected activities and respect editable scorin
     mountSummons: 100,
     eggMerges: 20,
     eggSummonMerges: 30,
-  }, ["mountSummons", "eggMerges", "eggSummonMerges"]);
+  }, ["mountSummons", "eggMerges", "eggSummonMerges"], "historical");
   assert.equal(changed.minimum, 430);
   assert.equal(changed.maximum, 430);
   assert.deepEqual(estimateWar([bank], DEFAULT_WAR_RATES, []).rows, []);
@@ -161,17 +161,17 @@ test("missing-cost notices apply only to selected activities with relevant posit
   const unusedMergeCount = entry({ mountKeys: 100 }, EMPTY_SUMMONING_COSTS);
   const empty = entry({}, EMPTY_SUMMONING_COSTS);
   const banks = [missingBoth, unusedMergeCount, empty];
-  assert.equal(estimateWar(banks, DEFAULT_WAR_RATES, ALL_ACTIVITIES).missingCosts, 3);
-  assert.equal(estimateWar(banks, DEFAULT_WAR_RATES, ["newMountMerges"]).missingCosts, 1);
-  assert.equal(estimateWar(banks, DEFAULT_WAR_RATES, ["skillSummons"]).missingCosts, 1);
-  assert.equal(estimateWar(banks, DEFAULT_WAR_RATES, ["hammers", "eggMerges"]).missingCosts, 0);
-  assert.equal(estimateWar(banks, DEFAULT_WAR_RATES, ["mountSummons", "newMountMerges"]).missingCosts, 2);
+  assert.equal(estimateWar(banks, DEFAULT_WAR_RATES, ALL_ACTIVITIES, "historical").missingCosts, 3);
+  assert.equal(estimateWar(banks, DEFAULT_WAR_RATES, ["newMountMerges"], "historical").missingCosts, 1);
+  assert.equal(estimateWar(banks, DEFAULT_WAR_RATES, ["skillSummons"], "historical").missingCosts, 1);
+  assert.equal(estimateWar(banks, DEFAULT_WAR_RATES, ["hammers", "eggMerges"], "historical").missingCosts, 0);
+  assert.equal(estimateWar(banks, DEFAULT_WAR_RATES, ["mountSummons", "newMountMerges"], "historical").missingCosts, 2);
 });
 
-test("legacy banks without planning details contribute no invented egg or new-mount actions", () => {
+test("historical legacy banks without planning details retain their original action model", () => {
   const legacy = entry({ eggsPetsTotal: 500, mountKeys: 120, mountsToMerge: 2 });
   delete legacy.planningDetails;
-  const result = estimateWar([legacy], DEFAULT_WAR_RATES, ["newMountMerges", "eggMerges", "eggSummonMerges"]);
+  const result = estimateWar([legacy], DEFAULT_WAR_RATES, ["newMountMerges", "eggMerges", "eggSummonMerges"], "historical");
   assert.equal(result.minimum, 0);
   assert.equal(result.maximum, 0);
   assert.equal(result.missingCosts, 0);
@@ -183,7 +183,7 @@ test("whole summon estimates retain affordable actions at decimal cost boundarie
     { fiveSkills: 175.5, mount: 43.875 },
     { newMountMerges: 9 },
   );
-  const result = estimateWar([priced], DEFAULT_WAR_RATES, ["skillSummons", "mountSummons", "newMountMerges"]);
+  const result = estimateWar([priced], DEFAULT_WAR_RATES, ["skillSummons", "mountSummons", "newMountMerges"], "historical");
   assert.deepEqual(result.rows.map(({ activity, quantity }) => ({ activity, quantity })), [
     { activity: "skillSummons", quantity: 10 },
     { activity: "mountSummons", quantity: 8 },
@@ -305,7 +305,7 @@ test("inactive accounts cannot read plans or Dew, respond to events, or buy and 
   });
 });
 
-test("Dew awards only one point per member per day, including concurrent updates", async () => {
+test("complete bank updates award twenty Dew Points once per member per week, including concurrent saves", async () => {
   await withDatabase(async (db) => {
     const first = await addMember(db, "First");
     const second = await addMember(db, "Second");
@@ -316,13 +316,15 @@ test("Dew awards only one point per member per day, including concurrent updates
       db.transaction((tx) => awardDewForBankUpdate(tx, second.id)),
     ]);
     await db.transaction((tx) => awardDewForBankUpdate(tx, first.id));
-    assert.equal((await getDew(first, db)).balance, 1);
+    assert.equal((await getDew(first, db)).balance, 20);
     assert.equal((await getDew(first, db)).earnedToday, true);
-    assert.equal((await getDew(second, db)).balance, 1);
-    await db.query("UPDATE dew_earnings SET earned_on=earned_on - 1 WHERE member_id=$1", [first.id]);
+    assert.equal((await getDew(first, db)).resourceRewardEarned, true);
+    assert.equal((await getDew(second, db)).balance, 20);
+    await db.query("UPDATE dew_weekly_earnings SET week_start=week_start - 7 WHERE member_id=$1", [first.id]);
     assert.equal((await getDew(first, db)).earnedToday, false);
+    assert.equal((await getDew(first, db)).resourceRewardEarned, false);
     await db.transaction((tx) => awardDewForBankUpdate(tx, first.id));
-    assert.equal((await getDew(first, db)).balance, 2);
+    assert.equal((await getDew(first, db)).balance, 40);
     assert.equal((await getDew(first, db)).earnedToday, true);
   });
 });

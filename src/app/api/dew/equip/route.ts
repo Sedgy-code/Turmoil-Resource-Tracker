@@ -8,6 +8,7 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireMember();
-    return privateResponse(await equipDewItem(actor, equipDewSchema.parse(await request.json()).itemId));
+    const input = equipDewSchema.parse(await request.json());
+    return privateResponse(await equipDewItem(actor, input.itemId, undefined, input.category));
   } catch (error) { return errorResponse(error); }
 }

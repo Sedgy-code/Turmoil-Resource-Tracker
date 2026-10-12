@@ -9,6 +9,7 @@ export const RARITIES = [
 export const RESOURCE_FIELDS = [
   { key: "skillTickets", label: "Skill Tickets", category: "essentials" },
   { key: "eggsPetsTotal", label: "Total eggs/pets", category: "essentials" },
+  { key: "eggshellsTotal", label: "Eggshells total", category: "essentials" },
   { key: "mountKeys", label: "Mount Keys", category: "essentials" },
   { key: "mountsToMerge", label: "Mounts to Merge", category: "essentials" },
   { key: "hammers", label: "Hammers", category: "essentials" },
@@ -16,6 +17,7 @@ export const RESOURCE_FIELDS = [
 export type ResourceKey =
   | "skillTickets"
   | "eggsPetsTotal"
+  | "eggshellsTotal"
   | "mountKeys"
   | "mountsToMerge"
   | "hammers";
@@ -31,10 +33,20 @@ export interface PlanningDetails {
   newMountMerges: number;
   eggMerges: number;
   eggSummonMerges: number;
+  extraMountChancePercent?: number;
+  extraPetSummonPercent?: number;
+  calculationVersion?: 2;
 }
 export const EMPTY_PLANNING_DETAILS: PlanningDetails = {
   skillLevel: 0, mountLevel: 0, eggLevel: 0,
   newMountMerges: 0, eggMerges: 0, eggSummonMerges: 0,
+};
+/** New live-bank forms opt into chance estimates without changing old snapshots. */
+export const CHANCE_PLANNING_DETAILS: PlanningDetails = {
+  ...EMPTY_PLANNING_DETAILS,
+  extraMountChancePercent: 0,
+  extraPetSummonPercent: 0,
+  calculationVersion: 2,
 };
 export const EMPTY_SUMMONING_COSTS: SummoningCosts = { fiveSkills: 0, mount: 0 };
 export const MOUNT_SUMMON_COST_MIN = 37.5;

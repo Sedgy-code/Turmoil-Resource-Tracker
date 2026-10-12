@@ -7,10 +7,11 @@ import {
 } from "@playwright/test";
 import type {
   DashboardResponse,
+  DewResponse,
   Member,
   SessionResponse,
 } from "../src/lib/types";
-import { EMPTY_PLANNING_DETAILS, EMPTY_RESOURCES, RESOURCE_FIELDS } from "../src/lib/resources";
+import { CHANCE_PLANNING_DETAILS, EMPTY_RESOURCES, RESOURCE_FIELDS } from "../src/lib/resources";
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
 const executablePath =
@@ -85,12 +86,15 @@ test.beforeAll(async ({ request }) => {
     const mountCost = existing?.summoningCosts.mount ?? 0;
     const validSkillCost = skillCost >= 150 && skillCost <= 200 && Number.isInteger(skillCost * 10);
     const validMountCost = mountCost >= 37.5 && mountCost <= 50;
-    if (existing && validSkillCost && validMountCost) continue;
+    if (existing && validSkillCost && validMountCost && existing.planningDetails?.calculationVersion === 2 && existing.planningDetails.extraMountChancePercent !== undefined && existing.planningDetails.extraPetSummonPercent !== undefined) continue;
+    const walletBefore = memberId === current.currentUser.id
+      ? await (await request.get("/api/dew")).json() as DewResponse : null;
     const response = await request.put("/api/bank", {
       headers: { Origin: baseURL },
       data: {
         memberId,
         resources: existing?.resources ?? {
+          ...EMPTY_RESOURCES,
           skillTickets: data.week === current.week ? 321 : 125,
           hammers: 25,
         },
@@ -98,10 +102,16 @@ test.beforeAll(async ({ request }) => {
           fiveSkills: validSkillCost ? skillCost : 150,
           mount: validMountCost ? mountCost : 37.5,
         },
+        planningDetails: { ...CHANCE_PLANNING_DETAILS, ...existing?.planningDetails, extraMountChancePercent: existing?.planningDetails?.extraMountChancePercent ?? 0, extraPetSummonPercent: existing?.planningDetails?.extraPetSummonPercent ?? 0, calculationVersion: 2 },
         notes: existing?.notes ?? "Demo browser-test fixture.",
       },
     });
     expect(response.ok(), await response.text()).toBeTruthy();
+    if (walletBefore) {
+      const walletAfter = await (await request.get("/api/dew")).json() as DewResponse;
+      expect(walletAfter.resourceRewardEarned).toBe(true);
+      expect(walletAfter.balance).toBe(walletBefore.balance + (walletBefore.resourceRewardEarned ? 0 : 20));
+    }
   }
 });
 
@@ -125,23 +135,35 @@ test("desktop resources persist, update live totals, preserve history, and expor
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("dialog", (dialog) => dialog.accept());
   try {
-    const planningDetails = { ...EMPTY_PLANNING_DETAILS, ...ownEntry.planningDetails, skillLevel: 42 };
+    const planningDetails = { ...CHANCE_PLANNING_DETAILS, ...ownEntry.planningDetails, skillLevel: 42 };
     const planningFixture = await request.put("/api/bank", {
       headers: { Origin: baseURL },
-      data: { memberId: ownEntry.memberId, resources: ownEntry.resources,
+      data: { memberId: ownEntry.memberId, resources: { ...ownEntry.resources, eggshellsTotal: 1350 },
         summoningCosts: ownEntry.summoningCosts, planningDetails, notes: ownEntry.notes },
     });
     expect(planningFixture.ok(), await planningFixture.text()).toBeTruthy();
+    const { eggshellsTotal: omittedShells, ...cachedResources } = ownEntry.resources;
+    expect(omittedShells).toBeGreaterThanOrEqual(0);
     const legacyUpdate = await request.put("/api/resources", {
       headers: { Origin: baseURL },
       data: { week: original.week, memberId: ownEntry.memberId,
-        resources: { ...ownEntry.resources, hammers: ownEntry.resources.hammers + 1 },
+        resources: { ...cachedResources, hammers: ownEntry.resources.hammers + 1 },
         summoningCosts: ownEntry.summoningCosts, notes: "Legacy client browser fixture." },
     });
     expect(legacyUpdate.ok(), await legacyUpdate.text()).toBeTruthy();
     const afterLegacy = (await dashboard(request)).entries.find((entry) => entry.memberId === ownEntry.memberId)!;
     expect(afterLegacy.resources.hammers).toBe(ownEntry.resources.hammers + 1);
+    expect(afterLegacy.resources.eggshellsTotal).toBe(1350);
     expect(afterLegacy.planningDetails).toEqual(planningDetails);
+    const walletBeforeInvalid = await (await request.get("/api/dew")).json() as DewResponse;
+    const invalidLegacy = await request.put("/api/resources", {
+      headers: { Origin: baseURL },
+      data: { week: original.week, memberId: ownEntry.memberId, resources: {}, summoningCosts: ownEntry.summoningCosts },
+    });
+    expect(invalidLegacy.status()).toBe(400);
+    expect((await invalidLegacy.json()).code).toBe("BANK_INCOMPLETE");
+    expect((await dashboard(request)).entries.find((entry) => entry.memberId === ownEntry.memberId)).toEqual(afterLegacy);
+    expect((await (await request.get("/api/dew")).json() as DewResponse).balance).toBe(walletBeforeInvalid.balance);
     await page.goto("/");
     await expect(
       page.getByRole("heading", { name: "Resource Dashboard" }),
@@ -151,8 +173,8 @@ test("desktop resources persist, update live totals, preserve history, and expor
     await expect(page.getByRole("columnheader", { name: "Potions", exact: true })).toHaveCount(0);
     const topRow = [
       page.locator(".stat-grid .stat-card").filter({ hasText: "Skill Tickets" }),
-      page.locator(".stat-grid .stat-card").filter({ hasText: "Mount Keys" }),
-      page.locator(".stat-grid .eggs-pets-card"),
+      page.locator(".stat-grid .arsenal-mountKeys"),
+      page.locator(".stat-grid .arsenal-eggsPetsTotal"),
     ];
     const topRowBounds = await Promise.all(topRow.map((card) => card.boundingBox()));
     expect(topRowBounds.every(Boolean)).toBeTruthy();
@@ -160,6 +182,15 @@ test("desktop resources persist, update live totals, preserve history, and expor
     expect(Math.abs(topRowBounds[0]!.y - topRowBounds[2]!.y)).toBeLessThanOrEqual(1);
     expect(topRowBounds[0]!.x).toBeLessThan(topRowBounds[1]!.x);
     expect(topRowBounds[1]!.x).toBeLessThan(topRowBounds[2]!.x);
+    const cards = page.locator(".arsenal-grid .stat-card");
+    await expect(cards).toHaveCount(6);
+    const bounds = await Promise.all(Array.from({ length: 6 }, (_, index) => cards.nth(index).boundingBox()));
+    expect(bounds.every(Boolean)).toBeTruthy();
+    for (const row of [bounds.slice(0, 3), bounds.slice(3)]) {
+      expect(Math.max(...row.map((box) => box!.y)) - Math.min(...row.map((box) => box!.y))).toBeLessThanOrEqual(1);
+      expect(Math.max(...row.map((box) => box!.height)) - Math.min(...row.map((box) => box!.height))).toBeLessThanOrEqual(1);
+    }
+    expect(bounds[3]!.y).toBeGreaterThanOrEqual(bounds[0]!.y + bounds[0]!.height);
     await noPageOverflow(page);
     await page.screenshot({
       path: testInfo.outputPath("desktop-dashboard.png"),
@@ -184,7 +215,7 @@ test("desktop resources persist, update live totals, preserve history, and expor
     await page
       .getByRole("button", { name: "Save resources", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText("resources are saved");
+    await expect(page.locator(".toast")).toContainText("resources are saved");
     await page.reload();
     await expect(page.getByLabel("Skill Tickets", { exact: true })).toHaveValue(
       "54321",
@@ -201,10 +232,8 @@ test("desktop resources persist, update live totals, preserve history, and expor
     await page.getByRole("link", { name: "Dashboard", exact: true }).click();
     const hammerCard = page.locator(".stat-card").filter({ hasText: "Hammers" });
     const format = new Intl.NumberFormat("en-US");
-    await expect(hammerCard.locator(".war-points-total")).toHaveText(
-      `${format.format(saved.totals.hammers * 2)}–${format.format(saved.totals.hammers * 5)}`,
-    );
-    await expect(hammerCard.locator(".war-points-note")).toHaveText("2–5 points per hammer.");
+    await expect(hammerCard.locator(".war-point-range strong")).toHaveText([format.format(saved.totals.hammers * 2), format.format(saved.totals.hammers * 5)]);
+    await expect(hammerCard.locator(".arsenal-note")).toContainText("2–5 points per hammer.");
     // The live bank remains saved while completed weekly snapshots stay fixed.
     expect((await dashboard(request, previous.week)).entries).toEqual(previous.entries);
     expect(saved.live).toBe(true);
@@ -216,6 +245,20 @@ test("desktop resources persist, update live totals, preserve history, and expor
       .locator(".war-points-total")).toHaveText(new Intl.NumberFormat("en-US").format(wholeSkills * 225));
     await expect(page.locator(".stat-card").filter({ hasText: "Mounts to Merge" })
       .locator(".war-points-total")).toHaveText(new Intl.NumberFormat("en-US").format(saved.totals.mountsToMerge * 1_080));
+    const availableMounts = saved.entries.reduce((sum, entry) => sum + (entry.summoningCosts.mount > 0
+      ? Math.floor(entry.resources.mountKeys / entry.summoningCosts.mount) : 0), 0);
+    const bonusMounts = saved.entries.reduce((sum, entry) => sum + (entry.summoningCosts.mount > 0
+      ? Math.floor(entry.resources.mountKeys / entry.summoningCosts.mount) * (entry.planningDetails?.extraMountChancePercent ?? 0) / 100 : 0), 0);
+    const extraPets = saved.entries.reduce((sum, entry) => sum + entry.resources.eggshellsTotal / 100
+      * (entry.planningDetails?.extraPetSummonPercent ?? 0) / 100, 0);
+    const mountPoints = availableMounts * 1080 + Math.round(bonusMounts * 1080);
+    const eggPoints = saved.totals.eggsPetsTotal * 2250 + Math.round(extraPets * 2250);
+    await expect(page.locator(".arsenal-mountKeys .war-points-total")).toHaveText(format.format(mountPoints));
+    await expect(page.locator(".arsenal-eggsPetsTotal .war-points-total")).toHaveText(format.format(eggPoints));
+    const fixedPoints = wholeSkills * 225 + mountPoints + eggPoints + saved.totals.mountsToMerge * 1080;
+    await expect(page.locator(".arsenal-summary .war-point-range strong")).toHaveText([
+      format.format(fixedPoints + saved.totals.hammers * 2), format.format(fixedPoints + saved.totals.hammers * 5),
+    ]);
     const downloadPromise = page.waitForEvent("download");
     await page.getByRole("button", { name: "Export CSV", exact: true }).click();
     const download = await downloadPromise;
@@ -227,12 +270,13 @@ test("desktop resources persist, update live totals, preserve history, and expor
     const chunks: Buffer[] = [];
     for await (const chunk of stream!) chunks.push(Buffer.from(chunk));
     const csv = Buffer.concat(chunks).toString("utf8");
-    expect(csv.trim().split("\r\n")).toHaveLength(6);
+    expect(csv.trim().split("\r\n")).toHaveLength(7);
+    expect(csv).toContain(`Eggshells total,${saved.totals.eggshellsTotal}`);
     expect(csv).toContain(`Skill Tickets,${saved.totals.skillTickets}`);
     expect(csv).toContain(`Total eggs/pets,${saved.totals.eggsPetsTotal}`);
     expect(csv).not.toContain("Potions");
     expect(csv).not.toMatch(/Common|Rare|Epic|Legendary|Ultimate|Mythic/);
-    await expect(page.locator(".eggs-pets-card")).toContainText(
+    await expect(page.locator(".arsenal-eggsPetsTotal")).toContainText(
       new Intl.NumberFormat("en-US").format(saved.totals.eggsPetsTotal),
     );
     await expect(page.getByRole("columnheader", { name: "Total eggs/pets", exact: true })).toBeVisible();
@@ -290,21 +334,21 @@ test("hammer clan war estimates follow the selected week and show a zero range f
   });
   await page.goto(`/?week=${original.week}`);
   const hammerCard = page.locator(".stat-card").filter({ hasText: "Hammers" });
-  await expect(hammerCard.locator(".war-points-total")).toHaveText("2,468–6,170");
-  await expect(hammerCard.locator(".war-points-note")).toHaveText("2–5 points per hammer.");
+  await expect(hammerCard.locator(".war-point-range strong")).toHaveText(["2,468", "6,170"]);
+  await expect(hammerCard.locator(".arsenal-note")).toContainText("2–5 points per hammer.");
   await page.getByRole("button", { name: "Previous week", exact: true }).click();
   await expect(page.getByLabel("Select week", { exact: true })).toHaveValue(previousWeek);
   await expect(hammerCard.locator(".stat-number")).toHaveText("67,890");
-  await expect(hammerCard.locator(".war-points-total")).toHaveText("135,780–339,450");
+  await expect(hammerCard.locator(".war-point-range strong")).toHaveText(["135,780", "339,450"]);
   await page.getByRole("button", { name: "Next week", exact: true }).click();
-  await expect(hammerCard.locator(".war-points-total")).toHaveText("2,468–6,170");
+  await expect(hammerCard.locator(".war-point-range strong")).toHaveText(["2,468", "6,170"]);
   await page.getByRole("button", { name: "Next week", exact: true }).click();
   await expect(page.getByLabel("Select week", { exact: true })).toHaveValue(nextWeek);
   await expect(hammerCard.locator(".stat-number")).toHaveText("0");
-  await expect(hammerCard.locator(".war-points-total")).toHaveText("0–0");
+  await expect(hammerCard.locator(".war-point-range strong")).toHaveText(["0", "0"]);
 });
 
-test("resource fields can be cleared, typed without a leading zero, and saved blank as zero", async ({
+test("blank resource fields block saving while explicitly entered zero quantities are valid", async ({
   page,
   request,
 }) => {
@@ -333,7 +377,10 @@ test("resource fields can be cleared, typed without a leading zero, and saved bl
       await input.fill("");
       await expect(input).toHaveValue("");
     }
-    await expect(page.locator(".save-bar")).toContainText("Unsaved changes");
+    await expect(page.locator(".save-bar")).toContainText("Complete your bank to save");
+    await expect(page.getByRole("button", { name: "Save resources", exact: true })).toBeDisabled();
+    await expect(page.locator(".bank-completeness")).toContainText("Complete every field before saving");
+    await expect(page.locator(".bank-completeness")).toContainText("20 Dew Points");
     const tickets = page.getByLabel("Skill Tickets", { exact: true });
     await tickets.pressSequentially("42");
     await expect(tickets).toHaveValue("42");
@@ -349,10 +396,15 @@ test("resource fields can be cleared, typed without a leading zero, and saved bl
       ).toBeFalsy();
     }
     await tickets.fill("42");
+    for (const { label } of RESOURCE_FIELDS) {
+      const input = page.getByLabel(label, { exact: true });
+      if (await input.inputValue() === "") await input.fill("0");
+    }
+    await expect(page.getByRole("button", { name: "Save resources", exact: true })).toBeEnabled();
     await page
       .getByRole("button", { name: "Save resources", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText("resources are saved");
+    await expect(page.locator(".toast")).toContainText("resources are saved");
     const expected = {
       ...EMPTY_RESOURCES,
       skillTickets: 42,
@@ -433,7 +485,7 @@ test("personal summoning costs persist and enforce required decimal ranges", asy
     await mountCost.pressSequentially("37.5");
     await expect(page.locator(".save-bar")).toContainText("Unsaved changes");
     await page.getByRole("button", { name: "Save resources", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText("resources are saved");
+    await expect(page.locator(".toast")).toContainText("resources are saved");
     expect(costSaves).toBe(1);
     await page.reload();
     await expect(page.getByLabel(skillCostLabel, { exact: true })).toHaveValue("175.5");
@@ -450,20 +502,18 @@ test("personal summoning costs persist and enforce required decimal ranges", asy
     expect(saved.summons.mounts).toBe(baselineMounts + 4);
     await page.getByRole("link", { name: "Dashboard", exact: true }).click();
     const skillCard = page.locator(".stat-card").filter({ hasText: "Skill Tickets" });
-    const mountCard = page.locator(".stat-card").filter({ hasText: "Mount Keys" });
-    await expect(skillCard.locator(".stat-summons")).toContainText("Total skill summons");
-    await expect(skillCard.locator(".summon-total")).toHaveText(new Intl.NumberFormat("en-US").format(saved.summons.skills));
+    const mountCard = page.locator(".arsenal-mountKeys");
+    await expect(skillCard.locator(".arsenal-metric").filter({ hasText: "Total skill summons" }).locator("strong")).toHaveText(new Intl.NumberFormat("en-US").format(saved.summons.skills));
     await expect(skillCard.locator(".war-points-total")).toHaveText(new Intl.NumberFormat("en-US").format(saved.summons.skills * 225));
-    await expect(mountCard.locator(".stat-summons")).toContainText("Total mount summons");
-    await expect(mountCard.locator(".summon-total")).toHaveText(new Intl.NumberFormat("en-US").format(saved.summons.mounts));
+    await expect(mountCard.locator(".arsenal-metric").filter({ hasText: "Total mount summons" }).locator("strong")).toHaveText(new Intl.NumberFormat("en-US").format(saved.summons.mounts));
     const headers = page.getByRole("table").locator("thead");
     await expect(headers).not.toContainText(/summon|cost/i);
     await page.getByRole("link", { name: "My Resources", exact: true }).click();
     await page.getByLabel(skillCostLabel, { exact: true }).fill("");
     await page.getByLabel(mountCostLabel, { exact: true }).fill("");
     await page.getByLabel("Total eggs/pets", { exact: true }).fill("");
-    await page.getByRole("button", { name: "Save resources", exact: true }).click();
-    await expect(page.getByLabel(skillCostLabel, { exact: true })).toBeFocused();
+    await expect(page.getByRole("button", { name: "Save resources", exact: true })).toBeDisabled();
+    await expect(page.locator(".bank-completeness")).toContainText("Complete every field before saving");
     expect(costSaves).toBe(1);
     const blocked = await dashboard(request, original.week);
     expect(blocked.entries.find((entry) => entry.memberId === own.memberId)?.summoningCosts)
@@ -475,8 +525,9 @@ test("personal summoning costs persist and enforce required decimal ranges", asy
     }
     await page.getByLabel(skillCostLabel, { exact: true }).fill("200");
     await page.getByLabel(mountCostLabel, { exact: true }).fill("50");
+    await page.getByLabel("Total eggs/pets", { exact: true }).fill("0");
     await page.getByRole("button", { name: "Save resources", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText("resources are saved");
+    await expect(page.locator(".toast")).toContainText("resources are saved");
     expect(costSaves).toBe(2);
     const cleared = await dashboard(request, original.week);
     expect(cleared.entries.find((entry) => entry.memberId === own.memberId)?.summoningCosts).toEqual({ fiveSkills: 200, mount: 50 });
@@ -491,15 +542,15 @@ test("personal summoning costs persist and enforce required decimal ranges", asy
     await expect(page.getByLabel("Total eggs/pets", { exact: true })).toHaveValue("0");
     await page.getByRole("link", { name: "Dashboard", exact: true }).click();
     if (cleared.summons.missingSkillCosts > 0) {
-      await expect(skillCard.locator(".summon-warning")).toContainText(String(cleared.summons.missingSkillCosts));
+      await expect(skillCard.locator(".summon-warning").filter({ hasText: "summon cost" })).toContainText(String(cleared.summons.missingSkillCosts));
     } else {
-      await expect(skillCard.locator(".summon-warning")).toHaveCount(0);
+      await expect(skillCard.locator(".summon-warning").filter({ hasText: "summon cost" })).toHaveCount(0);
     }
     await expect(skillCard.locator(".war-points-total")).toHaveText(new Intl.NumberFormat("en-US").format(cleared.summons.skills * 225));
     if (cleared.summons.missingMountCosts > 0) {
-      await expect(mountCard.locator(".summon-warning")).toContainText(String(cleared.summons.missingMountCosts));
+      await expect(mountCard.locator(".summon-warning").filter({ hasText: "summon cost" })).toContainText(String(cleared.summons.missingMountCosts));
     } else {
-      await expect(mountCard.locator(".summon-warning")).toHaveCount(0);
+      await expect(mountCard.locator(".summon-warning").filter({ hasText: "summon cost" })).toHaveCount(0);
     }
   } finally {
     for (const entry of [own, other]) {
@@ -581,7 +632,7 @@ test("refreshed clan profile replaces the login snapshot and retries a changed a
       ),
     )
     .toBeTruthy();
-  await expect(page.locator(".topbar-actions > .avatar img")).toHaveAttribute(
+  await expect(page.locator(".topbar-actions .avatar img")).toHaveAttribute(
     "src",
     updatedAvatar,
   );
@@ -614,7 +665,7 @@ test("admin can edit another member, promote, deactivate, and restore access", a
     await page
       .getByRole("button", { name: "Save resources", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText("resources are saved");
+    await expect(page.locator(".toast")).toContainText("resources are saved");
     const edited = await dashboard(request);
     expect(
       edited.entries.find((candidate) => candidate.memberId === member.id)
@@ -684,15 +735,15 @@ test("mobile dashboard, menu, complete resource form, and week navigation fit th
   ).toBeVisible();
   await expect(page.getByRole("table")).toBeVisible();
   const mobileCards = page.locator(".stat-grid > article");
-  const mobileBounds = await Promise.all(
-    [0, 1, 2].map((index) => mobileCards.nth(index).boundingBox()),
-  );
+  await expect(mobileCards).toHaveCount(6);
+  const mobileBounds = await Promise.all(Array.from({ length: 6 }, (_, index) => mobileCards.nth(index).boundingBox()));
   expect(mobileBounds.every(Boolean)).toBeTruthy();
-  expect(Math.abs(mobileBounds[0]!.x - mobileBounds[1]!.x)).toBeLessThanOrEqual(1);
-  expect(Math.abs(mobileBounds[0]!.x - mobileBounds[2]!.x)).toBeLessThanOrEqual(1);
-  expect(mobileBounds[2]!.y).toBeLessThan(mobileBounds[0]!.y);
-  expect(mobileBounds[1]!.y).toBeGreaterThan(mobileBounds[0]!.y);
-  await expect(mobileCards.nth(2)).toContainText("Total eggs/pets");
+  const visualOrder = mobileBounds.map((bounds) => bounds!).sort((a, b) => a.y - b.y);
+  for (let index = 1; index < visualOrder.length; index++) {
+    expect(Math.abs(visualOrder[0].x - visualOrder[index].x)).toBeLessThanOrEqual(1);
+    expect(visualOrder[index].y).toBeGreaterThanOrEqual(visualOrder[index - 1].y + visualOrder[index - 1].height);
+  }
+  await expect(page.locator(".arsenal-eggsPetsTotal")).toContainText("Total eggs/pets");
   await noPageOverflow(page);
   await page.screenshot({
     path: testInfo.outputPath("mobile-dashboard.png"),
@@ -738,8 +789,9 @@ test("mobile dashboard, menu, complete resource form, and week navigation fit th
   await expect(page.getByLabel("Cost per mount summon", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Open navigation", exact: true }).click();
   await page.getByRole("link", { name: "Dashboard", exact: true }).click();
-  await expect(page.locator(".stat-summons")).toHaveCount(2);
-  await expect(page.locator(".stat-war-points")).toHaveCount(3);
+  await expect(page.locator(".arsenal-card")).toHaveCount(6);
+  await expect(page.locator(".stat-war-points")).toHaveCount(5);
+  await expect(page.locator(".arsenal-summary .war-point-range strong")).toHaveCount(2);
   await noPageOverflow(page);
   expect(errors).toEqual([]);
 });

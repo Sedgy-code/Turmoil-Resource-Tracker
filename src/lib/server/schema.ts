@@ -29,6 +29,9 @@ CREATE TABLE IF NOT EXISTS resource_entries (
 ALTER TABLE resource_entries ADD COLUMN IF NOT EXISTS summoning_costs JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE resource_entries ADD COLUMN IF NOT EXISTS planning_details JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE app_members ADD COLUMN IF NOT EXISTS badge TEXT;
+ALTER TABLE app_members ADD COLUMN IF NOT EXISTS cosmetic_title TEXT;
+ALTER TABLE app_members ADD COLUMN IF NOT EXISTS cosmetic_accent TEXT;
+ALTER TABLE app_members ADD COLUMN IF NOT EXISTS cosmetic_frame TEXT;
 CREATE INDEX IF NOT EXISTS entries_week_idx ON resource_entries(week_start);
 CREATE TABLE IF NOT EXISTS auth_sessions (
   token_hash TEXT PRIMARY KEY,
@@ -96,6 +99,7 @@ CREATE TABLE IF NOT EXISTS bank_history_state (
   started_at TIMESTAMPTZ NOT NULL
 );
 INSERT INTO bank_history_state(id,started_at) VALUES('live-banks',clock_timestamp()) ON CONFLICT(id) DO NOTHING;
+INSERT INTO bank_history_state(id,started_at) VALUES('chance-war-estimates',clock_timestamp()) ON CONFLICT(id) DO NOTHING;
 CREATE TABLE IF NOT EXISTS clan_settings (
   id TEXT PRIMARY KEY,
   capacity INTEGER NOT NULL DEFAULT 50 CHECK (capacity BETWEEN 1 AND 1000),
@@ -126,6 +130,13 @@ CREATE TABLE IF NOT EXISTS snipe_responses (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (snipe_id, member_id)
 );
+CREATE TABLE IF NOT EXISTS snipe_attendance (
+  snipe_id TEXT NOT NULL REFERENCES snipe_plans(id),
+  member_id TEXT NOT NULL REFERENCES app_members(id),
+  confirmed_by TEXT NOT NULL REFERENCES app_members(id),
+  confirmed_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY (snipe_id, member_id)
+);
 CREATE TABLE IF NOT EXISTS dew_balances (
   member_id TEXT PRIMARY KEY REFERENCES app_members(id),
   balance INTEGER NOT NULL DEFAULT 0 CHECK (balance >= 0)
@@ -134,6 +145,14 @@ CREATE TABLE IF NOT EXISTS dew_earnings (
   member_id TEXT NOT NULL REFERENCES app_members(id),
   earned_on DATE NOT NULL,
   PRIMARY KEY (member_id, earned_on)
+);
+CREATE TABLE IF NOT EXISTS dew_weekly_earnings (
+  member_id TEXT NOT NULL REFERENCES app_members(id),
+  week_start DATE NOT NULL CHECK (EXTRACT(ISODOW FROM week_start) = 1),
+  reason TEXT NOT NULL CHECK (reason IN ('resources', 'snipe')),
+  amount INTEGER NOT NULL CHECK ((reason = 'resources' AND amount = 20) OR (reason = 'snipe' AND amount = 10)),
+  earned_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY (member_id, week_start, reason)
 );
 CREATE TABLE IF NOT EXISTS dew_owned (
   member_id TEXT NOT NULL REFERENCES app_members(id),

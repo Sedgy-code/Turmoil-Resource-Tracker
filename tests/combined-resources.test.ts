@@ -29,6 +29,7 @@ const NEXT_WEEK = "2026-10-12";
 const CURRENT_KEYS = [
   "skillTickets",
   "eggsPetsTotal",
+  "eggshellsTotal",
   "mountKeys",
   "mountsToMerge",
   "hammers",
@@ -102,7 +103,7 @@ async function insertLegacy(
   return id;
 }
 
-test("resource responses expose five fields with one combined eggs and pets total", () => {
+test("resource responses expose six fields with separate eggs/pets and eggshell totals", () => {
   assert.deepEqual(RESOURCE_FIELDS.map(({ key }) => key).sort(), [...CURRENT_KEYS].sort());
   const parsed = resourceSchema.parse({});
   assertCurrentKeys(parsed);

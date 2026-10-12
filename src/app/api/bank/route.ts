@@ -3,7 +3,7 @@ import { historicalBankDashboard, liveDashboard, saveBank } from "@/lib/server/b
 import { assertSameOrigin } from "@/lib/server/config";
 import { currentWeek } from "@/lib/resources";
 import { saveBankSchema, weekSchema } from "@/lib/server/validation";
-import { errorResponse, privateResponse } from "@/lib/server/errors";
+import { ApiError, errorResponse, privateResponse } from "@/lib/server/errors";
 import { z } from "zod";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,6 +24,9 @@ export async function PUT(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireMember();
-    return privateResponse({ entry: await saveBank(actor, saveBankSchema.parse(await request.json())) });
+    const parsed = saveBankSchema.safeParse(await request.json());
+    if (!parsed.success) throw new ApiError(400,
+      "Complete all resource totals, valid summon costs, levels, and extra summon chances before saving. Incomplete information cannot be saved and will not earn the weekly 20 Dew Points.", "BANK_INCOMPLETE");
+    return privateResponse({ entry: await saveBank(actor, parsed.data) });
   } catch (error) { return errorResponse(error); }
 }

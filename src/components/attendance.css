@@ -1,0 +1,45 @@
+.snipe-confirmed-attendance {
+  margin: 0 24px 22px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #101611;
+}
+.snipe-attendance-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.snipe-attendance-heading h3 { font-size: 12px; font-weight: 650; }
+.snipe-attendance-copy { color: var(--muted); font-size: 11px; line-height: 1.75; margin: 10px 0; }
+.snipe-attendance-empty { font-size: 11px; color: var(--subtle); line-height: 1.6; margin-top: 12px; }
+.snipe-confirmed-list,
+.snipe-attendance-actions { list-style: none; padding: 0; margin: 12px 0 0; }
+.snipe-confirmed-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.snipe-confirmed-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 9px;
+  color: var(--text);
+  font-size: 11px;
+  border: 1px solid #32503a;
+  border-radius: 6px;
+  background: #1c3021;
+  overflow-wrap: anywhere;
+}
+.snipe-confirmed-list svg { flex-shrink: 0; color: #77cb8a; }
+.snipe-confirmed-list small { color: #a1c6a9; font-size: 9px; }
+.snipe-attendance-management { border-top: 1px solid var(--border); margin-top: 15px; padding-top: 4px; }
+.snipe-attendance-management h4 { color: var(--muted); font-size: 10px; margin: 15px 0 0; }
+.snipe-attendance-actions li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; }
+.snipe-attendance-actions li + li { border-top: 1px solid var(--border); }
+.snipe-attendance-actions li > span { min-width: 0; color: var(--text); font-size: 11px; overflow-wrap: anywhere; }
+.snipe-attendance-actions .planning-button { font-size: 10px; min-height: 34px; padding: 7px 10px; }
+.snipe-additional-attendees { margin-top: 12px; }
+.snipe-additional-attendees summary { cursor: pointer; color: var(--gold); font-size: 11px; line-height: 1.7; }
+@media (max-width: 600px) {
+  .snipe-confirmed-attendance { margin-left: 16px; margin-right: 16px; padding: 12px; }
+  .snipe-attendance-heading { flex-wrap: wrap; }
+}

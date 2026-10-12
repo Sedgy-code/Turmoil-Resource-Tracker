@@ -71,14 +71,14 @@ export function WarPlanner({ data, notify }: Props) {
   }, [data.entries, data.currentUser.id, memberId, members, scope]);
   const { estimate, estimateError } = useMemo((): { estimate: WarEstimate; estimateError: string } => {
     try {
-      return { estimate: estimateWar(entries, rates, activities), estimateError: "" };
+      return { estimate: estimateWar(entries, rates, activities, data.live === false ? "historical" : "current"), estimateError: "" };
     } catch (error) {
       return {
         estimate: { rows: [], minimum: 0, maximum: 0, missingCosts: 0 },
         estimateError: error instanceof Error ? error.message : "Unable to calculate this estimate. Reduce the selected activities or saved resource counts.",
       };
     }
-  }, [entries, rates, activities]);
+  }, [entries, rates, activities, data.live]);
   const scopeName = scope === "clan" ? "Clan totals" : scope === "mine" ? "My totals" : members.find((member) => member.id === memberId)?.username || "Member";
 
   function toggleActivity(activity: WarActivity) {
@@ -120,11 +120,11 @@ export function WarPlanner({ data, notify }: Props) {
       </div>
       <fieldset className="planning-activities"><legend>Include activities</legend>{WAR_ACTIVITIES.map(({ key, label, description }) => <label key={key} className="planning-check"><input type="checkbox" aria-label={label} checked={activities.includes(key)} onChange={() => toggleActivity(key)} /><span><strong>{label}</strong><small>{key === "hammers" ? `${points(rates.hammersMin, rates.hammersMax)} points per hammer.` : description}</small></span></label>)}</fieldset>
       {estimateError && <p className="planning-notice" role="alert">{estimateError} You can also select fewer activities or view an individual member’s estimate.</p>}
-      <div className="planning-table-wrap"><table className="planning-table"><caption className="planning-sr-only">{scopeName} estimated war points</caption><thead><tr><th scope="col">Activity</th><th scope="col">Actions</th><th scope="col">Points each</th><th scope="col">Estimated points</th></tr></thead><tbody>{estimate.rows.map((row) => <tr key={row.activity}><th scope="row">{row.label}</th><td>{numberFormat(row.quantity)}</td><td>{row.activity === "hammers" ? points(rates.hammersMin, rates.hammersMax) : numberFormat(rates[row.activity])}</td><td className="planning-gold">{points(row.minimum, row.maximum)}</td></tr>)}{estimate.rows.length === 0 && <tr><td colSpan={4} className="planning-table-empty">{estimateError ? "Estimate unavailable until the selected points are reduced." : "Select an activity to calculate an estimate."}</td></tr>}</tbody></table></div>
+      <div className="planning-table-wrap"><table className="planning-table"><caption className="planning-sr-only">{scopeName} estimated war points</caption><thead><tr><th scope="col">Activity</th><th scope="col">Estimated actions</th><th scope="col">Points each</th><th scope="col">Estimated points</th></tr></thead><tbody>{estimate.rows.map((row) => <tr key={row.activity}><th scope="row">{row.label}</th><td>{numberFormat(row.quantity)}</td><td>{row.activity === "hammers" ? points(rates.hammersMin, rates.hammersMax) : numberFormat(rates[row.activity])}</td><td className="planning-gold">{points(row.minimum, row.maximum)}</td></tr>)}{estimate.rows.length === 0 && <tr><td colSpan={4} className="planning-table-empty">{estimateError ? "Estimate unavailable until the selected points are reduced." : "Select an activity to calculate an estimate."}</td></tr>}</tbody></table></div>
       <div className="planning-total"><div><span>{scopeName}</span><small>Total selected points</small></div><strong className="war-estimate-total" aria-live="polite">{estimateError ? "--" : points(estimate.minimum, estimate.maximum)}</strong></div>
       {estimate.missingCosts > 0 && <p className="planning-notice" role="status">{numberFormat(estimate.missingCosts)} missing summon {estimate.missingCosts === 1 ? "cost is" : "costs are"} leaving some resources out of this estimate. Add the costs in My Resources to include them.</p>}
       {entries.length === 0 && <p className="planning-notice">No saved resource bank for this selection yet. Save a bank in My Resources to start planning.</p>}
-      <p className="planning-footnote">Summons use each member’s saved costs. Existing merges and summon-then-merge actions are entered separately in My Resources. Count each merge once; summoning and merging are separate scoring actions.</p>
+      <p className="planning-footnote">Summons use each member’s saved costs. Bonus mount merges = mount summons × extra mount chance ÷ 100. Existing egg/pet merges use Total eggs/pets, assuming every egg and pet will be ascended when needed. Egg/pet summon then merge = eggshells ÷ 100 × extra pet summon chance ÷ 100. Chances estimate expected actions and can produce fractions; point estimates are rounded to whole points. Summoning and merging are separate scoring actions. {data.live === false && "Older snapshots retain their original saved merge counts."}</p>
     </section>
     <section className="planning-panel">
       <div className="planning-heading"><div><h2>Clan point rates</h2><p>{isAdmin ? "Saved rates apply to every member’s estimates and open snipe plans." : "Your clan leadership sets the point rates used for these estimates."}</p></div>{isAdmin && <button className="planning-button planning-button-subtle" onClick={() => { setRateDraft(rates); setEditingRates((open) => !open); }} aria-expanded={editingRates}><Settings2 size={15} />{editingRates ? "Cancel" : "Edit rates"}</button>}</div>

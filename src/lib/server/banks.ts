@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { assessBankCompleteness } from "../completeness";
 import {
   currentWeek,
   EMPTY_PLANNING_DETAILS,
@@ -32,7 +33,8 @@ function aggregate(entries: ResourceEntry[]) {
   const totals = { ...EMPTY_RESOURCES };
   const summons = { skills: 0, mounts: 0, missingSkillCosts: 0, missingMountCosts: 0 };
   for (const entry of entries) {
-    for (const key of Object.keys(totals) as (keyof ResourceValues)[]) totals[key] += entry.resources[key];
+    const resources = normalizeResources(entry.resources);
+    for (const key of Object.keys(totals) as (keyof ResourceValues)[]) totals[key] += resources[key];
     if (entry.summoningCosts.fiveSkills > 0) summons.skills += wholeSummons(entry.resources.skillTickets * 5, entry.summoningCosts.fiveSkills);
     else if (entry.resources.skillTickets > 0) summons.missingSkillCosts++;
     if (entry.summoningCosts.mount > 0) summons.mounts += wholeSummons(entry.resources.mountKeys, entry.summoningCosts.mount);
@@ -71,7 +73,7 @@ function snapshotFromRow(row: Record<string, unknown>): BankHistorySnapshot {
     capturedAt: iso(row.captured_at)!,
     automatic: row.automatic === true,
     members: json<Member[]>(row.members),
-    entries: json<ResourceEntry[]>(row.entries),
+    entries: json<ResourceEntry[]>(row.entries).map((entry) => ({ ...entry, resources: normalizeResources(entry.resources) })),
     totals: normalizeResources(json(row.totals)),
   };
 }
@@ -119,6 +121,8 @@ export async function capturePendingSnapshots(tx: SqlConnection, now = new Date(
   const events = await tx.query("SELECT * FROM member_status_events WHERE changed_at <= $1 ORDER BY changed_at,id", [now.toISOString()]);
   const existingRows = await tx.query("SELECT week_start::text AS week FROM bank_snapshots");
   const historyStateRows = await tx.query("SELECT started_at FROM bank_history_state WHERE id='live-banks'");
+  const chanceStateRows = await tx.query("SELECT started_at FROM bank_history_state WHERE id='chance-war-estimates'");
+  const chanceStartedAt = iso(chanceStateRows[0]?.started_at) ?? now.toISOString();
   const legacyRows = await tx.query(
       `SELECT e.*,COALESCE(NULLIF(editor.display_name,''),editor.username) AS updated_by_username
        FROM resource_entries e JOIN app_members editor ON editor.id=e.updated_by
@@ -199,7 +203,12 @@ export async function capturePendingSnapshots(tx: SqlConnection, now = new Date(
         if (!version) return [];
         const editorStatus = statusState.get(String(version.updated_by));
         const editorName = editorStatus?.username ?? memberMap.get(String(version.updated_by))?.username;
-        return [bankEntry(version, week, editorName ? String(editorName) : "Clan member")];
+        const entry = bankEntry(version, week, editorName ? String(editorName) : "Clan member");
+        // Freeze the model active at this cutoff without altering original
+        // versions, submitted values, or the member's freshness timestamp.
+        return [{ ...entry, planningDetails: cutoff > chanceStartedAt
+          ? { ...entry.planningDetails!, calculationVersion: 2 as const }
+          : entry.planningDetails }];
       }).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
       await insertSnapshot(tx, { week, capturedAt, automatic: true, members: frozenMembers, entries, totals: aggregate(entries).totals });
       captured++;
@@ -255,7 +264,7 @@ export async function liveDashboard(actor: Member, db?: Database): Promise<Dashb
 
 export async function saveBank(
   actor: Member,
-  input: { memberId?: string; resources: ResourceValues; summoningCosts?: SummoningCosts; planningDetails?: PlanningDetails; notes: string },
+  input: { memberId?: string; resources: ResourceValues; summoningCosts?: SummoningCosts; planningDetails?: PlanningDetails; notes: string; preserveEggshells?: boolean },
   db?: Database,
 ): Promise<ResourceEntry> {
   const connection = db ?? await database();
@@ -272,9 +281,16 @@ export async function saveBank(
     await capturePendingSnapshots(tx, now);
     const oldRows = await tx.query("SELECT * FROM member_banks WHERE member_id=$1", [memberId]);
     const old = oldRows[0] ? bankEntry(oldRows[0], currentWeek(now)) : null;
-    const resources = normalizeResources(input.resources);
+    const resources = normalizeResources({ ...input.resources, ...(input.preserveEggshells && old
+      ? { eggshellsTotal: old.resources.eggshellsTotal }
+      : {}) });
     const costs = input.summoningCosts ?? old?.summoningCosts ?? EMPTY_SUMMONING_COSTS;
-    const details = input.planningDetails ?? old?.planningDetails ?? EMPTY_PLANNING_DETAILS;
+    const suppliedDetails = input.planningDetails ?? old?.planningDetails ?? EMPTY_PLANNING_DETAILS;
+    const completeness = assessBankCompleteness({ resources: input.resources, summoningCosts: costs, planningDetails: suppliedDetails });
+    if (!completeness.complete) {
+      throw new ApiError(400, `Complete all information before saving. Missing or invalid: ${completeness.missing.join(", ")}. Incomplete submissions do not earn the weekly 20 Dew Points.`, "BANK_INCOMPLETE");
+    }
+    const details = { ...suppliedDetails, calculationVersion: 2 as const };
     const rows = await tx.query(
       `INSERT INTO member_banks (member_id,resources,summoning_costs,planning_details,notes,updated_by,updated_at)
        VALUES ($1,$2::jsonb,$3::jsonb,$4::jsonb,$5,$6,clock_timestamp())
@@ -293,9 +309,7 @@ export async function saveBank(
       [versionId, memberId, JSON.stringify(resources), JSON.stringify(costs), JSON.stringify(details), input.notes, freshActor.id, row.updated_at],
     );
     await tx.query("UPDATE app_members SET last_updated_at=$2 WHERE id=$1", [memberId, row.updated_at]);
-    const resourceChanged = Object.keys(resources).some((key) =>
-      resources[key as keyof ResourceValues] !== (old?.resources ?? EMPTY_RESOURCES)[key as keyof ResourceValues]);
-    if (memberId === freshActor.id && resourceChanged) await awardDewForBankUpdate(tx, memberId);
+    if (memberId === freshActor.id) await awardDewForBankUpdate(tx, memberId, savedWeek);
     // Keep old API clients and exports useful without making legacy week edits
     // mutate the persistent bank or its freshness indicator.
     await tx.query(
@@ -366,7 +380,9 @@ export async function captureSnapshot(actor: Member, db?: Database): Promise<Ban
     const rows = await tx.query(
       `INSERT INTO bank_manual_snapshots (id,week_start,captured_at,members,entries,totals)
        VALUES ($1,$2,$3,$4::jsonb,$5::jsonb,$6::jsonb) RETURNING *,FALSE AS automatic`,
-      [randomUUID(), week, now.toISOString(), JSON.stringify(live.members), JSON.stringify(live.entries), JSON.stringify(live.totals)],
+      [randomUUID(), week, now.toISOString(), JSON.stringify(live.members), JSON.stringify(live.entries.map((entry) => ({
+        ...entry, planningDetails: { ...entry.planningDetails!, calculationVersion: 2 },
+      }))), JSON.stringify(live.totals)],
     );
     return snapshotFromRow(rows[0]);
   });

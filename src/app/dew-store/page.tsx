@@ -1,5 +1,5 @@
-import { Suspense } from "react";
-import Tracker from "@/components/tracker";
+import { permanentRedirect } from "next/navigation";
+
 export default function Page() {
-  return <Suspense><Tracker view="store" /></Suspense>;
+  permanentRedirect("/reward-shop");
 }

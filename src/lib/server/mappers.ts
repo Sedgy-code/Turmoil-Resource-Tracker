@@ -1,4 +1,5 @@
 import type { Member, ResourceEntry } from "../types";
+import { cosmeticItem } from "../dew";
 import { normalizeResources, EMPTY_SUMMONING_COSTS, EMPTY_PLANNING_DETAILS, type SummoningCosts, type PlanningDetails } from "../resources";
 
 export function iso(value: unknown): string | null {
@@ -17,7 +18,13 @@ export function memberFromRow(row: Record<string, unknown>): Member {
     active: row.active === true,
     lastUpdatedAt: iso(row.last_updated_at),
     joinedAt: iso(row.joined_at)!,
-    badge: row.badge ? String(row.badge) : null,
+    badge: cosmeticItem(row.badge, "badge")?.id ?? null,
+    cosmetics: {
+      badge: cosmeticItem(row.badge, "badge")?.id ?? null,
+      title: cosmeticItem(row.cosmetic_title, "title")?.id ?? null,
+      accent: cosmeticItem(row.cosmetic_accent, "accent")?.id ?? null,
+      frame: cosmeticItem(row.cosmetic_frame, "frame")?.id ?? null,
+    },
   };
 }
 export function entryFromRow(row: Record<string, unknown>): ResourceEntry {
