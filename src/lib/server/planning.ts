@@ -231,7 +231,7 @@ export async function purchaseDewItem(actor: Member, itemId: string, db?: Databa
     // Retried purchases are safe: owning a reward never charges a second time.
     if (alreadyOwned.length) return dewResponse(tx, freshActor);
     const paid = await tx.query("UPDATE dew_balances SET balance = balance - $2 WHERE member_id = $1 AND balance >= $2 RETURNING balance", [freshActor.id, item.cost]);
-    if (!paid.length) throw new ApiError(409, "You need more Dew Points to unlock this reward.", "INSUFFICIENT_DEW");
+    if (!paid.length) throw new ApiError(409, "You need more Clan Points to unlock this reward.", "INSUFFICIENT_DEW");
     await tx.query("INSERT INTO dew_owned (member_id, item_id) VALUES ($1, $2)", [freshActor.id, itemId]);
     return dewResponse(tx, freshActor);
   });

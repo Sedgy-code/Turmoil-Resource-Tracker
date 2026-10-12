@@ -11,7 +11,7 @@ To host it for your clan, follow the [beginner hosting guide](HOSTING-GUIDE.md) 
 - Sortable clan totals and contributions, roster freshness and capacity, fixed weekly history, CSV export, and copy-to-clipboard.
 - Personal, clan, and member war calculators with selectable scoring activities and editable clan point rates.
 - Admin-managed snipe plans with Yes/No responses, confirmed attendance, participant estimates, and immutable archived results.
-- A Reward Shop with weekly Dew Points and five equal-price tiers of badges, titles, name accents, and avatar frames.
+- A current Clan Points balance in the top bar and a Reward Shop with weekly rewards and five equal-price tiers of badges, titles, name accents, and avatar frames.
 - One combined Total eggs/pets quantity, with existing egg and pet rarity entries carried forward automatically.
 - Weekly personal summoning costs, with whole-number skill and mount summon totals calculated per member.
 - Six balanced dashboard cards with points for every inventory, eggshell totals, an overall estimate, and a hammer range of 2–5 points each.
@@ -121,7 +121,7 @@ The original core tables are:
 | `resource_entries` | One entry per member and week, resource quantities in `resources` JSONB, personal skill/mount costs in `summoning_costs` JSONB, optional notes, last update time, and the member who last edited it. |
 | `auth_sessions` | Session-token hashes, member association, expiration, encrypted Discord OAuth tokens, and membership-check timestamps. |
 
-Additional tables store live banks, append-only bank/profile histories, weekly and manual snapshots, clan settings, snipe plans/responses/confirmed attendance, and virtual Dew balances/ownership/weekly earnings. Migrations preserve original submissions, purchases and balances, and retain stable activation dates for live history and chance estimates.
+Additional tables store live banks, append-only bank/profile histories, weekly and manual snapshots, clan settings, snipe plans/responses/confirmed attendance, and virtual Clan Point balances/ownership/weekly earnings. Migrations preserve original submissions, purchases and balances, and retain stable activation dates for live history and chance estimates.
 
 Resource banks remain active across weeks until members update them. Weekly history and rewards use **Monday at 00:00 UTC** boundaries (10am AEST / 11am AEDT in Sydney), labelled by the Monday's `YYYY-MM-DD` date. Each entry contains Skill Tickets, **Total eggs/pets**, **Eggshells total**, Mount Keys, Mounts to Merge, and Hammers. Total eggs/pets combines all eggs and pets; old rarity counts are added together when read, and an explicit combined value, including zero, takes precedence. Old records without eggshells read as zero without rewriting the stored history. Resource quantities must be entered as nonnegative whole numbers. Blank or invalid required fields block saving; an entered zero is valid. Notes remain optional.
 
@@ -135,6 +135,8 @@ A legacy zero or missing cost contributes zero summons for that resource, while 
 
 Every inventory card shows **Potential clan war points** using saved clan rates. Mount Keys includes mount summons and expected bonus mount merges; Eggs/Pets includes existing merges and expected extra pet merges. Existing mounts remain separate. Hammers shows its minimum and maximum estimate. A sixth card adds all seven scoring activities once and matches the clan war calculator. Cards form three columns on desktop, two on tablets, and one on phones. Missing saved costs or bonus chances are flagged as incomplete estimates.
 
+Hover, focus, or tap an incomplete-estimate warning to see the affected members and their missing fields. The contribution table highlights the same members in amber with a **Missing data** badge; members with no saved bank are shown separately. Missing costs or chances are only flagged when they affect saved positive inventory, and historical manual estimates retain their original requirements.
+
 Current bank values, costs, levels, and bonus percentages carry forward automatically. Historical bank views are read-only and retain their original calculation model. Weekly History compares clan or individual values and movement between captures. Completed-week snapshots are captured automatically on application access and before bank/roster writes; delayed access replays the immutable version ledger at each missed Monday cutoff. Manual snapshots have separate IDs and never suppress the completed-week capture. Archived rosters and totals survive later edits or deactivation. These application snapshots do not replace provider database backups.
 
 ## Planning and rewards
@@ -143,9 +145,11 @@ Leadership can set the registered-member capacity and scoring rates. Defaults ar
 
 Snipe plans use local browser date/time converted to a stored UTC instant. Only administrators create, edit, or archive plans. Members answer Yes or No; unanswered members stay distinct. Only Yes participants contribute to an open plan's points. Responses close at the event start; admins can then confirm actual attendance, including members who did not RSVP. Archiving freezes participants, responses, confirmed attendance identities, and estimates.
 
-Saving complete information in your own bank earns **20 Dew Points once per clan week**, even if quantities are unchanged. Incomplete information cannot be saved or earn points; zeros are valid and notes are optional. An admin-confirmed attendance record for a snipe that starts in the current clan week earns **10 additional points once that week**, across all snipes. A Yes response alone earns nothing. Admin edits to another member's bank earn no resource reward. Historical attendance can be recorded but cannot generate a current-week reward. Weekly awards and purchases are transactional and cannot duplicate rewards, overspend, or charge twice.
+Saving complete information in your own bank earns **20 Clan Points once per clan week**, even if quantities are unchanged. Incomplete information cannot be saved or earn points; zeros are valid and notes are optional. An admin-confirmed attendance record for a snipe that starts in the current clan week earns **10 additional points once that week**, across all snipes. A Yes response alone earns nothing. Admin edits to another member's bank earn no resource reward. Historical attendance can be recorded but cannot generate a current-week reward. Weekly awards and purchases are transactional and cannot duplicate rewards, overspend, or charge twice.
 
-The **Reward Shop** at `/reward-shop` offers one badge, title, name accent and avatar frame at each price: **10, 25, 50, 75 and 100 Dew Points per item**. Each item is purchased separately; members can equip one of each category together. Original badges and earlier purchases remain available. `/dew-store` redirects to the Reward Shop. Cosmetics preserve Discord names and avatars while adding catalog-controlled decorations. Existing balances, ownership and daily earning history remain intact.
+The **Reward Shop** at `/reward-shop` offers one badge, title, name accent and avatar frame at each price: **10, 25, 50, 75 and 100 Clan Points per item**. Each item is purchased separately; members can equip one of each category together. Original badges and earlier purchases remain available. `/dew-store` redirects to the Reward Shop. Cosmetics preserve Discord names and avatars while adding catalog-controlled decorations. Existing balances, ownership and daily earning history remain intact.
+
+The top bar shows the signed-in member's current **Clan Points**, including while viewing historical banks or editing another member. It links to the Reward Shop, updates immediately after earning or spending points, and refreshes on focus and every 30 seconds while visible. Loading or unavailable balances use a placeholder rather than an assumed zero.
 
 An optional scheduler can call `GET /api/cron/snapshots` with `Authorization: Bearer <CRON_SECRET>`. Set `CRON_SECRET` securely on the hosting provider before using that endpoint. It rejects all calls when the secret is absent. Scheduling is optional: the automatic cutoff replay described above operates without it.
 
@@ -173,7 +177,7 @@ npm run build
 
 `npm run dev` starts the development server. `npm run start` serves a production build. `npm run db:migrate` initializes the configured database. Real Discord login requires an OAuth application and an authorized Discord account; local demo checks do not substitute for that integration check.
 
-The browser suite covers desktop/mobile layouts, persistent banks and planning counts, numeric ranges, whole per-member summon estimates, CSV export, sortable rosters, legacy-client compatibility, Monday rollover, frozen snapshots, snipe attendance/archive, virtual Dew purchases, and admin permissions. Start the demo server in one terminal:
+The browser suite covers desktop/mobile layouts, persistent banks and planning counts, numeric ranges, whole per-member summon estimates, CSV export, sortable rosters, legacy-client compatibility, Monday rollover, frozen snapshots, snipe attendance/archive, virtual Clan Point purchases, and admin permissions. Start the demo server in one terminal:
 
 ```bash
 DEMO_MODE=true npm run dev

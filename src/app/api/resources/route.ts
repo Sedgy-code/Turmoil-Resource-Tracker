@@ -17,7 +17,7 @@ export async function PUT(request: Request) {
       const hasTotals = ["skillTickets", "mountKeys", "mountsToMerge", "hammers"].every((key) => typeof rawResources?.[key] === "number");
       const hasEggs = typeof rawResources?.eggsPetsTotal === "number" || LEGACY_EGGS_PETS_KEYS.every((key) => typeof rawResources?.[key] === "number");
       if (!hasTotals || !hasEggs) throw new ApiError(400,
-        "Complete every resource total before saving. Incomplete information cannot be saved and will not earn the weekly 20 Dew Points.", "BANK_INCOMPLETE");
+        "Complete every resource total before saving. Incomplete information cannot be saved and will not earn the weekly 20 Clan Points.", "BANK_INCOMPLETE");
     }
     const entry = input.week === currentWeek()
       ? await saveBank(actor, { memberId: input.memberId, resources: input.resources, summoningCosts: input.summoningCosts, notes: input.notes,

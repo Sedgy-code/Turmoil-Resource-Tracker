@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { Archive, CalendarDays, Check, Crosshair, LoaderCircle, Pencil, Plus, RefreshCw, X } from "lucide-react";
 import { currentWeek, numberFormat } from "@/lib/resources";
 import { WAR_ACTIVITIES } from "@/lib/war";
+import { announceClanPointsUpdate } from "@/lib/clan-points";
 import type { DashboardResponse, SnipePlan, SnipesResponse, WarActivity } from "@/lib/types";
 import "./attendance.css";
 
@@ -182,9 +183,10 @@ export function SnipePlanner({ data, notify }: Props) {
         body: JSON.stringify({ memberId, attended: true }),
       });
       replacePlan(result.plan);
+      announceClanPointsUpdate(memberId);
       notify(currentWeek(new Date(plan.startsAt)) === currentWeek()
-        ? "Attendance confirmed. Eligible members earn 10 Dew Points once per clan week."
-        : "Attendance confirmed. Older snipes do not earn this week’s Dew Points.");
+        ? "Attendance confirmed. Eligible members earn 10 Clan Points once per clan week."
+        : "Attendance confirmed. Older snipes do not earn this week’s Clan Points.");
     } catch (error) { notify(error instanceof Error ? error.message : "Unable to confirm attendance.", true); }
     finally { finishMutation(); }
   }
@@ -227,10 +229,10 @@ export function SnipePlanner({ data, notify }: Props) {
         {!plan.archived && <div className="planning-rsvp"><p>{started ? "This snipe has started. Yes/No responses are closed." : "Can you join this snipe?"}</p>{!started && <div className="planning-tabs"><button aria-pressed={answer === "yes"} disabled={busy !== null} onClick={() => void respond(plan, "yes")}><Check size={14} />Yes</button><button aria-pressed={answer === "no"} disabled={busy !== null} onClick={() => void respond(plan, "no")}><X size={14} />No</button></div>}{busy === plan.id && <LoaderCircle size={16} className="spin" aria-label="Saving" />}</div>}
         <section className="snipe-confirmed-attendance" aria-label={`Confirmed attendance for ${plan.title}`}>
           <div className="snipe-attendance-heading"><h3>Confirmed attendance</h3><span className="planning-chip">{attendees.length} attended</span></div>
-          <p className="snipe-attendance-copy">Earn 10 Dew Points per clan week when an admin confirms you attended a snipe. Answering Yes reserves your place; points require confirmed attendance.</p>
+          <p className="snipe-attendance-copy">Earn 10 Clan Points per clan week when an admin confirms you attended a snipe. Answering Yes reserves your place; points require confirmed attendance.</p>
           {attendees.length > 0 ? <ul className="snipe-confirmed-list">{attendees.map((attendee) => <li key={attendee.memberId}><Check size={14} aria-hidden="true" /><span>{confirmedName(attendee.memberId)}</span>{attendee.memberId === data.currentUser.id && <small>You attended</small>}</li>)}</ul> : <p className="snipe-attendance-empty">{started || plan.archived ? "No attendance has been confirmed." : "Admins can confirm attendance after the snipe starts."}</p>}
           {!plan.archived && started && isAdmin && <div className="snipe-attendance-management">
-            <p className="snipe-attendance-copy">Mark members who actually took part, then archive the plan to save attendance. {currentRewardWeek ? "Each member can earn this 10-point reward once this clan week, across all snipes." : "This snipe is from an earlier clan week. You can record attendance, but it will not award Dew Points."}</p>
+            <p className="snipe-attendance-copy">Mark members who actually took part, then archive the plan to save attendance. {currentRewardWeek ? "Each member can earn this 10-point reward once this clan week, across all snipes." : "This snipe is from an earlier clan week. You can record attendance, but it will not award Clan Points."}</p>
             {expectedMembers.length > 0 && <><h4>Members who answered Yes</h4><ul className="snipe-attendance-actions">{expectedMembers.map(attendanceButton)}</ul></>}
             {additionalMembers.length > 0 && <details className="snipe-additional-attendees"><summary>Confirm other clan members ({additionalMembers.length})</summary><p className="snipe-attendance-copy">Members can be confirmed even if they did not answer Yes.</p><ul className="snipe-attendance-actions">{additionalMembers.map(attendanceButton)}</ul></details>}
             {expectedMembers.length === 0 && additionalMembers.length === 0 && <p className="snipe-attendance-empty">All active clan members have been confirmed.</p>}

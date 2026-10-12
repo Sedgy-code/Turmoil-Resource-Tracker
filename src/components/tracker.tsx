@@ -6,9 +6,14 @@ import { BankHistory } from "./bank-history";
 import { WarPlanner } from "./war-planner";
 import { SnipePlanner } from "./snipe-planner";
 import { DewStore } from "./dew-store";
+import { ClanPointsBalance } from "./clan-points-balance";
+import { announceClanPointsUpdate } from "@/lib/clan-points";
 import { MemberAvatar as Avatar, MemberName, MemberTitle } from "./member-identity";
 import { DEFAULT_WAR_RATES, WAR_ACTIVITIES, estimateWar } from "@/lib/war";
 import { assessBankCompleteness } from "@/lib/completeness";
+import { filterPlanningIssues, memberPlanningIssues } from "@/lib/planning-completeness";
+import { MissingDataIndicator } from "./missing-data-indicator";
+import missingDataStyles from "./missing-data-indicator.module.css";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   useCallback,
@@ -36,6 +41,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleHelp,
+  CircleAlert,
   Clipboard,
   Egg,
   Flame,
@@ -485,6 +491,7 @@ export default function Tracker({ view }: { view: View }) {
             <strong>{viewNames[view]}</strong>
           </div>
           <div className="topbar-actions">
+            <ClanPointsBalance memberId={user.id} revision={data?.currentUser.lastUpdatedAt} />
             {session.demo && <span className="demo-pill">Demo workspace</span>}
             <span className="connection">
               <i />
@@ -548,7 +555,7 @@ export default function Tracker({ view }: { view: View }) {
                       ? "A stronger clan starts with the people behind it."
                       : view === "war" ? "Choose activities and estimate the clan’s next battle."
                         : view === "snipes" ? "Organise events, share availability, and prepare together."
-                          : view === "store" ? "Earn Dew Points for complete weekly updates and confirmed snipe participation."
+                          : view === "store" ? "Earn Clan Points for complete weekly updates and confirmed snipe participation."
                             : "Fixed weekly snapshots and changes in the clan’s resources."}
               </p>
             </div>
@@ -899,8 +906,8 @@ function ClanArsenal({ data, estimate, rates, estimateError, snapshotId }: { dat
   const chanceEntries = data.entries.filter((entry) => entry.planningDetails?.calculationVersion === 2 || entry.planningDetails?.extraMountChancePercent !== undefined || entry.planningDetails?.extraPetSummonPercent !== undefined).length;
   const chanceHistory = live || chanceEntries > 0;
   const mixedHistory = !live && chanceEntries > 0 && chanceEntries < data.entries.length;
-  const missingMountChances = live ? data.entries.filter((entry) => entry.resources.mountKeys > 0 && entry.planningDetails?.extraMountChancePercent === undefined).length : 0;
-  const missingPetChances = live ? data.entries.filter((entry) => entry.resources.eggshellsTotal > 0 && entry.planningDetails?.extraPetSummonPercent === undefined).length : 0;
+  const incompleteMembers = memberPlanningIssues(data);
+  const membersMissingCosts = filterPlanningIssues(incompleteMembers, ["fiveSkills", "mount"]);
   return (
     <div className="stat-grid arsenal-grid">
       {dashboardResources.map(({ key, label, icon: StatIcon, color }) => {
@@ -908,8 +915,9 @@ function ClanArsenal({ data, estimate, rates, estimateError, snapshotId }: { dat
           : key === "mountKeys" ? points("mountSummons", "newMountMerges")
             : key === "eggsPetsTotal" ? points("eggMerges", "eggSummonMerges")
               : key === "mountsToMerge" ? points("mountMerges") : points("hammers");
-        const missingCosts = key === "skillTickets" ? data.summons.missingSkillCosts : key === "mountKeys" ? data.summons.missingMountCosts : 0;
-        const missingChances = key === "mountKeys" ? missingMountChances : key === "eggsPetsTotal" ? missingPetChances : 0;
+        const cardIssues = filterPlanningIssues(incompleteMembers, key === "skillTickets" ? ["fiveSkills"] : key === "mountKeys" ? ["mount", "extraMountChancePercent"] : key === "eggsPetsTotal" ? ["extraPetSummonPercent"] : []);
+        const missingCosts = filterPlanningIssues(cardIssues, ["fiveSkills", "mount"]).length;
+        const missingChances = filterPlanningIssues(cardIssues, ["extraMountChancePercent", "extraPetSummonPercent"]).length;
         return (
           <article className={`stat-card arsenal-card arsenal-${key}`} key={key}>
             <div className="stat-label"><span className={`resource-icon ${color}`}><StatIcon size={19} strokeWidth={1.8} /></span><span>{label}</span></div>
@@ -929,8 +937,9 @@ function ClanArsenal({ data, estimate, rates, estimateError, snapshotId }: { dat
               {key === "hammers" && <p className="arsenal-note">A range of {numberFormat(rates.hammersMin)}–{numberFormat(rates.hammersMax)} points per hammer.</p>}
               {(key === "skillTickets" || key === "mountKeys") && <p className="arsenal-note">Whole summons calculated per member.{key === "mountKeys" && chanceHistory ? " Bonus merges use each member’s extra mount chance." : ""}</p>}
               {key === "eggsPetsTotal" && <p className="arsenal-note">{mixedHistory ? "Original manual counts are preserved; newer banks use eggs/pets totals and extra chances." : chanceHistory ? "All eggs/pets are available to merge. Extra pets use eggshells ÷ 100 × each member’s chance." : "Saved manual merge counts are preserved in this history."}</p>}
-              {missingCosts > 0 && <p className="summon-warning">Incomplete: {missingCosts} {missingCosts === 1 ? "member" : "members"} missing a summon cost.</p>}
-              {missingChances > 0 && <p className="summon-warning">Extra chance needed for {missingChances} {missingChances === 1 ? "member" : "members"}; bonus points are incomplete.</p>}
+              <MissingDataIndicator members={cardIssues} label={missingCosts > 0
+                ? `Incomplete: ${missingCosts} ${missingCosts === 1 ? "member" : "members"} missing a summon cost.${missingChances > 0 ? " Extra chances are also missing." : ""}`
+                : `Extra chance needed for ${missingChances} ${missingChances === 1 ? "member" : "members"}; bonus points are incomplete.`} />
             </div>
             <div className="stat-war-points">
               <span className="war-points-label">Potential clan war points</span>
@@ -950,8 +959,9 @@ function ClanArsenal({ data, estimate, rates, estimateError, snapshotId }: { dat
         <div className="arsenal-summary-footer">
           <span className="arsenal-summary-tag"><Swords size={13} />All seven scoring activities</span>
           <p className="arsenal-note">Adds the five resource cards once. Fractional bonus actions are expected values; points are rounded per activity.</p>
-          {!!estimate?.missingCosts && <p className="summon-warning">Some summon costs are missing. This total is incomplete.</p>}
-          {(missingMountChances > 0 || missingPetChances > 0) && <p className="summon-warning">Add missing extra chances to include all bonus points.</p>}
+          <MissingDataIndicator members={incompleteMembers} label={membersMissingCosts.length > 0
+            ? "Some summon costs are missing. This total is incomplete."
+            : "Add missing extra chances to include all bonus points."} />
           <Link className="arsenal-planner-link" href={`/war-points${data.live === false ? `?week=${data.week}${snapshotId ? `&snapshot=${encodeURIComponent(snapshotId)}` : ""}` : ""}`}>View war calculator <ArrowRight size={14} /></Link>
         </div>
       </article>
@@ -975,6 +985,8 @@ function MemberResources({
   type ContributionSort = "username" | "updatedAt" | ResourceKey;
   const [sort, setSort] = useState<{ key: ContributionSort; direction: "asc" | "desc" }>({ key: "username", direction: "asc" });
   const entries = new Map(data.entries.map((entry) => [entry.memberId, entry]));
+  const incompleteMembers = memberPlanningIssues(data);
+  const incompleteByMember = new Map(incompleteMembers.map((member) => [member.memberId, member]));
   const changeSort = (key: ContributionSort) => setSort((old) => ({
     key,
     direction: old.key === key ? (old.direction === "asc" ? "desc" : "asc") : key === "username" ? "asc" : "desc",
@@ -1040,6 +1052,7 @@ function MemberResources({
           <ArrowRight size={13} />
         </span>
       </div>
+      {incompleteMembers.length > 0 && <p className={missingDataStyles.legend}><CircleAlert size={13} aria-hidden="true" />Highlighted members have incomplete war-planning data. Hover or tap Missing data for details.</p>}
       <div className="table-scroll">
         <table className="resource-table">
           <thead>
@@ -1070,8 +1083,9 @@ function MemberResources({
                 (item) => item.memberId === member.id,
               );
               const resources = entry?.resources ?? EMPTY_RESOURCES;
+              const missingInformation = incompleteByMember.get(member.id);
               return (
-                <tr key={member.id}>
+                <tr key={member.id} className={missingInformation ? missingDataStyles.incompleteRow : undefined} data-planning-incomplete={missingInformation ? "true" : undefined}>
                   <td className="sticky-member">
                     <div className="table-member">
                       <Avatar member={member} small />
@@ -1087,8 +1101,9 @@ function MemberResources({
                           <i
                             className={entry ? "updated-dot" : "pending-dot"}
                           />
-                          {entry ? "Resources updated" : "Awaiting update"}
+                          {entry ? "Resources updated" : "No bank saved"}
                         </span>
+                        {missingInformation && <MissingDataIndicator members={[missingInformation]} label="Missing data" accessibleLabel={`Missing war-planning data for ${member.username}`} compact />}
                       </div>
                     </div>
                   </td>
@@ -1261,7 +1276,7 @@ function ResourceForm({
     event.preventDefault();
     if (readOnly) return;
     if (!completeness.complete) {
-      setFormError(`Complete all resource totals, summon costs, levels, and extra summon chances before saving to earn 20 Dew Points this week. Check: ${completeness.missing.join(", ")}.`);
+      setFormError(`Complete all resource totals, summon costs, levels, and extra summon chances before saving to earn 20 Clan Points this week. Check: ${completeness.missing.join(", ")}.`);
       return;
     }
     const planningDetails = draftBank.planningDetails;
@@ -1323,6 +1338,7 @@ function ResourceForm({
           notes,
         }),
       });
+      announceClanPointsUpdate(selected.id);
       await refresh();
       notify(
         `${selected.id === data.currentUser.id ? "Your" : selected.username + "’s"} resources are saved. Clan totals are up to date.`,
@@ -1401,7 +1417,7 @@ function ResourceForm({
       {!readOnly && <div className={`bank-completeness ${completeness.complete ? "complete" : "incomplete"}`} role="status">
         <ShieldCheck size={17} />
         <div><strong>{completeness.complete ? "Bank information is complete" : "Complete every field before saving"}</strong>
-          <p>Complete all resource totals, summon costs, levels, and extra summon chances before saving to earn 20 Dew Points this week. Zero totals, levels, and chances are valid.</p>
+          <p>Complete all resource totals, summon costs, levels, and extra summon chances before saving to earn 20 Clan Points this week. Zero totals, levels, and chances are valid.</p>
           {!completeness.complete && <p className="bank-missing-fields">Check: {completeness.missing.join(", ")}.</p>}
           {selected.id !== data.currentUser.id && <p>Editing another member’s bank does not earn your weekly reward.</p>}
         </div>

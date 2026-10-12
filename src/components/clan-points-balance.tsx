@@ -1,0 +1,71 @@
+"use client";
+
+import Link from "next/link";
+import { Coins } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { CLAN_POINTS_UPDATED, type ClanPointsUpdate } from "@/lib/clan-points";
+import { numberFormat } from "@/lib/resources";
+
+export function ClanPointsBalance({ memberId, revision }: { memberId: string; revision?: string | null }) {
+  const [wallet, setWallet] = useState<{ memberId: string; balance: number } | null>(null);
+  const [unavailable, setUnavailable] = useState(false);
+  const controller = useRef<AbortController | null>(null);
+  const generation = useRef(0);
+  const load = useCallback(async () => {
+    controller.current?.abort();
+    const pending = new AbortController();
+    controller.current = pending;
+    const requestGeneration = ++generation.current;
+    try {
+      const response = await fetch("/api/dew", { cache: "no-store", signal: pending.signal });
+      if (!response.ok) {
+        if ((response.status === 401 || response.status === 403) && requestGeneration === generation.current) setWallet(null);
+        throw new Error("Balance unavailable");
+      }
+      const result = await response.json() as { balance: number };
+      if (!Number.isSafeInteger(result.balance) || result.balance < 0) throw new Error("Balance unavailable");
+      if (requestGeneration === generation.current) {
+        setWallet({ memberId, balance: result.balance });
+        setUnavailable(false);
+      }
+    } catch {
+      if (!pending.signal.aborted && requestGeneration === generation.current) setUnavailable(true);
+    }
+  }, [memberId]);
+
+  useEffect(() => {
+    const whenVisible = () => { if (document.visibilityState === "visible") void load(); };
+    const updated = (event: Event) => {
+      const detail = (event as CustomEvent<ClanPointsUpdate>).detail;
+      if (!detail || detail.memberId !== memberId) return;
+      if (typeof detail.balance === "number" && Number.isSafeInteger(detail.balance) && detail.balance >= 0) {
+        controller.current?.abort();
+        ++generation.current;
+        setWallet({ memberId, balance: detail.balance });
+        setUnavailable(false);
+      } else void load();
+    };
+    const interval = window.setInterval(whenVisible, 30_000);
+    window.addEventListener("focus", whenVisible);
+    document.addEventListener("visibilitychange", whenVisible);
+    window.addEventListener(CLAN_POINTS_UPDATED, updated);
+    return () => {
+      controller.current?.abort();
+      ++generation.current;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", whenVisible);
+      document.removeEventListener("visibilitychange", whenVisible);
+      window.removeEventListener(CLAN_POINTS_UPDATED, updated);
+    };
+  }, [memberId, load]);
+  useEffect(() => { void load(); }, [load, revision]);
+
+  const balance = wallet?.memberId === memberId ? wallet.balance : null;
+  return <Link className="topbar-clan-points" href="/reward-shop"
+    aria-label={balance === null ? "Clan Points. Open Reward Shop." : `${numberFormat(balance)} Clan Points. Open Reward Shop.`}
+    title={unavailable ? "Unable to refresh your balance. Open Reward Shop to retry." : "Your current Clan Points. Open Reward Shop."}>
+    <Coins size={17} aria-hidden="true" />
+    <span className="topbar-points-label">Clan Points</span>
+    <strong aria-live="polite" aria-atomic="true">{balance === null ? "—" : numberFormat(balance)}</strong>
+  </Link>;
+}

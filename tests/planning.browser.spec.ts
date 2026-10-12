@@ -15,7 +15,7 @@ import type {
   SnipesResponse,
   WarActivity,
 } from "../src/lib/types";
-import { CHANCE_PLANNING_DETAILS, EMPTY_RESOURCES } from "../src/lib/resources";
+import { CHANCE_PLANNING_DETAILS, EMPTY_RESOURCES, RESOURCE_FIELDS } from "../src/lib/resources";
 import { DEFAULT_WAR_RATES, WAR_ACTIVITIES } from "../src/lib/war";
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
@@ -72,6 +72,30 @@ async function noPageOverflow(page: Page) {
   expect(await page.evaluate(() =>
     document.documentElement.scrollWidth <= window.innerWidth + 1,
   )).toBeTruthy();
+}
+
+async function expectHeaderBalance(page: Page, balance: number) {
+  const header = page.locator(".topbar-clan-points");
+  const formatted = new Intl.NumberFormat("en-US").format(balance);
+  await expect(header).toBeVisible();
+  await expect(header).toHaveAttribute("aria-label", `${formatted} Clan Points. Open Reward Shop.`);
+  await expect(header).toContainText(formatted);
+}
+
+async function noHeaderOverlap(page: Page) {
+  const balance = page.locator(".topbar-clan-points");
+  const bounds = await balance.boundingBox();
+  expect(bounds).toBeTruthy();
+  expect(bounds!.x).toBeGreaterThanOrEqual(0);
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual((page.viewportSize()?.width ?? 0) + 1);
+  for (const sibling of await page.locator(".topbar-actions > :not(.topbar-clan-points)").all()) {
+    if (!await sibling.isVisible()) continue;
+    const other = await sibling.boundingBox();
+    if (!other) continue;
+    const overlapWidth = Math.min(bounds!.x + bounds!.width, other.x + other.width) - Math.max(bounds!.x, other.x);
+    const overlapHeight = Math.min(bounds!.y + bounds!.height, other.y + other.height) - Math.max(bounds!.y, other.y);
+    expect(overlapWidth <= 1 || overlapHeight <= 1, "Clan Points must not overlap another top-bar control").toBeTruthy();
+  }
 }
 
 async function selectActivities(page: Page, selected: WarActivity[]) {
@@ -255,6 +279,7 @@ test("snipe creation, attendance, selected points, and archived history use the 
     await saveBank(request, { ...entry, resources: { ...entry.resources, hammers: 10 } });
     const beforeAttendance = await read<DewResponse>(request, "/api/dew");
     await page.goto("/snipes");
+    await expectHeaderBalance(page, beforeAttendance.balance);
     await page.getByRole("button", { name: "New snipe", exact: true }).click();
     await page.getByLabel("Snipe title", { exact: true }).fill(title);
     await page.getByLabel("Start date and time", { exact: true }).fill("2030-01-14T20:30");
@@ -307,6 +332,7 @@ test("snipe creation, attendance, selected points, and archived history use the 
     const afterAttendance = await read<DewResponse>(request, "/api/dew");
     expect(afterAttendance.snipeRewardEarned).toBe(true);
     expect(afterAttendance.balance).toBe(beforeAttendance.balance + (beforeAttendance.snipeRewardEarned ? 0 : 10));
+    await expectHeaderBalance(page, afterAttendance.balance);
     const repeated = await request.post(`/api/snipes/${createdId}/attendance`, {
       headers: { Origin: baseURL }, data: { memberId: entry.memberId, attended: true },
     });
@@ -399,11 +425,14 @@ test("weekly resource rewards are capped and four cosmetic categories equip inde
     await expect(page).toHaveURL(`${baseURL}/reward-shop`);
     await expect(page.getByRole("heading", { name: "Reward Shop", exact: true }).first()).toBeVisible();
     await expect(page.getByRole("link", { name: "Dew Store", exact: true })).toHaveCount(0);
-    const weekly = page.locator('[aria-label="This week’s Dew Point rewards"]');
+    await expectHeaderBalance(page, afterTwo.balance);
+    await expect(page.locator(".planning-dew-balance")).toHaveAttribute("aria-label", `${afterTwo.balance} Clan Points available`);
+    await expect(page.locator(".planning-reward-shop")).not.toContainText(/Dew Points?/);
+    const weekly = page.locator('[aria-label="This week’s Clan Point rewards"]');
     await expect(weekly).toContainText("+20 points");
     await expect(weekly).toContainText("+10 points");
     for (const [index, cost] of [10, 25, 50, 75, 100].entries()) {
-      const tier = page.getByRole("region", { name: `Tier ${index + 1}: ${cost} Dew Points each`, exact: true });
+      const tier = page.getByRole("region", { name: `Tier ${index + 1}: ${cost} Clan Points each`, exact: true });
       await expect(tier.locator("article.dew-item")).toHaveCount(4);
     }
     const selected = [
@@ -422,12 +451,15 @@ test("weekly resource rewards are capped and four cosmetic categories equip inde
         const purchased = await read<DewResponse>(request, "/api/dew");
         expect(purchased.owned).toContain(item.id);
         expect(purchased.balance).toBe(balance);
+        await expectHeaderBalance(page, balance);
+        await expect(page.locator(".planning-dew-balance")).toHaveAttribute("aria-label", `${balance} Clan Points available`);
       }
       if (equipment[item.category] !== item.id) await card.getByRole("button", { name: `Equip ${categoryNames[item.category]}`, exact: true }).click();
       equipment[item.category] = item.id;
       await expect.poll(async () => (await read<DewResponse>(request, "/api/dew")).equippedCosmetics).toEqual(equipment);
     }
     await page.reload();
+    await expectHeaderBalance(page, balance);
     const profile = page.getByRole("region", { name: "Your equipped rewards", exact: true });
     for (const item of selected) {
       await expect(profile).toContainText(item.name);
@@ -486,10 +518,180 @@ test("weekly snapshots remain fixed when a member's live bank changes", async ({
   }
 });
 
-test("new planning and history pages remain usable at narrow mobile widths", async ({ page }, testInfo) => {
+test("top bar updates weekly Clan Points after an own save and keeps the own wallet while editing another member", async ({ page, request }, testInfo) => {
+  const { data, entry } = await ownBank(request);
+  const other = data.entries.find((row) => row.memberId !== data.currentUser.id)!;
+  expect(other).toBeTruthy();
+  const actualWallet = await read<DewResponse>(request, "/api/dew");
+  // A controlled wallet gives this browser workflow a fresh weekly award even
+  // when other tests have already earned the real fixture's once-weekly reward.
+  let balance = 0;
+  let ownAwarded = false;
+  let walletReads = 0;
+  await page.route("**/api/dew", (route) => {
+    walletReads++;
+    return route.fulfill({ json: { ...actualWallet, balance, resourceRewardEarned: ownAwarded } });
+  });
+  await page.route(/\/api\/bank(?:\?|$)/, async (route) => {
+    if (route.request().method() !== "PUT") return route.continue();
+    const response = await route.fetch();
+    if (response.ok() && route.request().postDataJSON().memberId === entry.memberId && !ownAwarded) {
+      ownAwarded = true;
+      balance += 20;
+    }
+    return route.fulfill({ response });
+  });
+  try {
+    // Complete the second member's fixture if an isolated planning-only run
+    // encounters a bank from before the percentage fields were introduced.
+    await saveBank(request, other);
+    await page.goto("/resources");
+    await expectHeaderBalance(page, 0);
+    const readsBeforeSave = walletReads;
+    await page.getByLabel("Hammers", { exact: true }).fill(String(entry.resources.hammers + 1));
+    await page.getByRole("button", { name: "Save resources", exact: true }).click();
+    await expect(page.locator(".toast")).toContainText(/saved/i);
+    await expectHeaderBalance(page, 20);
+    expect(walletReads).toBeGreaterThan(readsBeforeSave);
+
+    await page.getByLabel("Editing member", { exact: true }).selectOption(other.memberId);
+    await expect(page.getByLabel("Hammers", { exact: true })).toHaveValue(String(other.resources.hammers));
+    await page.getByLabel("Hammers", { exact: true }).fill(String(other.resources.hammers + 1));
+    await page.getByRole("button", { name: "Save resources", exact: true }).click();
+    await expect(page.locator(".toast")).toContainText(/saved/i);
+    await expectHeaderBalance(page, 20);
+
+    await page.getByRole("button", { name: "Previous week", exact: true }).click();
+    await expect(page.getByText(/^Read-only history for the week/)).toBeVisible();
+    await expectHeaderBalance(page, 20);
+    await page.locator(".topbar-clan-points").click();
+    await expect(page).toHaveURL(`${baseURL}/reward-shop`);
+    await expect(page.locator(".planning-dew-balance")).toHaveAttribute("aria-label", "20 Clan Points available");
+
+    balance = 1250;
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expectHeaderBalance(page, 1250);
+    for (const width of [320, 390, 1440]) {
+      await page.setViewportSize({ width, height: 844 });
+      await expectHeaderBalance(page, 1250);
+      await noHeaderOverlap(page);
+      await noPageOverflow(page);
+      await page.locator(".topbar").screenshot({ path: testInfo.outputPath(`clan-points-topbar-${width}.png`) });
+    }
+  } finally {
+    await saveBank(request, entry);
+    await saveBank(request, other);
+  }
+});
+
+test("an unavailable Clan Points wallet does not display a false zero and recovers on focus", async ({ page, request }) => {
+  const wallet = await read<DewResponse>(request, "/api/dew");
+  let available = false;
+  await page.route("**/api/dew", (route) => available
+    ? route.fulfill({ json: { ...wallet, balance: 0 } })
+    : route.fulfill({ status: 503, json: { error: "Wallet is temporarily unavailable." } }));
+  const initialFailure = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/dew" && response.status() === 503);
+  await page.goto("/");
+  await initialFailure;
+  const header = page.locator(".topbar-clan-points");
+  await expect(header).toBeVisible();
+  await expect(header).toHaveAttribute("aria-label", "Clan Points. Open Reward Shop.");
+  await expect(header).toHaveAttribute("title", /Unable to refresh your balance/);
+  await expect(header).not.toHaveAttribute("aria-label", "0 Clan Points. Open Reward Shop.");
+  available = true;
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expectHeaderBalance(page, 0);
+  available = false;
+  const refreshFailure = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/dew" && response.status() === 503);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await refreshFailure;
+  await expect(header).toHaveAttribute("title", /Unable to refresh your balance/);
+  await expectHeaderBalance(page, 0);
+});
+
+test("incomplete war estimates identify missing members and fields without flagging zero inventories", async ({ page, request }) => {
+  const current = await read<DashboardResponse>(request, "/api/bank");
+  expect(current.entries.length).toBeGreaterThanOrEqual(4);
+  const [skill, bonus, zero, absent] = current.entries;
+  const fixture = current.entries.filter((row) => row.memberId !== absent.memberId).map((row) => {
+    const normal: ResourceEntry = { ...row, resources: { ...EMPTY_RESOURCES },
+      summoningCosts: { fiveSkills: 150, mount: 37.5 }, planningDetails: { ...CHANCE_PLANNING_DETAILS } };
+    if (row.memberId === skill.memberId) return { ...normal,
+      resources: { ...normal.resources, skillTickets: 100 }, summoningCosts: { ...normal.summoningCosts, fiveSkills: 0 } };
+    if (row.memberId === bonus.memberId) return { ...normal,
+      resources: { ...normal.resources, mountKeys: 75, eggshellsTotal: 1250 },
+      summoningCosts: { ...normal.summoningCosts, mount: 0 },
+      planningDetails: { ...CHANCE_PLANNING_DETAILS, extraMountChancePercent: undefined, extraPetSummonPercent: undefined } };
+    if (row.memberId === zero.memberId) return { ...normal,
+      summoningCosts: { fiveSkills: 0, mount: 0 },
+      planningDetails: { ...CHANCE_PLANNING_DETAILS, extraMountChancePercent: undefined, extraPetSummonPercent: undefined } };
+    return normal;
+  });
+  const totals = fixture.reduce((sum, row) => {
+    for (const { key } of RESOURCE_FIELDS) sum[key] += row.resources[key];
+    return sum;
+  }, { ...EMPTY_RESOURCES });
+  const data = { ...current, entries: fixture, totals,
+    summons: { skills: 0, mounts: 0, missingSkillCosts: 1, missingMountCosts: 1 },
+    stats: { ...current.stats, submittedMembers: fixture.length, pendingMembers: current.members.length - fixture.length } };
+  await page.route(/\/api\/bank(?:\?|$)/, (route) => route.fulfill({ json: data }));
+  const username = (memberId: string) => current.members.find((member) => member.id === memberId)!.username;
+  await page.goto("/");
+  const skillWarning = page.locator(".arsenal-skillTickets").getByRole("button");
+  await skillWarning.focus();
+  const skillTip = page.getByRole("tooltip").filter({ hasText: username(skill.memberId) });
+  await expect(skillTip).toBeVisible();
+  await expect(skillTip).toContainText("Cost for 5 skills");
+  await expect(skillTip).not.toContainText(username(bonus.memberId));
+  await skillWarning.press("Escape");
+  await expect(skillWarning).toHaveAttribute("aria-expanded", "false");
+
+  const summaryWarning = page.locator(".arsenal-summary").getByRole("button");
+  await summaryWarning.hover();
+  const summaryTip = page.getByRole("tooltip").filter({ hasText: "Mount summon cost" });
+  await expect(summaryTip).toBeVisible();
+  for (const label of [username(skill.memberId), username(bonus.memberId), "Cost for 5 skills", "Mount summon cost", "Extra mount chance %", "Extra pet summon %"]) {
+    await expect(summaryTip).toContainText(label);
+  }
+  await expect(summaryTip).not.toContainText(username(zero.memberId));
+  await expect(summaryTip).not.toContainText(username(absent.memberId));
+  await summaryWarning.press("Escape");
+
+  const table = page.getByRole("table");
+  const memberRow = (memberId: string) => table.getByRole("row").filter({ has: page.locator(".table-member").getByText(username(memberId), { exact: true }) });
+  const skillRow = memberRow(skill.memberId);
+  const bonusRow = memberRow(bonus.memberId);
+  await expect(skillRow).toHaveAttribute("data-planning-incomplete", "true");
+  await expect(bonusRow).toHaveAttribute("data-planning-incomplete", "true");
+  await expect(table.locator('tbody tr[data-planning-incomplete="true"]')).toHaveCount(2);
+  await expect(memberRow(zero.memberId).getByRole("button", { name: /^Missing war-planning data/ })).toHaveCount(0);
+  await expect(memberRow(absent.memberId)).toContainText("No bank saved");
+
+  const memberWarning = bonusRow.getByRole("button", { name: `Missing war-planning data for ${username(bonus.memberId)}`, exact: true });
+  await memberWarning.click();
+  const memberTip = page.getByRole("tooltip").filter({ hasText: "Mount summon cost" });
+  await expect(memberTip).toBeVisible();
+  await expect(memberTip).toContainText("Extra mount chance %");
+  await expect(memberTip).toContainText("Extra pet summon %");
+  await memberWarning.press("Escape");
+
+  await page.setViewportSize({ width: 320, height: 844 });
+  await summaryWarning.click();
+  await expect(summaryTip).toBeVisible();
+  await noPageOverflow(page);
+  const bounds = await summaryTip.boundingBox();
+  expect(bounds).toBeTruthy();
+  expect(bounds!.x).toBeGreaterThanOrEqual(0);
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(321);
+  await summaryWarning.click();
+  await expect(summaryWarning).toHaveAttribute("aria-expanded", "false");
+});
+
+test("new planning and history pages keep the current Clan Points balance usable at narrow mobile widths", async ({ page, request }, testInfo) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  for (const width of [320, 390]) {
+  const wallet = await read<DewResponse>(request, "/api/dew");
+  for (const width of [320, 390, 1440]) {
     await page.setViewportSize({ width, height: 844 });
     for (const path of ["/resources", "/members", "/weeks", "/war-points", "/snipes", "/reward-shop"]) {
       await page.goto(path);
@@ -500,9 +702,12 @@ test("new planning and history pages remain usable at narrow mobile widths", asy
       if (path === "/war-points") await expect(page.locator(".war-estimate-total")).toBeVisible();
       if (path === "/snipes") await expect(page.getByRole("button", { name: "New snipe", exact: true })).toBeEnabled();
       if (path === "/reward-shop") await expect(page.locator(".planning-dew-balance")).toBeVisible();
+      await expectHeaderBalance(page, wallet.balance);
+      await noHeaderOverlap(page);
       await noPageOverflow(page);
     }
   }
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: testInfo.outputPath("mobile-dew-store.png"), fullPage: true });
   expect(errors).toEqual([]);
 });

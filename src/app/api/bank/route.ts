@@ -26,7 +26,7 @@ export async function PUT(request: Request) {
     const actor = await requireMember();
     const parsed = saveBankSchema.safeParse(await request.json());
     if (!parsed.success) throw new ApiError(400,
-      "Complete all resource totals, valid summon costs, levels, and extra summon chances before saving. Incomplete information cannot be saved and will not earn the weekly 20 Dew Points.", "BANK_INCOMPLETE");
+      "Complete all resource totals, valid summon costs, levels, and extra summon chances before saving. Incomplete information cannot be saved and will not earn the weekly 20 Clan Points.", "BANK_INCOMPLETE");
     return privateResponse({ entry: await saveBank(actor, parsed.data) });
   } catch (error) { return errorResponse(error); }
 }

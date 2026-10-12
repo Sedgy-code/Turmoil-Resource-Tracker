@@ -959,6 +959,36 @@ body {
   .sidebar .game-card { display: none; }
 }
 
+.topbar-clan-points {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 8px;
+  min-height: 36px;
+  padding: 7px 11px;
+  border: 1px solid #c29c444d;
+  border-radius: 9px;
+  background: #c29c440f;
+  color: #eed08b;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.topbar-clan-points:hover { background: #c29c4421; border-color: #c29c4499; }
+.topbar-clan-points:focus-visible { outline: 2px solid #eed08b; outline-offset: 3px; }
+.topbar-clan-points strong { font-size: 15px; font-variant-numeric: tabular-nums; }
+@media (max-width: 1100px) {
+  .topbar-actions .connection, .topbar-actions .demo-pill { display: none; }
+}
+@media (max-width: 650px) {
+  .topbar { gap: 10px; }
+  .topbar .breadcrumb { min-width: 0; }
+  .topbar .breadcrumb strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .topbar .topbar-actions { gap: 7px; }
+  .topbar-clan-points { gap: 5px; padding: 6px 8px; min-height: 33px; font-size: 10px; }
+  .topbar-clan-points strong { font-size: 13px; }
+  .topbar-actions .notification-wrap { display: none; }
+}
+
 /* A balanced arsenal: five inventories and one combined estimate. */
 .arsenal-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));

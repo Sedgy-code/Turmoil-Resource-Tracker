@@ -380,7 +380,7 @@ test("blank resource fields block saving while explicitly entered zero quantitie
     await expect(page.locator(".save-bar")).toContainText("Complete your bank to save");
     await expect(page.getByRole("button", { name: "Save resources", exact: true })).toBeDisabled();
     await expect(page.locator(".bank-completeness")).toContainText("Complete every field before saving");
-    await expect(page.locator(".bank-completeness")).toContainText("20 Dew Points");
+    await expect(page.locator(".bank-completeness")).toContainText("20 Clan Points");
     const tickets = page.getByLabel("Skill Tickets", { exact: true });
     await tickets.pressSequentially("42");
     await expect(tickets).toHaveValue("42");

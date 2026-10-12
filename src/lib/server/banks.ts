@@ -288,7 +288,7 @@ export async function saveBank(
     const suppliedDetails = input.planningDetails ?? old?.planningDetails ?? EMPTY_PLANNING_DETAILS;
     const completeness = assessBankCompleteness({ resources: input.resources, summoningCosts: costs, planningDetails: suppliedDetails });
     if (!completeness.complete) {
-      throw new ApiError(400, `Complete all information before saving. Missing or invalid: ${completeness.missing.join(", ")}. Incomplete submissions do not earn the weekly 20 Dew Points.`, "BANK_INCOMPLETE");
+      throw new ApiError(400, `Complete all information before saving. Missing or invalid: ${completeness.missing.join(", ")}. Incomplete submissions do not earn the weekly 20 Clan Points.`, "BANK_INCOMPLETE");
     }
     const details = { ...suppliedDetails, calculationVersion: 2 as const };
     const rows = await tx.query(
