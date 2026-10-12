@@ -947,3 +947,14 @@ body {
     font-size: 31px;
   }
 }
+
+/* Keep status and movement meaning visible alongside the clan palette. */
+.resource-table td.movement-up { color: #87df9c; }
+.resource-table td.movement-down { color: #f19a91; }
+.updated-cell .freshness { display: inline-flex; }
+.sidebar-profile strong .member-cosmetic { display: inline; margin: 0 0 0 5px; color: inherit; font-size: 14px; }
+.sidebar { overflow-y: auto; scrollbar-width: thin; }
+.sidebar nav, .sidebar-bottom { flex-shrink: 0; }
+@media (max-height: 820px) {
+  .sidebar .game-card { display: none; }
+}

@@ -58,6 +58,7 @@ export async function seedDemo(): Promise<void> {
               member.index === 0 ? "ADMIN" : "MEMBER",
             ],
           );
+          await tx.query("INSERT INTO dew_balances(member_id,balance) VALUES($1,5) ON CONFLICT(member_id) DO NOTHING", [member.id]);
         }
         for (let offset = 0; offset > -4; offset--) {
           for (const { id, index, name } of members) {

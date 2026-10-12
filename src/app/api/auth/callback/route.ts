@@ -12,7 +12,7 @@ import {
   registerDiscordMember,
   SESSION_COOKIE,
   OAUTH_COOKIE,
-  SESSION_SECONDS,
+  sessionCookieOptions,
   cookieOptions,
 } from "@/lib/server/auth";
 import { ApiError, errorResponse } from "@/lib/server/errors";
@@ -60,10 +60,7 @@ export async function GET(request: Request) {
     const member = await registerDiscordMember(user, undefined, membership);
     const session = await createSession(member, tokens);
     const response = NextResponse.redirect(`${appUrl()}/`);
-    response.cookies.set(SESSION_COOKIE, session, {
-      ...cookieOptions(),
-      maxAge: SESSION_SECONDS,
-    });
+    response.cookies.set(SESSION_COOKIE, session, sessionCookieOptions());
     response.cookies.set(OAUTH_COOKIE, "", { ...cookieOptions(), maxAge: 0 });
     response.headers.set("Cache-Control", "no-store");
     return response;

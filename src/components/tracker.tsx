@@ -2,6 +2,12 @@
 
 import Link from "next/link";
 import { ClanBrand } from "./clan-brand";
+import { BankHistory } from "./bank-history";
+import { WarPlanner } from "./war-planner";
+import { SnipePlanner } from "./snipe-planner";
+import { DewStore } from "./dew-store";
+import { DEW_ITEMS } from "@/lib/dew";
+import { DEFAULT_WAR_RATES, estimateWar } from "@/lib/war";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   useCallback,
@@ -13,6 +19,11 @@ import {
 } from "react";
 import {
   ArrowDownToLine,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Droplets,
+  Target,
   ArrowRight,
   ArrowUpRight,
   Backpack,
@@ -25,7 +36,6 @@ import {
   ChevronRight,
   CircleHelp,
   Clipboard,
-  Copy,
   Egg,
   Flame,
   Hammer,
@@ -45,6 +55,7 @@ import {
 } from "lucide-react";
 import {
   EMPTY_RESOURCES,
+  EMPTY_PLANNING_DETAILS,
   EMPTY_SUMMONING_COSTS,
   MOUNT_SUMMON_COST_MIN,
   MOUNT_SUMMON_COST_MAX,
@@ -57,11 +68,13 @@ import {
   resourceMaximum,
   skillCostHasValidPrecision,
   shiftWeek,
+  type PlanningDetails,
   type ResourceKey,
   type ResourceValues,
   type SummoningCosts,
 } from "@/lib/resources";
 import type {
+  ClanSettings,
   DashboardResponse,
   EntryResponse,
   Member,
@@ -69,7 +82,7 @@ import type {
   SessionResponse,
 } from "@/lib/types";
 
-type View = "dashboard" | "resources" | "members" | "weeks";
+type View = "dashboard" | "resources" | "members" | "weeks" | "war" | "snipes" | "store";
 type Icon = ComponentType<{
   size?: number;
   className?: string;
@@ -79,11 +92,17 @@ const viewNames = {
   dashboard: "Dashboard",
   resources: "My Resources",
   members: "Manage Members",
-  weeks: "Weeks",
+  weeks: "Weekly History",
+  war: "Estimated War Points",
+  snipes: "Snipe Plans",
+  store: "Dew Store",
 };
 const navigation: { view: View; href: string; icon: Icon }[] = [
   { view: "dashboard", href: "/", icon: LayoutDashboard },
   { view: "resources", href: "/resources", icon: Backpack },
+  { view: "war", href: "/war-points", icon: Swords },
+  { view: "snipes", href: "/snipes", icon: Target },
+  { view: "store", href: "/dew-store", icon: Droplets },
   { view: "members", href: "/members", icon: Users },
   { view: "weeks", href: "/weeks", icon: CalendarDays },
 ];
@@ -116,8 +135,11 @@ async function api<T>(url: string, options?: RequestInit): Promise<T> {
     cache: "no-store",
   });
   const data = await response.json();
-  if (!response.ok)
-    throw new Error(data.error || "Something went wrong. Please try again.");
+  if (!response.ok) {
+    const error = new Error(data.error || "Something went wrong. Please try again.");
+    Object.assign(error, { status: response.status, code: data.code });
+    throw error;
+  }
   return data as T;
 }
 function ago(date: string | null) {
@@ -130,6 +152,21 @@ function ago(date: string | null) {
   if (minutes < 60) return `${minutes}m ago`;
   if (minutes < 1440) return `${Math.floor(minutes / 60)}h ago`;
   return `${Math.floor(minutes / 1440)}d ago`;
+}
+function MemberBadge({ member }: { member: Member }) {
+  const badge = DEW_ITEMS.find((item) => item.id === member.badge);
+  return badge ? <span className="member-cosmetic" title={badge.name} aria-label={badge.name}>{badge.symbol}</span> : null;
+}
+function freshness(date: string | null) {
+  if (!date) return { color: "stale", label: "Never updated" };
+  const elapsed = Math.max(0, Date.now() - new Date(date).getTime());
+  if (elapsed < 24 * 60 * 60 * 1000) return { color: "fresh", label: "Updated under 24 hours ago" };
+  if (elapsed < 7 * 24 * 60 * 60 * 1000) return { color: "aging", label: "Updated 1–7 days ago" };
+  return { color: "stale", label: "Updated a week ago or longer" };
+}
+function Freshness({ date }: { date: string | null }) {
+  const status = freshness(date);
+  return <span className={`freshness ${status.color}`} title={status.label}><i aria-hidden="true" />{date ? ago(date) : "Never updated"}</span>;
 }
 function validWeekFromQuery(value: string | null): string {
   if (
@@ -198,10 +235,14 @@ export default function Tracker({ view }: { view: View }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
+  const snapshotId = params.get("snapshot");
+  const explicitWeek = params.get("week");
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [sessionError, setSessionError] = useState("");
   const [week, setWeek] = useState(currentWeek());
   const [data, setData] = useState<DashboardResponse | null>(null);
+  const [warRates, setWarRates] = useState(DEFAULT_WAR_RATES);
+  const [loadedSnapshotId, setLoadedSnapshotId] = useState<string | null | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [toast, setToast] = useState<{
@@ -221,49 +262,97 @@ export default function Tracker({ view }: { view: View }) {
   useEffect(() => {
     setWeek(validWeekFromQuery(params.get("week")));
   }, [params]);
+  const checkSession = useCallback(async () => {
+    try {
+      const result = await api<SessionResponse>("/api/session");
+      setSessionError("");
+      setSession(result);
+      if (!result.user) {
+        requestGeneration.current++;
+        setData(null);
+      }
+    } catch (e) {
+      const status = (e as Error & { status?: number }).status;
+      if (status === 401 || status === 403) {
+        requestGeneration.current++;
+        setData(null);
+        setSession((previous) => ({ configured: previous?.configured ?? true, demo: previous?.demo ?? false, user: null, error: "discord-auth-failed" }));
+      } else {
+        // Temporary service failures must not discard a valid device session.
+        setSessionError((e as Error).message);
+      }
+    }
+  }, []);
   useEffect(() => {
-    api<SessionResponse>("/api/session")
-      .then(setSession)
-      .catch((e) => setSessionError(e.message));
+    void checkSession();
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
-  }, []);
+  }, [checkSession]);
+  const sessionUserId = session?.user?.id;
   const refresh = useCallback(async () => {
-    if (!session?.user) return;
+    if (!sessionUserId) return;
+    // An unselected dashboard follows the live week across the Monday cutoff.
+    // Explicit historical dates and snapshot links keep their selected period.
+    const liveWeek = currentWeek();
+    if (explicitWeek === null && snapshotId === null && week !== liveWeek) {
+      requestGeneration.current++;
+      setWeek(liveWeek);
+      return;
+    }
     const generation = ++requestGeneration.current;
     setLoading(true);
     setError("");
     try {
-      const result = await api<DashboardResponse>(
-        `/api/dashboard?week=${week}`,
-      );
-      if (generation === requestGeneration.current) setData(result);
+      const [bankResult, settingsResult] = await Promise.allSettled([
+        api<DashboardResponse>(`/api/bank?week=${week}${snapshotId ? `&snapshot=${encodeURIComponent(snapshotId)}` : ""}`),
+        api<{ settings: ClanSettings }>("/api/settings"),
+      ]);
+      if (bankResult.status === "rejected") throw bankResult.reason;
+      if (generation === requestGeneration.current) {
+        setData(bankResult.value);
+        setLoadedSnapshotId(snapshotId);
+        if (settingsResult.status === "fulfilled") setWarRates(settingsResult.value.settings.warRates);
+      }
     } catch (e) {
-      if (generation === requestGeneration.current)
-        setError((e as Error).message);
+      if (generation === requestGeneration.current) setError((e as Error).message);
+      if ((e as Error & { status?: number }).status === 401) await checkSession();
     } finally {
       if (generation === requestGeneration.current) setLoading(false);
     }
-  }, [session, week]);
+  }, [sessionUserId, week, explicitWeek, snapshotId, checkSession]);
   useEffect(() => {
     void refresh();
   }, [refresh]);
   useEffect(() => {
-    if (view !== "dashboard" || !session?.user) return;
-    const sync = () => {
-      if (document.visibilityState === "visible") void refresh();
+    const renew = () => {
+      if (document.visibilityState === "visible") {
+        void checkSession();
+        if (sessionUserId && ["dashboard", "war", "snipes"].includes(view)) void refresh();
+      }
     };
-    const interval = setInterval(sync, 30000);
-    window.addEventListener("focus", sync);
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") void checkSession();
+    }, 5 * 60 * 1000);
+    window.addEventListener("focus", renew);
+    document.addEventListener("visibilitychange", renew);
     return () => {
       clearInterval(interval);
-      window.removeEventListener("focus", sync);
+      window.removeEventListener("focus", renew);
+      document.removeEventListener("visibilitychange", renew);
     };
-  }, [view, session, refresh]);
+  }, [sessionUserId, view, checkSession, refresh]);
+  useEffect(() => {
+    if (!["dashboard", "war", "snipes"].includes(view) || !sessionUserId) return;
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") void refresh();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [view, sessionUserId, refresh]);
   function selectWeek(value: string) {
     const next = new URLSearchParams(params.toString());
     next.set("week", currentWeek(new Date(`${value}T00:00:00Z`)));
+    next.delete("snapshot");
     router.push(`${pathname}?${next}`);
   }
   async function signOut() {
@@ -335,7 +424,14 @@ export default function Tracker({ view }: { view: View }) {
       ? data.currentUser
       : session.user;
   const denied = view === "members" && user.role !== "ADMIN";
+  const dataMatches = !!data && data.week === week && loadedSnapshotId === snapshotId;
   const ownEntry = data?.entries.find((entry) => entry.memberId === user.id);
+  let dashboardWar: ReturnType<typeof estimateWar> | null = null;
+  let warEstimateError = "";
+  if (data) {
+    try { dashboardWar = estimateWar(data.entries, warRates, ["hammers", "skillSummons", "mountSummons", "mountMerges"]); }
+    catch (e) { warEstimateError = (e as Error).message; }
+  }
   return (
     <div className="app-shell">
       {mobileOpen && (
@@ -393,7 +489,7 @@ export default function Tracker({ view }: { view: View }) {
           <div className="sidebar-profile">
             <Avatar member={user} />
             <div>
-              <strong>{user.username}</strong>
+              <strong>{user.username}<MemberBadge member={user} /></strong>
               <span>
                 {user.role === "ADMIN" ? "Clan admin" : "Clan member"}
               </span>
@@ -454,7 +550,7 @@ export default function Tracker({ view }: { view: View }) {
                         </p>
                       </div>
                     ))}
-                  {!data?.entries.length && <p>No updates this week yet.</p>}
+                  {!data?.entries.length && <p>No resource bank updates yet.</p>}
                 </div>
               )}
             </div>
@@ -471,7 +567,9 @@ export default function Tracker({ view }: { view: View }) {
                     ? "YOUR CONTRIBUTION"
                     : view === "members"
                       ? "CLAN ROSTER"
-                      : "THE CLAN ARCHIVE"}
+                      : view === "war" ? "BATTLE PREPARATION"
+                        : view === "snipes" ? "PLAN TOGETHER"
+                          : view === "store" ? "YOUR CLAN REWARDS" : "THE CLAN ARCHIVE"}
               </div>
               <h1>
                 {view === "dashboard" ? "Resource Dashboard" : viewNames[view]}
@@ -483,10 +581,13 @@ export default function Tracker({ view }: { view: View }) {
                     ? "Keep your arsenal up to date. Make every resource count."
                     : view === "members"
                       ? "A stronger clan starts with the people behind it."
-                      : "Past preparations. Future victories. Your weekly resource history."}
+                      : view === "war" ? "Choose activities and estimate the clan’s next battle."
+                        : view === "snipes" ? "Organise events, share availability, and prepare together."
+                          : view === "store" ? "Earn Dew for keeping your bank current. Wear your clan rewards."
+                            : "Fixed weekly snapshots and changes in the clan’s resources."}
               </p>
             </div>
-            {view !== "members" && (
+            {["dashboard", "resources", "weeks"].includes(view) && (
               <div className="week-control">
                 <button
                   className="icon-button"
@@ -533,9 +634,9 @@ export default function Tracker({ view }: { view: View }) {
                 Back to dashboard
               </Link>
             </section>
-          ) : (!data || data.week !== week) && loading ? (
+          ) : !dataMatches && loading ? (
             <DashboardSkeleton />
-          ) : data && data.week === week && view === "dashboard" ? (
+          ) : data && dataMatches && view === "dashboard" ? (
             <>
               <section className="hero">
                 <div className="hero-copy">
@@ -549,10 +650,10 @@ export default function Tracker({ view }: { view: View }) {
                     Track your arsenal. Prepare for what’s ahead.
                   </p>
                   <Link
-                    href={`/resources?week=${week}`}
+                    href={`/resources?week=${week}${snapshotId ? `&snapshot=${encodeURIComponent(snapshotId)}` : ""}`}
                     className="button primary"
                   >
-                    {ownEntry ? "Update my resources" : "Add my resources"}
+                    {data.live === false ? "View saved resources" : ownEntry ? "Update my resources" : "Add my resources"}
                     <ArrowRight size={16} />
                   </Link>
                 </div>
@@ -578,7 +679,7 @@ export default function Tracker({ view }: { view: View }) {
                       {data.stats.submittedMembers} of {data.stats.totalMembers}{" "}
                       members
                     </strong>
-                    <span>have shared their resources this week</span>
+                    <span>{data.live === false ? "had resources in this saved week" : "have a saved resource bank"}</span>
                   </div>
                   <div className="participation-track">
                     <i
@@ -592,13 +693,13 @@ export default function Tracker({ view }: { view: View }) {
               <div className="section-heading">
                 <div>
                   <h2>
-                    This week’s arsenal{" "}
+                    {data.live === false ? "Saved weekly arsenal" : "The clan’s current arsenal"}{" "}
                     <span className="live-badge">
                       <i />
-                      LIVE TOTALS
+                      {data.live === false ? "READ-ONLY HISTORY" : "LIVE TOTALS"}
                     </span>
                   </h2>
-                  <p>Combined resources from all active Turmoil members.</p>
+                  <p>{data.live === false ? "Historical totals are preserved with the roster at capture time." : "Combined persistent banks from all active Turmoil members."}</p>
                 </div>
                 <div className="section-actions">
                   <button className="button subtle" onClick={copyTotals}>
@@ -611,6 +712,7 @@ export default function Tracker({ view }: { view: View }) {
                   </button>
                 </div>
               </div>
+              {warEstimateError && <div className="error-banner" role="alert">War estimate unavailable: {warEstimateError}</div>}
               <div className="stat-grid">
                 {dashboardResources.map(({ key, label, icon: StatIcon, color }) => {
                   if (key === "eggsPetsTotal") {
@@ -620,31 +722,31 @@ export default function Tracker({ view }: { view: View }) {
                     key === "skillTickets"
                       ? {
                           label: "Total skill summons",
-                          total: data.summons?.skills ?? 0,
+                          total: dashboardWar?.rows.find((row) => row.activity === "skillSummons")?.quantity ?? 0,
                           missing: data.summons?.missingSkillCosts ?? 0,
                         }
                       : key === "mountKeys"
                         ? {
                             label: "Total mount summons",
-                            total: data.summons?.mounts ?? 0,
+                            total: dashboardWar?.rows.find((row) => row.activity === "mountSummons")?.quantity ?? 0,
                             missing: data.summons?.missingMountCosts ?? 0,
                           }
                         : null;
                   const warPoints =
                     key === "skillTickets"
                       ? {
-                          total: numberFormat((data.summons?.skills ?? 0) * 225),
-                          note: "225 points per skill summon.",
+                          total: warEstimateError ? "--" : numberFormat(dashboardWar?.rows.find((row) => row.activity === "skillSummons")?.minimum ?? 0),
+                          note: `${numberFormat(warRates.skillSummons)} points per skill summon.`,
                         }
                       : key === "mountsToMerge"
                         ? {
-                            total: numberFormat(data.totals.mountsToMerge * 1_080),
-                            note: "1,080 points per mount to merge.",
+                            total: warEstimateError ? "--" : numberFormat(dashboardWar?.rows.find((row) => row.activity === "mountMerges")?.minimum ?? 0),
+                            note: `${numberFormat(warRates.mountMerges)} points per mount to merge.`,
                           }
                         : key === "hammers"
                           ? {
-                              total: `${numberFormat(data.totals.hammers * 2)}–${numberFormat(data.totals.hammers * 5)}`,
-                              note: "2–5 points per hammer.",
+                              total: warEstimateError ? "--" : `${numberFormat(data.totals.hammers * warRates.hammersMin)}–${numberFormat(data.totals.hammers * warRates.hammersMax)}`,
+                              note: `${numberFormat(warRates.hammersMin)}–${numberFormat(warRates.hammersMax)} points per hammer.`,
                             }
                           : null;
                   return (
@@ -665,13 +767,13 @@ export default function Tracker({ view }: { view: View }) {
                         <div className="stat-summons">
                           <span className="summon-label">{summons.label}</span>
                           <strong className="summon-total">
-                            {new Intl.NumberFormat("en-US", {
+                            {warEstimateError ? "--" : new Intl.NumberFormat("en-US", {
                               minimumFractionDigits: 0,
                               maximumFractionDigits: 0,
                             }).format(summons.total)}
                           </strong>
                           <span className="summon-note">
-                            Clan total rounded to a whole number.
+                            Whole summons calculated per member.
                           </span>
                           {summons.missing > 0 && (
                             <p className="summon-warning">
@@ -707,20 +809,28 @@ export default function Tracker({ view }: { view: View }) {
                 data={data}
                 week={week}
                 admin={user.role === "ADMIN"}
+                snapshotId={snapshotId}
               />
             </>
-          ) : data && data.week === week && view === "resources" ? (
+          ) : data && dataMatches && view === "resources" ? (
             <ResourceForm
               data={data}
               week={week}
               memberId={params.get("member")}
+              snapshotId={snapshotId}
               notify={notify}
               refresh={refresh}
             />
           ) : data && view === "members" ? (
-            <MembersManager currentUser={user} notify={notify} />
-          ) : data && data.week === week && view === "weeks" ? (
-            <Weeks data={data} week={week} selectWeek={selectWeek} />
+            <MembersManager currentUser={user} notify={notify} refresh={refresh} />
+          ) : data && dataMatches && view === "weeks" ? (
+            <Weeks data={data} week={week} selectWeek={selectWeek} notify={notify} refresh={refresh} />
+          ) : data && view === "war" ? (
+            <WarPlanner data={data} notify={notify} refresh={refresh} />
+          ) : data && view === "snipes" ? (
+            <SnipePlanner data={data} notify={notify} refresh={refresh} />
+          ) : data && view === "store" ? (
+            <DewStore data={data} notify={notify} refresh={refresh} />
           ) : null}
           <footer className="page-footer">
             <span>
@@ -768,17 +878,18 @@ export default function Tracker({ view }: { view: View }) {
             </span>
             <h2>Your clan’s resource hub.</h2>
             <p>
-              Every week begins Monday at 00:00 UTC. Add your current Forge
-              Masters resources in My Resources and save your entry. Your
-              contribution appears in the clan totals immediately.
+              Your bank carries forward until you update it. Save your current
+              Forge Masters resources in My Resources; clan totals change immediately.
+              Weekly history records fixed snapshots at Monday 00:00 UTC
+              (10am AEST or 11am AEDT in Sydney).
             </p>
             <div className="guide-row">
               <Backpack size={20} />
               <div>
                 <strong>Update your arsenal</strong>
                 <p>
-                  All amounts are whole numbers. You can copy your previous week
-                  to get started faster.
+                  Resource amounts are whole numbers. Your costs, levels, and
+                  inventory stay saved, so you only change what has changed.
                 </p>
               </div>
             </div>
@@ -787,8 +898,8 @@ export default function Tracker({ view }: { view: View }) {
               <div>
                 <strong>Browse any week</strong>
                 <p>
-                  Use the date picker or Weeks archive to see past entries. Each
-                  week is saved separately.
+                  Use the date picker or Weekly History to see fixed snapshots.
+                  Past views are read-only and never change your live bank.
                 </p>
               </div>
             </div>
@@ -863,7 +974,7 @@ function Login({ configured, error }: { configured: boolean; error: string }) {
           <p>
             Your Forge Masters arsenal, united.
             <br />
-            Sign in to track resources and prepare together.
+            Sign in once in this browser. We keep you signed in on this device.
           </p>
           {message && (
             <div className="error-banner" role="alert">
@@ -879,6 +990,7 @@ function Login({ configured, error }: { configured: boolean; error: string }) {
             Continue with Discord
             <ArrowRight size={17} />
           </a>
+          <p className="login-device-note">Sign in again if you sign out, clear cookies, use private browsing, or your device session expires.</p>
           <div className="login-security">
             <ShieldCheck size={15} />
             Exclusively for members of the Turmoil clan
@@ -925,24 +1037,38 @@ function MemberResources({
   data,
   week,
   admin,
+  snapshotId,
 }: {
   data: DashboardResponse;
   week: string;
   admin: boolean;
+  snapshotId: string | null;
 }) {
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("all");
+  type ContributionSort = "username" | "updatedAt" | ResourceKey;
+  const [sort, setSort] = useState<{ key: ContributionSort; direction: "asc" | "desc" }>({ key: "username", direction: "asc" });
+  const entries = new Map(data.entries.map((entry) => [entry.memberId, entry]));
+  const changeSort = (key: ContributionSort) => setSort((old) => ({
+    key,
+    direction: old.key === key ? (old.direction === "asc" ? "desc" : "asc") : key === "username" ? "asc" : "desc",
+  }));
+  const sortOrder = (key: ContributionSort) => sort.key === key ? (sort.direction === "asc" ? "ascending" as const : "descending" as const) : "none" as const;
+  const sortIcon = (key: ContributionSort) => sort.key === key
+    ? sort.direction === "asc" ? <ArrowUp size={12} aria-hidden="true" /> : <ArrowDown size={12} aria-hidden="true" />
+    : <ArrowUpDown size={12} aria-hidden="true" />;
   const members = data.members
-    .filter((member) =>
-      member.username.toLowerCase().includes(search.toLowerCase()),
-    )
-    .filter(
-      (member) =>
-        tab === "all" ||
-        (tab === "submitted"
-          ? data.entries.some((entry) => entry.memberId === member.id)
-          : !data.entries.some((entry) => entry.memberId === member.id)),
-    );
+    .filter((member) => member.username.toLowerCase().includes(search.toLowerCase()))
+    .filter((member) => tab === "all" || (tab === "submitted" ? entries.has(member.id) : !entries.has(member.id)))
+    .sort((a, b) => {
+      const value = (member: Member) => sort.key === "username" ? member.username : sort.key === "updatedAt"
+        ? new Date(entries.get(member.id)?.updatedAt ?? 0).getTime()
+        : entries.get(member.id)?.resources[sort.key] ?? 0;
+      const av = value(a), bv = value(b);
+      const comparison = typeof av === "string" && typeof bv === "string"
+        ? av.localeCompare(bv, undefined, { sensitivity: "base", numeric: true }) : Number(av) - Number(bv);
+      return comparison * (sort.direction === "asc" ? 1 : -1);
+    });
   return (
     <section className="member-resources panel">
       <div className="table-section-heading">
@@ -992,7 +1118,7 @@ function MemberResources({
         <table className="resource-table">
           <thead>
             <tr>
-              <th className="sticky-member">Member</th>
+              <th className="sticky-member" aria-sort={sortOrder("username")}><button className="column-sort" onClick={() => changeSort("username")}>Member {sortIcon("username")}</button></th>
               {RESOURCE_FIELDS.map(({ key, label }) => {
                 const FieldIcon =
                   key === "eggsPetsTotal"
@@ -1000,13 +1126,14 @@ function MemberResources({
                     : (essentials.find((field) => field.key === key)?.icon ??
                       Backpack);
                 return (
-                  <th key={key}>
-                    <FieldIcon size={14} />
-                    {label}
+                  <th key={key} aria-sort={sortOrder(key)}>
+                    <button className="column-sort" onClick={() => changeSort(key)}>
+                      <FieldIcon size={14} aria-hidden="true" />{label}{sortIcon(key)}
+                    </button>
                   </th>
                 );
               })}
-              <th>Last updated</th>
+              <th aria-sort={sortOrder("updatedAt")}><button className="column-sort" onClick={() => changeSort("updatedAt")}>Last updated {sortIcon("updatedAt")}</button></th>
               <th>Notes</th>
               {admin && <th>Edit</th>}
             </tr>
@@ -1024,7 +1151,7 @@ function MemberResources({
                       <Avatar member={member} small />
                       <div>
                         <strong>
-                          {member.username}
+                          {member.username}<MemberBadge member={member} />
                           {member.id === data.currentUser.id && (
                             <span className="you-badge">you</span>
                           )}
@@ -1056,7 +1183,7 @@ function MemberResources({
                   >
                     {entry ? (
                       <>
-                        <span>{ago(entry.updatedAt)}</span>
+                        <Freshness date={entry.updatedAt} />
                         <small>by {entry.updatedBy.username}</small>
                       </>
                     ) : (
@@ -1068,9 +1195,9 @@ function MemberResources({
                     <td>
                       <Link
                         className="text-link"
-                        href={`/resources?week=${week}&member=${member.id}`}
+                        href={`/resources?week=${week}&member=${member.id}${snapshotId ? `&snapshot=${encodeURIComponent(snapshotId)}` : ""}`}
                       >
-                        Edit
+                        {data.live === false ? "View" : "Edit"}
                         <ArrowUpRight size={13} />
                       </Link>
                     </td>
@@ -1113,12 +1240,14 @@ function ResourceForm({
   data,
   week,
   memberId,
+  snapshotId,
   notify,
   refresh,
 }: {
   data: DashboardResponse;
   week: string;
   memberId: string | null;
+  snapshotId: string | null;
   notify: (message: string, error?: boolean) => void;
   refresh: () => Promise<void>;
 }) {
@@ -1131,6 +1260,19 @@ function ResourceForm({
   const entry = data.entries.find((item) => item.memberId === selected.id);
   const savedResources = entry?.resources ?? EMPTY_RESOURCES;
   const savedCosts = entry?.summoningCosts ?? EMPTY_SUMMONING_COSTS;
+  const savedPlanning = entry?.planningDetails ?? EMPTY_PLANNING_DETAILS;
+  const readOnly = data.live === false;
+  const planningMaximum = (key: keyof PlanningDetails) => key.endsWith("Level") ? 1_000_000_000 : 1_000_000;
+  const planningFields: { key: keyof PlanningDetails; label: string; help: string }[] = [
+    { key: "skillLevel", label: "Skill level", help: "Saved for reference; costs are entered separately." },
+    { key: "mountLevel", label: "Mount level", help: "Saved for reference; costs are entered separately." },
+    { key: "eggLevel", label: "Egg/pet level", help: "Saved for reference; action counts are entered separately." },
+    { key: "newMountMerges", label: "Newly summoned mount merges", help: "Merges planned from future mount summons; exclude existing mounts." },
+    { key: "eggMerges", label: "Existing egg/pet merges", help: "Merges using eggs/pets already in your bank." },
+    { key: "eggSummonMerges", label: "Egg/pet summon then merge", help: "Separate actions from future summons; exclude existing egg/pet merges." },
+  ];
+  const draftPlanning = (details: PlanningDetails) => Object.fromEntries(planningFields.map(({ key }) => [key, String(details[key])])) as Record<keyof PlanningDetails, string>;
+  const [planningValues, setPlanningValues] = useState(() => draftPlanning(savedPlanning));
   const resourceKeys = RESOURCE_FIELDS.map(({ key }) => key as ResourceKey);
   const draftResources = (resources: ResourceValues) =>
     Object.fromEntries(
@@ -1147,12 +1289,12 @@ function ResourceForm({
   }));
   const [notes, setNotes] = useState(entry?.notes ?? "");
   const [saving, setSaving] = useState(false);
-  const [copying, setCopying] = useState(false);
   const [formError, setFormError] = useState("");
   const dirty =
     resourceKeys.some((key) => values[key] !== String(savedResources[key])) ||
     costValues.fiveSkills !== String(savedCosts.fiveSkills) ||
     costValues.mount !== String(savedCosts.mount) ||
+    planningFields.some(({ key }) => planningValues[key] !== String(savedPlanning[key])) ||
     notes !== (entry?.notes ?? "");
   useEffect(() => {
     setValues(draftResources(entry?.resources ?? EMPTY_RESOURCES));
@@ -1161,18 +1303,26 @@ function ResourceForm({
       fiveSkills: String(costs.fiveSkills),
       mount: String(costs.mount),
     });
+    setPlanningValues(draftPlanning(entry?.planningDetails ?? EMPTY_PLANNING_DETAILS));
     setNotes(entry?.notes ?? "");
     setFormError("");
   }, [selected.id, week, entry]);
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
-      if (dirty) e.preventDefault();
+      if (dirty && !readOnly) e.preventDefault();
     };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty]);
+  }, [dirty, readOnly]);
   async function save(event: FormEvent) {
     event.preventDefault();
+    if (readOnly) return;
+    const planningDetails = Object.fromEntries(planningFields.map(({ key }) => [key, Number(planningValues[key])])) as unknown as PlanningDetails;
+    const invalidPlanning = planningFields.find(({ key }) => !Number.isInteger(planningDetails[key]) || planningDetails[key] < 0 || planningDetails[key] > planningMaximum(key));
+    if (invalidPlanning) {
+      setFormError(`${invalidPlanning.label}: enter a whole number between 0 and ${numberFormat(planningMaximum(invalidPlanning.key))}.`);
+      return;
+    }
     const resources = Object.fromEntries(
       resourceKeys.map((key) => [
         key,
@@ -1226,13 +1376,13 @@ function ResourceForm({
     setSaving(true);
     setFormError("");
     try {
-      await api<EntryResponse>("/api/resources", {
+      await api<EntryResponse>("/api/bank", {
         method: "PUT",
         body: JSON.stringify({
-          week,
           memberId: selected.id,
           resources,
           summoningCosts,
+          planningDetails,
           notes,
         }),
       });
@@ -1244,31 +1394,6 @@ function ResourceForm({
       setFormError((e as Error).message);
     } finally {
       setSaving(false);
-    }
-  }
-  async function copyPrevious() {
-    if (
-      (dirty || entry) &&
-      !window.confirm(
-        "Replace this form with your previous week’s resources and summoning costs? This will also save the copied entry for this week.",
-      )
-    )
-      return;
-    setCopying(true);
-    setFormError("");
-    try {
-      await api<EntryResponse>("/api/resources/copy", {
-        method: "POST",
-        body: JSON.stringify({ week, memberId: selected.id }),
-      });
-      await refresh();
-      notify(
-        "Previous week copied and saved. You can adjust your resources below.",
-      );
-    } catch (e) {
-      setFormError((e as Error).message);
-    } finally {
-      setCopying(false);
     }
   }
   const update = (key: ResourceKey, value: string) =>
@@ -1290,12 +1415,12 @@ function ResourceForm({
           <p>
             {entry
               ? `Last updated ${ago(entry.updatedAt)} by ${entry.updatedBy.username}`
-              : "No resources submitted for this week yet."}
+              : "No saved resource bank yet."}
           </p>
         </div>
         {data.currentUser.role === "ADMIN" && (
           <label className="member-select">
-            <span>Editing member</span>
+            <span>{readOnly ? "Viewing member" : "Editing member"}</span>
             <select
               aria-label="Editing member"
               value={selected.id}
@@ -1307,7 +1432,7 @@ function ResourceForm({
                   )
                 )
                   return;
-                router.push(`/resources?week=${week}&member=${e.target.value}`);
+                router.push(`/resources?week=${week}&member=${e.target.value}${snapshotId ? `&snapshot=${encodeURIComponent(snapshotId)}` : ""}`);
               }}
             >
               {data.members.map((member) => (
@@ -1323,34 +1448,24 @@ function ResourceForm({
       <div className="entry-notice">
         <ShieldCheck size={17} />
         <span>
-          Your resources are shared with the clan. Enter your current inventory
-          for the week of {formatWeek(week)}.
+          {readOnly
+            ? `Read-only history for the week of ${formatWeek(week)}. These saved amounts cannot be edited.`
+            : "Your bank is shared with the clan and carries forward until you update it. Levels and costs stay saved."}
         </span>
       </div>
       <div className="section-heading">
         <div>
-          <h2>Your weekly inventory</h2>
+          <h2>{readOnly ? "Saved inventory" : "Your current inventory"}</h2>
           <p>Use whole numbers for resources and the ranges shown for costs.</p>
         </div>
-        <button
-          className="button secondary"
-          type="button"
-          disabled={copying || saving}
-          onClick={copyPrevious}
-        >
-          {copying ? (
-            <LoaderCircle size={15} className="spin" />
-          ) : (
-            <Copy size={15} />
-          )}
-          Copy previous week
-        </button>
+        {readOnly && <Link className="button primary" href={`/resources${selected.id !== data.currentUser.id ? `?member=${selected.id}` : ""}`}>Return to live bank <ArrowRight size={15} /></Link>}
       </div>
       {formError && (
         <div className="error-banner" role="alert">
           {formError}
         </div>
       )}
+      <fieldset className="bank-fields" disabled={readOnly || saving}>
       <section className="panel form-section">
         <h3>
           <Backpack size={19} />
@@ -1449,6 +1564,17 @@ function ResourceForm({
           />
         </label>
       </section>
+      <section className="panel form-section planning-bank-section">
+        <h3><Swords size={19} />Levels and planned actions</h3>
+        <p className="form-section-subtitle">Levels are kept for reference. Enter action counts directly; they are not inferred from levels or the combined eggs/pets total. Keep existing merges separate from newly summoned merges so the same action is counted once.</p>
+        <div className="planning-bank-grid">
+          {planningFields.map(({ key, label, help }) => <label key={key}>
+            <span>{label}</span>
+            <input aria-label={label} aria-describedby={`planning-help-${key}`} type="number" inputMode="numeric" min="0" max={planningMaximum(key)} step="1" value={planningValues[key]} onChange={(e) => setPlanningValues((old) => ({ ...old, [key]: e.target.value }))} />
+            <small id={`planning-help-${key}`}>{help}</small>
+          </label>)}
+        </div>
+      </section>
       <section className="panel form-section">
         <h3>
           <Clipboard size={19} />A note for the clan{" "}
@@ -1464,7 +1590,8 @@ function ResourceForm({
         />
         <div className="character-count">{notes.length} / 1,000</div>
       </section>
-      <div className="save-bar">
+      </fieldset>
+      {!readOnly && <div className="save-bar">
         <span className={dirty ? "unsaved" : "saved"}>
           {dirty ? (
             <>
@@ -1486,7 +1613,7 @@ function ResourceForm({
         <button
           className="button primary"
           type="submit"
-          disabled={saving || copying}
+          disabled={saving}
         >
           {saving ? (
             <LoaderCircle size={17} className="spin" />
@@ -1495,7 +1622,7 @@ function ResourceForm({
           )}
           {saving ? "Saving resources…" : "Save resources"}
         </button>
-      </div>
+      </div>}
     </form>
   );
 }
@@ -1503,9 +1630,11 @@ function ResourceForm({
 function MembersManager({
   currentUser,
   notify,
+  refresh,
 }: {
   currentUser: Member;
   notify: (message: string, error?: boolean) => void;
+  refresh: () => Promise<void>;
 }) {
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1513,17 +1642,44 @@ function MembersManager({
   const [filter, setFilter] = useState("active");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [sort, setSort] = useState("oldest");
+  const [capacity, setCapacity] = useState(50);
+  const [capacityDraft, setCapacityDraft] = useState("50");
+  const [capacitySaving, setCapacitySaving] = useState(false);
   const load = useCallback(async () => {
-    try {
-      const result = await api<MembersResponse>("/api/members");
-      setMembers(result.members);
+    const results = await Promise.allSettled([
+      api<MembersResponse>("/api/members"),
+      api<{ settings: ClanSettings }>("/api/settings"),
+    ]);
+    if (results[0].status === "fulfilled") {
+      setMembers(results[0].value.members);
       setError("");
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setLoading(false);
+    } else setError((results[0].reason as Error).message);
+    if (results[1].status === "fulfilled") {
+      setCapacity(results[1].value.settings.capacity);
+      setCapacityDraft(String(results[1].value.settings.capacity));
+    } else {
+      const message = (results[1].reason as Error).message;
+      setError((previous) => previous || message);
     }
+    setLoading(false);
   }, []);
+  async function saveCapacity(event: FormEvent) {
+    event.preventDefault();
+    const value = Number(capacityDraft);
+    if (!Number.isInteger(value) || value < 1 || value > 1000) {
+      notify("Clan capacity must be a whole number between 1 and 1,000.", true);
+      return;
+    }
+    setCapacitySaving(true);
+    try {
+      const result = await api<{ settings: ClanSettings }>("/api/settings", { method: "PATCH", body: JSON.stringify({ capacity: value }) });
+      setCapacity(result.settings.capacity);
+      await refresh();
+      notify("Clan capacity saved.");
+    } catch (e) { notify((e as Error).message, true); }
+    finally { setCapacitySaving(false); }
+  }
   useEffect(() => {
     void load();
   }, [load]);
@@ -1552,6 +1708,7 @@ function MembersManager({
         body: JSON.stringify(patch),
       });
       await load();
+      await refresh();
       notify("Member updated successfully.");
       if (member.id === currentUser.id) window.location.reload();
     } catch (e) {
@@ -1566,14 +1723,21 @@ function MembersManager({
     )
     .filter(
       (member) => filter === "all" || member.active === (filter === "active"),
-    );
+    )
+    .sort((a, b) => {
+      if (sort === "alphabetical") return a.username.localeCompare(b.username, undefined, { sensitivity: "base", numeric: true });
+      const difference = new Date(a.lastUpdatedAt ?? 0).getTime() - new Date(b.lastUpdatedAt ?? 0).getTime();
+      return sort === "oldest" ? difference : -difference;
+    });
+  const activeCount = members.filter((member) => member.active).length;
+  const openSlots = Math.max(0, capacity - activeCount);
   return (
     <>
       <div className="management-stats">
         <article className="panel">
           <Users size={21} />
-          <strong>{members.filter((m) => m.active).length}</strong>
-          <span>Active members</span>
+          <strong>{activeCount}/{capacity}</strong>
+          <span>Active registered members</span>
         </article>
         <article className="panel">
           <ShieldCheck size={21} />
@@ -1584,10 +1748,15 @@ function MembersManager({
         </article>
         <article className="panel">
           <Swords size={21} />
-          <strong>{members.filter((m) => !m.active).length}</strong>
-          <span>Inactive members</span>
+          <strong>{openSlots}</strong>
+          <span>{activeCount > capacity ? `${activeCount - capacity} above capacity` : "Open clan slots"}</span>
         </article>
       </div>
+      <form className="capacity-form panel" onSubmit={saveCapacity}>
+        <div><h2>Clan capacity</h2><p>Counts reflect active members registered on this tracker.</p></div>
+        <label><span>Member capacity</span><input aria-label="Member capacity" type="number" min="1" max="1000" step="1" value={capacityDraft} onChange={(event) => setCapacityDraft(event.target.value)} /></label>
+        <button className="button secondary" type="submit" disabled={capacitySaving}>{capacitySaving ? "Saving…" : "Save capacity"}</button>
+      </form>
       <div className="entry-notice">
         <ShieldCheck size={17} />
         <span>
@@ -1624,6 +1793,10 @@ function MembersManager({
             </button>
           ))}
         </div>
+        <div className="roster-tools">
+          <label><span>Sort</span><select aria-label="Sort roster" value={sort} onChange={(event) => setSort(event.target.value)}><option value="oldest">Oldest update first</option><option value="newest">Newest update first</option><option value="alphabetical">A–Z</option></select></label>
+          <div className="freshness-legend"><span className="freshness fresh"><i />Under 24h</span><span className="freshness aging"><i />1–7 days</span><span className="freshness stale"><i />A week or never</span></div>
+        </div>
         {error && (
           <div className="error-banner" role="alert">
             {error}
@@ -1650,7 +1823,7 @@ function MembersManager({
                       <Avatar member={member} />
                       <div>
                         <strong>
-                          {member.username}
+                          {member.username}<MemberBadge member={member} />
                           {member.id === currentUser.id && (
                             <span className="you-badge">you</span>
                           )}
@@ -1682,7 +1855,7 @@ function MembersManager({
                         : ""
                     }
                   >
-                    {ago(member.lastUpdatedAt)}
+                    <Freshness date={member.lastUpdatedAt} />
                   </td>
                   <td>
                     {new Date(member.joinedAt).toLocaleDateString("en-US", {
@@ -1750,10 +1923,14 @@ function Weeks({
   data,
   week,
   selectWeek,
+  notify,
+  refresh,
 }: {
   data: DashboardResponse;
   week: string;
   selectWeek: (value: string) => void;
+  notify: (message: string, error?: boolean) => void;
+  refresh: () => Promise<void>;
 }) {
   const weeks = [...new Set([currentWeek(), week, ...data.weeks])]
     .sort()
@@ -1765,12 +1942,13 @@ function Weeks({
         <div>
           <h2>Every week tells a story.</h2>
           <p>
-            Your clan’s resource entries are saved by week. Revisit an old
-            inventory or start preparing for a new week with the date selector.
+            Weekly bank snapshots keep resource totals fixed, including the roster
+            at capture time. Compare movements or revisit a saved dashboard.
           </p>
         </div>
         <span className="count-badge">{data.weeks.length} saved weeks</span>
       </section>
+      <BankHistory admin={data.currentUser.role === "ADMIN"} notify={notify} refresh={refresh} />
       <div className="weeks-grid">
         {weeks.map((item) => (
           <article
@@ -1830,8 +2008,8 @@ function Weeks({
       <div className="archive-note">
         <CircleHelp size={16} />
         <span>
-          Weeks run Monday through Sunday in UTC. Changing weeks never
-          overwrites another week’s entry.
+          Weeks begin Monday 00:00 UTC, which is Monday 10am AEST or 11am AEDT
+          in Sydney. Historical views are read-only; live banks carry forward.
         </span>
       </div>
     </>

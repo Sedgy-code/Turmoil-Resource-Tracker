@@ -9,6 +9,7 @@ import {
 } from "./db";
 import { ApiError } from "./errors";
 import { entryFromRow, memberFromRow } from "./mappers";
+import { capturePendingSnapshots } from "./banks";
 
 async function activeActor(
   tx: SqlConnection,
@@ -64,10 +65,6 @@ async function writeEntry(
     ON CONFLICT (member_id,week_start) DO UPDATE SET resources = EXCLUDED.resources, notes = EXCLUDED.notes, summoning_costs = COALESCE($7::jsonb, resource_entries.summoning_costs), updated_at = NOW(), updated_by = EXCLUDED.updated_by
     RETURNING *`,
     [randomUUID(), memberId, week, JSON.stringify(resources), notes, actor.id, summoningCosts === undefined ? null : JSON.stringify(summoningCosts)],
-  );
-  await tx.query(
-    "UPDATE app_members SET last_updated_at = NOW() WHERE id = $1",
-    [memberId],
   );
   return entryFromRow({ ...rows[0], updated_by_username: actor.username });
 }
@@ -178,10 +175,21 @@ export async function updateMember(
           "LAST_ADMIN",
         );
     }
+    // Complete old weeks before a roster change, so changing today's active
+    // members can never rewrite a previously completed week's bank totals.
+    await capturePendingSnapshots(tx, new Date());
     const updated = await tx.query(
       "UPDATE app_members SET role = $2, active = $3 WHERE id = $1 RETURNING *",
       [memberId, role, active],
     );
+    if (member.role !== role || member.active !== active) {
+      await tx.query(
+        `INSERT INTO member_status_events
+          (id,member_id,active,role,username,avatar_url,changed_at)
+         VALUES ($1,$2,$3,$4,$5,$6,clock_timestamp())`,
+        [randomUUID(), memberId, active, role, member.username, member.avatarUrl],
+      );
+    }
     if (!active)
       await tx.query("DELETE FROM auth_sessions WHERE member_id = $1", [
         memberId,

@@ -289,9 +289,10 @@ test("migration adds costs to a prior database idempotently while preserving inv
     await initializeSchema(db);
     await initializeSchema(db);
     const after = (await db.query("SELECT * FROM resource_entries WHERE id = $1", [entryId]))[0];
-    const { summoning_costs: migratedCosts, ...preservedFields } = after;
+    const { summoning_costs: migratedCosts, planning_details: migratedPlanning, ...preservedFields } = after;
     assert.deepEqual(preservedFields, before);
     assert.deepEqual(migratedCosts, {});
+    assert.deepEqual(migratedPlanning, {});
     assert.deepEqual(entryFromRow(after).summoningCosts, EMPTY_SUMMONING_COSTS);
     assert.deepEqual(entryFromRow(after).resources, resources);
     assert.equal(entryFromRow(after).notes, "Legacy notes must survive");

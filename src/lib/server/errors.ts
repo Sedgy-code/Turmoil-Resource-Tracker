@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
+import { WarEstimateError } from "../war";
 
 export class ApiError extends Error {
   constructor(
@@ -12,6 +13,11 @@ export class ApiError extends Error {
 }
 
 export function errorResponse(error: unknown): NextResponse {
+  if (error instanceof WarEstimateError) {
+    return NextResponse.json({ error: error.message, code: error.code }, {
+      status: 400, headers: { "Cache-Control": "private, no-store" },
+    });
+  }
   if (error instanceof ApiError) {
     return NextResponse.json(
       { error: error.message, code: error.code },

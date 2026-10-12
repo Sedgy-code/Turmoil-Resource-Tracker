@@ -32,7 +32,7 @@ test("every unauthenticated browser route shows the Discord login screen", async
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  for (const path of ["/", "/resources", "/members", "/weeks"]) {
+  for (const path of ["/", "/resources", "/members", "/weeks", "/war-points", "/snipes", "/dew-store"]) {
     await page.goto(path);
     await expect(
       page.getByRole("heading", { name: "One clan. Endless potential." }),
@@ -66,7 +66,7 @@ test("every unauthenticated browser route shows the Discord login screen", async
 test("protected APIs deny unauthenticated reads and writes without touching the database", async ({
   request,
 }) => {
-  for (const path of ["/api/dashboard", "/api/weeks", "/api/members"]) {
+  for (const path of ["/api/dashboard", "/api/weeks", "/api/members", "/api/bank", "/api/history", "/api/settings", "/api/snipes", "/api/dew"]) {
     const response = await request.get(path);
     expect(response.status()).toBe(401);
     expect(await response.json()).toEqual({
@@ -82,6 +82,14 @@ test("protected APIs deny unauthenticated reads and writes without touching the 
     ["PUT", "/api/resources"],
     ["POST", "/api/resources/copy"],
     ["PATCH", "/api/members/00000000-0000-4000-8000-000000000000"],
+    ["PUT", "/api/bank"],
+    ["POST", "/api/history"],
+    ["PATCH", "/api/settings"],
+    ["POST", "/api/snipes"],
+    ["PATCH", "/api/snipes/00000000-0000-4000-8000-000000000000"],
+    ["POST", "/api/snipes/00000000-0000-4000-8000-000000000000/response"],
+    ["POST", "/api/dew/purchase"],
+    ["POST", "/api/dew/equip"],
   ] as const) {
     const response = await request.fetch(path, {
       method,

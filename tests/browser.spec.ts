@@ -10,7 +10,7 @@ import type {
   Member,
   SessionResponse,
 } from "../src/lib/types";
-import { EMPTY_RESOURCES, RESOURCE_FIELDS } from "../src/lib/resources";
+import { EMPTY_PLANNING_DETAILS, EMPTY_RESOURCES, RESOURCE_FIELDS } from "../src/lib/resources";
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
 const executablePath =
@@ -43,7 +43,7 @@ async function dashboard(
   week?: string,
 ): Promise<DashboardResponse> {
   const response = await request.get(
-    `/api/dashboard${week ? `?week=${week}` : ""}`,
+    `/api/bank${week ? `?week=${week}` : ""}`,
   );
   expect(response.ok()).toBeTruthy();
   return response.json() as Promise<DashboardResponse>;
@@ -68,12 +68,6 @@ test.beforeAll(async ({ request }) => {
   // A persisted demo database may have crossed into a new week since it was seeded.
   // Keep required demo fixtures and their cost ranges usable across app updates.
   const current = await dashboard(request);
-  const previousDate = new Date(`${current.week}T00:00:00Z`);
-  previousDate.setUTCDate(previousDate.getUTCDate() - 7);
-  const previous = await dashboard(
-    request,
-    previousDate.toISOString().slice(0, 10),
-  );
   const target = current.members.find(
     (member) =>
       member.id !== current.currentUser.id && member.role === "MEMBER",
@@ -85,7 +79,6 @@ test.beforeAll(async ({ request }) => {
   for (const [data, memberId] of [
     [current, current.currentUser.id],
     [current, target!.id],
-    [previous, current.currentUser.id],
   ] as const) {
     const existing = data.entries.find((entry) => entry.memberId === memberId);
     const skillCost = existing?.summoningCosts.fiveSkills ?? 0;
@@ -93,10 +86,9 @@ test.beforeAll(async ({ request }) => {
     const validSkillCost = skillCost >= 150 && skillCost <= 200 && Number.isInteger(skillCost * 10);
     const validMountCost = mountCost >= 37.5 && mountCost <= 50;
     if (existing && validSkillCost && validMountCost) continue;
-    const response = await request.put("/api/resources", {
+    const response = await request.put("/api/bank", {
       headers: { Origin: baseURL },
       data: {
-        week: data.week,
         memberId,
         resources: existing?.resources ?? {
           skillTickets: data.week === current.week ? 321 : 125,
@@ -113,7 +105,7 @@ test.beforeAll(async ({ request }) => {
   }
 });
 
-test("desktop resources persist, copy from history, update totals, and export complete CSV", async ({
+test("desktop resources persist, update live totals, preserve history, and export complete CSV", async ({
   page,
   request,
 }, testInfo) => {
@@ -129,21 +121,27 @@ test("desktop resources persist, copy from history, update totals, and export co
     request,
     previousWeek.toISOString().slice(0, 10),
   );
-  const previousEntry = previous.entries.find(
-    (entry) => entry.memberId === original.currentUser.id,
-  )!;
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("dialog", (dialog) => dialog.accept());
   try {
-    const previousCosts = { fiveSkills: 175.5, mount: 37.5 };
-    const seededPrevious = await request.put("/api/resources", {
+    const planningDetails = { ...EMPTY_PLANNING_DETAILS, ...ownEntry.planningDetails, skillLevel: 42 };
+    const planningFixture = await request.put("/api/bank", {
       headers: { Origin: baseURL },
-      data: { week: previousEntry.week, memberId: previousEntry.memberId,
-        resources: previousEntry.resources, summoningCosts: previousCosts,
-        notes: previousEntry.notes },
+      data: { memberId: ownEntry.memberId, resources: ownEntry.resources,
+        summoningCosts: ownEntry.summoningCosts, planningDetails, notes: ownEntry.notes },
     });
-    expect(seededPrevious.ok(), await seededPrevious.text()).toBeTruthy();
+    expect(planningFixture.ok(), await planningFixture.text()).toBeTruthy();
+    const legacyUpdate = await request.put("/api/resources", {
+      headers: { Origin: baseURL },
+      data: { week: original.week, memberId: ownEntry.memberId,
+        resources: { ...ownEntry.resources, hammers: ownEntry.resources.hammers + 1 },
+        summoningCosts: ownEntry.summoningCosts, notes: "Legacy client browser fixture." },
+    });
+    expect(legacyUpdate.ok(), await legacyUpdate.text()).toBeTruthy();
+    const afterLegacy = (await dashboard(request)).entries.find((entry) => entry.memberId === ownEntry.memberId)!;
+    expect(afterLegacy.resources.hammers).toBe(ownEntry.resources.hammers + 1);
+    expect(afterLegacy.planningDetails).toEqual(planningDetails);
     await page.goto("/");
     await expect(
       page.getByRole("heading", { name: "Resource Dashboard" }),
@@ -207,53 +205,17 @@ test("desktop resources persist, copy from history, update totals, and export co
       `${format.format(saved.totals.hammers * 2)}–${format.format(saved.totals.hammers * 5)}`,
     );
     await expect(hammerCard.locator(".war-points-note")).toHaveText("2–5 points per hammer.");
-    await page.getByRole("link", { name: "My Resources", exact: true }).click();
-    await page
-      .getByRole("button", { name: "Copy previous week", exact: true })
-      .click();
-    await expect(page.getByRole("status")).toContainText(
-      "Previous week copied and saved",
-    );
-    await expect(page.getByLabel("Skill Tickets", { exact: true })).toHaveValue(
-      String(previousEntry.resources.skillTickets),
-    );
-    await expect(page.getByLabel("Total eggs/pets", { exact: true })).toHaveValue(
-      String(previousEntry.resources.eggsPetsTotal),
-    );
-    const copied = await dashboard(request);
-    expect(copied.entries.find((entry) => entry.memberId === copied.currentUser.id)?.summoningCosts)
-      .toEqual(previousCosts);
-    await expect(page.getByLabel("Cost of summoning 5 skills", { exact: true })).toHaveValue("175.5");
-    await expect(page.getByLabel("Cost per mount summon", { exact: true })).toHaveValue("37.5");
-    expect(
-      copied.entries.find((entry) => entry.memberId === copied.currentUser.id)
-        ?.resources,
-    ).toEqual(previousEntry.resources);
-    expect(
-      (await dashboard(request, previous.week)).entries.find(
-        (entry) => entry.memberId === original.currentUser.id,
-      )?.resources,
-    ).toEqual(previousEntry.resources);
-    await page.getByRole("link", { name: "Dashboard", exact: true }).click();
-    await expect(
-      page
-        .locator(".stat-card")
-        .filter({ hasText: "Skill Tickets" })
-        .locator(".stat-number"),
-    ).toHaveText(
-      new Intl.NumberFormat("en-US").format(copied.totals.skillTickets),
-    );
-    await expect(
-      page.locator(".stat-card").filter({ hasText: "Skill Tickets" })
-        .locator(".war-points-total"),
-    ).toHaveText(new Intl.NumberFormat("en-US").format(copied.summons.skills * 225));
-    await expect(
-      page.locator(".stat-card").filter({ hasText: "Mounts to Merge" })
-        .locator(".war-points-total"),
-    ).toHaveText(new Intl.NumberFormat("en-US").format(copied.totals.mountsToMerge * 1_080));
-    await expect(hammerCard.locator(".war-points-total")).toHaveText(
-      `${format.format(copied.totals.hammers * 2)}–${format.format(copied.totals.hammers * 5)}`,
-    );
+    // The live bank remains saved while completed weekly snapshots stay fixed.
+    expect((await dashboard(request, previous.week)).entries).toEqual(previous.entries);
+    expect(saved.live).toBe(true);
+    await expect(page.locator(".stat-card").filter({ hasText: "Skill Tickets" })
+      .locator(".stat-number")).toHaveText(new Intl.NumberFormat("en-US").format(saved.totals.skillTickets));
+    const wholeSkills = saved.entries.reduce((sum, entry) => sum + (entry.summoningCosts.fiveSkills > 0
+      ? Math.floor(entry.resources.skillTickets * 5 / entry.summoningCosts.fiveSkills) : 0), 0);
+    await expect(page.locator(".stat-card").filter({ hasText: "Skill Tickets" })
+      .locator(".war-points-total")).toHaveText(new Intl.NumberFormat("en-US").format(wholeSkills * 225));
+    await expect(page.locator(".stat-card").filter({ hasText: "Mounts to Merge" })
+      .locator(".war-points-total")).toHaveText(new Intl.NumberFormat("en-US").format(saved.totals.mountsToMerge * 1_080));
     const downloadPromise = page.waitForEvent("download");
     await page.getByRole("button", { name: "Export CSV", exact: true }).click();
     const download = await downloadPromise;
@@ -266,41 +228,34 @@ test("desktop resources persist, copy from history, update totals, and export co
     for await (const chunk of stream!) chunks.push(Buffer.from(chunk));
     const csv = Buffer.concat(chunks).toString("utf8");
     expect(csv.trim().split("\r\n")).toHaveLength(6);
-    expect(csv).toContain(`Skill Tickets,${copied.totals.skillTickets}`);
-    expect(csv).toContain(`Total eggs/pets,${copied.totals.eggsPetsTotal}`);
+    expect(csv).toContain(`Skill Tickets,${saved.totals.skillTickets}`);
+    expect(csv).toContain(`Total eggs/pets,${saved.totals.eggsPetsTotal}`);
     expect(csv).not.toContain("Potions");
     expect(csv).not.toMatch(/Common|Rare|Epic|Legendary|Ultimate|Mythic/);
     await expect(page.locator(".eggs-pets-card")).toContainText(
-      new Intl.NumberFormat("en-US").format(copied.totals.eggsPetsTotal),
+      new Intl.NumberFormat("en-US").format(saved.totals.eggsPetsTotal),
     );
     await expect(page.getByRole("columnheader", { name: "Total eggs/pets", exact: true })).toBeVisible();
-    await page.getByRole("link", { name: "Weeks", exact: true }).click();
+    await page.getByRole("link", { name: "Weekly History", exact: true }).click();
     await expect(
-      page.getByRole("heading", { name: "Weeks", exact: true }),
+      page.getByRole("heading", { name: "Weekly History", exact: true }),
     ).toBeVisible();
     await expect(
       page.getByRole("link", { name: "View dashboard" }).first(),
     ).toBeVisible();
     expect(errors).toEqual([]);
   } finally {
-    const restored = await request.put("/api/resources", {
+    const restored = await request.put("/api/bank", {
       headers: { Origin: baseURL },
       data: {
-        week: ownEntry.week,
         memberId: ownEntry.memberId,
         resources: ownEntry.resources,
         summoningCosts: ownEntry.summoningCosts,
+        planningDetails: ownEntry.planningDetails,
         notes: ownEntry.notes,
       },
     });
     expect(restored.ok(), await restored.text()).toBeTruthy();
-    const restoredPrevious = await request.put("/api/resources", {
-      headers: { Origin: baseURL },
-      data: { week: previousEntry.week, memberId: previousEntry.memberId,
-        resources: previousEntry.resources, summoningCosts: previousEntry.summoningCosts,
-        notes: previousEntry.notes },
-    });
-    expect(restoredPrevious.ok(), await restoredPrevious.text()).toBeTruthy();
   }
 });
 
@@ -322,12 +277,13 @@ test("hammer clan war estimates follow the selected week and show a zero range f
     [previousWeek, 67_890],
     [nextWeek, 0],
   ]);
-  await page.route(/\/api\/dashboard(?:\?|$)/, (route) => {
+  await page.route(/\/api\/bank(?:\?|$)/, (route) => {
     const week = new URL(route.request().url()).searchParams.get("week") || original.week;
     return route.fulfill({
       json: {
         ...original,
         week,
+        entries: original.entries.map((entry, index) => ({ ...entry, resources: { ...entry.resources, hammers: index === 0 ? hammerTotals.get(week) ?? 0 : 0 } })),
         totals: { ...original.totals, hammers: hammerTotals.get(week) ?? 0 },
       },
     });
@@ -359,12 +315,13 @@ test("resource fields can be cleared, typed without a leading zero, and saved bl
   )!;
   expect(ownEntry).toBeTruthy();
   try {
-    const reset = await request.put("/api/resources", {
+    const reset = await request.put("/api/bank", {
       headers: { Origin: baseURL },
       data: {
-        week: ownEntry.week,
         memberId: ownEntry.memberId,
         resources: EMPTY_RESOURCES,
+        summoningCosts: ownEntry.summoningCosts,
+        planningDetails: ownEntry.planningDetails,
         notes: ownEntry.notes,
       },
     });
@@ -414,12 +371,13 @@ test("resource fields can be cleared, typed without a leading zero, and saved bl
     }
     await expect(page.locator(".save-bar")).toContainText("All changes saved");
   } finally {
-    const restored = await request.put("/api/resources", {
+    const restored = await request.put("/api/bank", {
       headers: { Origin: baseURL },
       data: {
-        week: ownEntry.week,
         memberId: ownEntry.memberId,
         resources: ownEntry.resources,
+        summoningCosts: ownEntry.summoningCosts,
+        planningDetails: ownEntry.planningDetails,
         notes: ownEntry.notes,
       },
     });
@@ -427,7 +385,7 @@ test("resource fields can be cleared, typed without a leading zero, and saved bl
   }
 });
 
-test("weekly summoning costs persist and enforce required decimal ranges", async ({ page, request }) => {
+test("personal summoning costs persist and enforce required decimal ranges", async ({ page, request }) => {
   await demoSession(request);
   const original = await dashboard(request);
   const own = original.entries.find((entry) => entry.memberId === original.currentUser.id)!;
@@ -438,14 +396,14 @@ test("weekly summoning costs persist and enforce required decimal ranges", async
   const mountCostLabel = "Cost per mount summon";
   let costSaves = 0;
   page.on("request", (outgoing) => {
-    if (new URL(outgoing.url()).pathname === "/api/resources" && outgoing.method() === "PUT") costSaves++;
+    if (new URL(outgoing.url()).pathname === "/api/bank" && outgoing.method() === "PUT") costSaves++;
   });
   try {
-    const seeded = await request.put("/api/resources", {
+    const seeded = await request.put("/api/bank", {
       headers: { Origin: baseURL },
-      data: { week: other.week, memberId: other.memberId,
+      data: { memberId: other.memberId,
         resources: { ...EMPTY_RESOURCES, skillTickets: 600, mountKeys: 90 },
-        summoningCosts: { fiveSkills: 150, mount: 45 }, notes: other.notes },
+        summoningCosts: { fiveSkills: 150, mount: 45 }, planningDetails: other.planningDetails, notes: other.notes },
     });
     expect(seeded.ok(), await seeded.text()).toBeTruthy();
     await page.goto(`/resources?week=${original.week}`);
@@ -485,11 +443,11 @@ test("weekly summoning costs persist and enforce required decimal ranges", async
       .toEqual({ fiveSkills: 175.5, mount: 37.5 });
     const baseline = original.entries.filter((entry) => entry.memberId !== own.memberId && entry.memberId !== other.memberId);
     const baselineSkills = baseline.reduce((sum, entry) => sum + (entry.summoningCosts.fiveSkills > 0
-      ? entry.resources.skillTickets * 5 / entry.summoningCosts.fiveSkills : 0), 0);
+      ? Math.floor(entry.resources.skillTickets * 5 / entry.summoningCosts.fiveSkills) : 0), 0);
     const baselineMounts = baseline.reduce((sum, entry) => sum + (entry.summoningCosts.mount > 0
-      ? entry.resources.mountKeys / entry.summoningCosts.mount : 0), 0);
-    expect(saved.summons.skills).toBe(Math.round(baselineSkills + 40));
-    expect(saved.summons.mounts).toBe(Math.round(baselineMounts + 4));
+      ? Math.floor(entry.resources.mountKeys / entry.summoningCosts.mount) : 0), 0);
+    expect(saved.summons.skills).toBe(baselineSkills + 40);
+    expect(saved.summons.mounts).toBe(baselineMounts + 4);
     await page.getByRole("link", { name: "Dashboard", exact: true }).click();
     const skillCard = page.locator(".stat-card").filter({ hasText: "Skill Tickets" });
     const mountCard = page.locator(".stat-card").filter({ hasText: "Mount Keys" });
@@ -523,8 +481,8 @@ test("weekly summoning costs persist and enforce required decimal ranges", async
     const cleared = await dashboard(request, original.week);
     expect(cleared.entries.find((entry) => entry.memberId === own.memberId)?.summoningCosts).toEqual({ fiveSkills: 200, mount: 50 });
     expect(cleared.entries.find((entry) => entry.memberId === own.memberId)?.resources.eggsPetsTotal).toBe(0);
-    expect(cleared.summons.skills).toBe(Math.round(baselineSkills + 37.55));
-    expect(cleared.summons.mounts).toBe(Math.round(baselineMounts + 3.5));
+    expect(cleared.summons.skills).toBe(baselineSkills + 37);
+    expect(cleared.summons.mounts).toBe(baselineMounts + 3);
     expect(cleared.summons.missingSkillCosts).toBe(saved.summons.missingSkillCosts);
     expect(cleared.summons.missingMountCosts).toBe(saved.summons.missingMountCosts);
     await page.reload();
@@ -545,10 +503,10 @@ test("weekly summoning costs persist and enforce required decimal ranges", async
     }
   } finally {
     for (const entry of [own, other]) {
-      const restored = await request.put("/api/resources", {
+      const restored = await request.put("/api/bank", {
         headers: { Origin: baseURL },
-        data: { week: entry.week, memberId: entry.memberId, resources: entry.resources,
-          summoningCosts: entry.summoningCosts, notes: entry.notes },
+        data: { memberId: entry.memberId, resources: entry.resources,
+          summoningCosts: entry.summoningCosts, planningDetails: entry.planningDetails, notes: entry.notes },
       });
       expect(restored.ok(), await restored.text()).toBeTruthy();
     }
@@ -584,7 +542,7 @@ test("refreshed clan profile replaces the login snapshot and retries a changed a
       body: '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="#4fc491"/></svg>',
     }),
   );
-  await page.route(/\/api\/dashboard(?:\?|$)/, (route) => {
+  await page.route(/\/api\/bank(?:\?|$)/, (route) => {
     const week =
       new URL(route.request().url()).searchParams.get("week") || original.week;
     const updated = week !== original.week;
@@ -698,12 +656,13 @@ test("admin can edit another member, promote, deactivate, and restore access", a
     ).toBeVisible();
   } finally {
     await patchMember(request, member);
-    const restored = await request.put("/api/resources", {
+    const restored = await request.put("/api/bank", {
       headers: { Origin: baseURL },
       data: {
-        week: entry.week,
         memberId: member.id,
         resources: entry.resources,
+        summoningCosts: entry.summoningCosts,
+        planningDetails: entry.planningDetails,
         notes: entry.notes,
       },
     });
@@ -745,7 +704,7 @@ test("mobile dashboard, menu, complete resource form, and week navigation fit th
   await page.getByRole("link", { name: "My Resources", exact: true }).click();
   await expect(page.getByLabel("Skill Tickets", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Total eggs/pets", { exact: true })).toHaveCount(1);
-  await expect(page.locator('input[type="number"]')).toHaveCount(7);
+  await expect(page.locator('input[type="number"]')).toHaveCount(13);
   await expect(page.getByLabel("Potions", { exact: true })).toHaveCount(0);
   await expect(page.getByLabel("Cost of summoning 5 skills", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Cost per mount summon", { exact: true })).toBeVisible();
@@ -809,7 +768,7 @@ test("a delayed old-week response cannot replace the selected week's inventory",
   const finished = new Promise<void>((resolve) => {
     responseFinished = resolve;
   });
-  await page.route(`**/api/dashboard?week=${previousWeek}`, async (route) => {
+  await page.route(`**/api/bank?week=${previousWeek}`, async (route) => {
     const response = await route.fetch();
     responseStarted();
     // Reproduce a slow older request arriving after a fast newer request.
@@ -832,4 +791,43 @@ test("a delayed old-week response cannot replace the selected week's inventory",
   await expect(page.getByLabel("Skill Tickets", { exact: true })).toHaveValue(
     String(currentEntry.resources.skillTickets),
   );
+});
+
+test("Monday rollover refreshes the default live bank and preserves an explicitly selected snapshot", async ({ page, request }) => {
+  await demoSession(request);
+  const current = await dashboard(request);
+  const monday = new Date(`${current.week}T00:00:00Z`);
+  const sunday = new Date(monday.getTime() - 5_000);
+  const previousMonday = new Date(monday.getTime() - 7 * 86_400_000).toISOString().slice(0, 10);
+  const snapshotId = "00000000-0000-4000-8000-000000000001";
+  const calls: { week: string; snapshot: string | null }[] = [];
+  await page.clock.install({ time: sunday });
+  await page.route(/\/api\/bank(?:\?|$)/, (route) => {
+    const parameters = new URL(route.request().url()).searchParams;
+    const week = parameters.get("week")!;
+    const snapshot = parameters.get("snapshot");
+    calls.push({ week, snapshot });
+    return route.fulfill({ json: { ...current, week, live: !snapshot,
+      snapshot: snapshot ? { capturedAt: monday.toISOString(), automatic: false } : null } });
+  });
+  await page.goto("/");
+  await expect(page.getByLabel("Select week", { exact: true })).toHaveValue(previousMonday);
+  await expect(page.getByRole("table")).toBeVisible();
+  calls.length = 0;
+  await page.clock.fastForward(10_000);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(page.getByLabel("Select week", { exact: true })).toHaveValue(current.week);
+  await expect.poll(() => calls.some((call) => call.week === current.week)).toBeTruthy();
+  expect(calls.every((call) => call.week === current.week && !call.snapshot)).toBeTruthy();
+
+  await page.clock.setSystemTime(sunday);
+  await page.goto(`/?week=${previousMonday}&snapshot=${snapshotId}`);
+  await expect(page.getByLabel("Select week", { exact: true })).toHaveValue(previousMonday);
+  await expect(page.getByRole("table")).toBeVisible();
+  calls.length = 0;
+  await page.clock.fastForward(10_000);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect.poll(() => calls.some((call) => call.snapshot === snapshotId)).toBeTruthy();
+  await expect(page.getByLabel("Select week", { exact: true })).toHaveValue(previousMonday);
+  expect(calls.every((call) => call.week === previousMonday && call.snapshot === snapshotId)).toBeTruthy();
 });

@@ -60,6 +60,46 @@ export const summoningCostsSchema = z
   })
   .strict();
 
+export const planningDetailsSchema = z.object({
+  skillLevel: z.number().int().min(0).max(1_000_000_000),
+  mountLevel: z.number().int().min(0).max(1_000_000_000),
+  eggLevel: z.number().int().min(0).max(1_000_000_000),
+  newMountMerges: z.number().int().min(0).max(1_000_000),
+  eggMerges: z.number().int().min(0).max(1_000_000),
+  eggSummonMerges: z.number().int().min(0).max(1_000_000),
+}).strict();
+
+export const saveBankSchema = z.object({
+  memberId: z.string().uuid().optional(),
+  resources: resourceSchema,
+  summoningCosts: summoningCostsSchema.optional(),
+  planningDetails: planningDetailsSchema.optional(),
+  notes: z.string().trim().max(2000).default(""),
+}).strict();
+
+const pointRate = z.number().int().min(0).max(100_000);
+export const warRatesSchema = z.object({
+  hammersMin: pointRate, hammersMax: pointRate,
+  skillSummons: pointRate, mountSummons: pointRate,
+  newMountMerges: pointRate, mountMerges: pointRate,
+  eggMerges: pointRate, eggSummonMerges: pointRate,
+}).strict().refine(rates => rates.hammersMax >= rates.hammersMin, "The maximum hammer rate must be at least the minimum.");
+export const settingsSchema = z.object({
+  capacity: z.number().int().min(1).max(1000).optional(),
+  warRates: warRatesSchema.optional(),
+}).strict().refine(value => value.capacity !== undefined || value.warRates !== undefined, "Choose a setting to update.");
+export const warActivitySchema = z.enum(["hammers", "skillSummons", "mountSummons", "newMountMerges", "mountMerges", "eggMerges", "eggSummonMerges"]);
+const activitiesSchema = z.array(warActivitySchema).min(1).max(7).refine(values => new Set(values).size === values.length, "Select each activity only once.");
+export const createSnipeSchema = z.object({
+  title: z.string().trim().min(1).max(120),
+  startsAt: z.string().datetime({ offset: true }),
+  activities: activitiesSchema,
+}).strict();
+export const updateSnipeSchema = createSnipeSchema.partial().extend({ archived: z.boolean().optional() }).strict().refine(value => Object.keys(value).length > 0, "Choose a change to save.");
+export const snipeResponseSchema = z.object({ answer: z.enum(["yes", "no"]) }).strict();
+export const purchaseDewSchema = z.object({ itemId: z.string().min(1).max(64) }).strict();
+export const equipDewSchema = z.object({ itemId: z.string().min(1).max(64).nullable() }).strict();
+
 export const saveResourcesSchema = z
   .object({
     week: weekSchema,

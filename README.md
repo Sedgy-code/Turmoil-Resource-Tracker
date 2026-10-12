@@ -1,14 +1,17 @@
 # Turmoil Resource Tracker
 
-A responsive, browser-based resource tracker for the Turmoil Forge Masters clan. Members sign in with Discord, record their weekly resources, and see the clan's combined inventory. The dark interface works on phones, tablets, and desktops; no native app is required.
+A responsive, browser-based resource tracker for the Turmoil Forge Masters clan. Members sign in with Discord, keep a persistent resource bank, and plan clan events using combined inventory and war estimates. The dark interface works on phones, tablets, and desktops; no native app is required.
 
 To host it for your clan, follow the [beginner hosting guide](HOSTING-GUIDE.md) for Vercel, Neon, and Discord. It includes Windows-friendly secret generation and the exact settings to enter.
 
 ## Features
 
 - Discord-only authentication with a configurable server membership requirement and optional required role.
-- Weekly personal entries with instant save confirmation, notes, and a copy-from-previous-week action.
-- Clan totals, a detailed member table, historical weeks, CSV export, and copy-to-clipboard.
+- Persistent personal resource banks with retained summoning costs, levels, explicit merge counts, and instant save confirmation.
+- Sortable clan totals and contributions, roster freshness and capacity, fixed weekly history, CSV export, and copy-to-clipboard.
+- Personal, clan, and member war calculators with selectable scoring activities and editable clan point rates.
+- Snipe plans with Yes/No attendance, participant estimates, and immutable archived results.
+- A virtual Dew store: one reward per UTC day for a changed personal inventory, with cosmetic badges.
 - One combined Total eggs/pets quantity, with existing egg and pet rarity entries carried forward automatically.
 - Weekly personal summoning costs, with whole-number skill and mount summon totals calculated per member.
 - Potential clan war points in the Skill Tickets, Mounts to Merge, and Hammers cards, including a hammer estimate of 2–5 points each.
@@ -59,7 +62,7 @@ For real authentication, follow the Discord setup below, set `DEMO_MODE=false`, 
 6. If access should require a particular role, open **Server Settings → Roles**, copy the role's ID, and set `DISCORD_ROLE_ID`. Leave it empty to admit any member of the configured Turmoil server.
 7. Sign in with a Discord account that belongs to the configured server and, if enabled, has the required role.
 
-The app requests only `identify` and `guilds.members.read`. Discord server membership is always required; the role restriction is an additional check. No bot installation, privileged gateway intent, or Discord bot token is needed. The app stores the immutable Discord user ID and actual account username separately from the displayed clan profile, then creates its own application session. Sessions expire after seven days. Membership and the required role are checked at login and rechecked on requests after five minutes; Discord OAuth tokens refresh automatically. Application Admin/Member permissions are separate from Discord roles.
+The app requests only `identify` and `guilds.members.read`. Discord server membership is always required; the role restriction is an additional check. No bot installation, privileged gateway intent, or Discord bot token is needed. The app stores the immutable Discord user ID and actual account username separately from the displayed clan profile, then creates its own application session. Sessions use a persistent, HTTP-only browser cookie lasting 180 days. A successful return visit renews the session and cookie for another 180 days. Existing unexpired sessions upgrade automatically; expired sessions need one new login. Signing out, administrator deactivation, Discord membership/role removal, or revoked Discord authorization ends access. Cookie clearing, private browsing, and switching between Discord's embedded browser and an external browser can require another login; persistence belongs to the same browser profile. Membership and the required role are checked at login and rechecked on requests after five minutes; Discord OAuth tokens refresh automatically. Application Admin/Member permissions are separate from Discord roles.
 
 Names shown throughout the tracker prefer the member's **Turmoil server nickname**, then their global Discord display name, then their account username. Server-specific avatars take priority over global or default Discord avatars. Profiles refresh at sign-in and during the membership checks; sign out and back in to pick up a change immediately. Removing a server nickname or avatar restores the global fallback. Existing members adopt their server profiles as they next sign in or use the tracker; changing a name does not create a new member or affect resource history and permissions.
 
@@ -110,7 +113,7 @@ npm run db:migrate
 
 Database initialization also runs on first application access. Migrations create the application's tables and constraints, add profile columns to existing member tables, and add weekly summoning costs to existing resource entries without resetting data. The configured PostgreSQL role needs permission to create and alter these tables and indexes because initialization also runs at application startup. The migration uses the same database configuration as the app.
 
-The schema has three tables:
+The original core tables are:
 
 | Table | Stored data |
 | --- | --- |
@@ -118,19 +121,31 @@ The schema has three tables:
 | `resource_entries` | One entry per member and week, resource quantities in `resources` JSONB, personal skill/mount costs in `summoning_costs` JSONB, optional notes, last update time, and the member who last edited it. |
 | `auth_sessions` | Session-token hashes, member association, expiration, encrypted Discord OAuth tokens, and membership-check timestamps. |
 
-Weeks start on **Monday at 00:00 UTC** and are stored using the Monday's `YYYY-MM-DD` date. Each entry contains Skill Tickets, **Total eggs/pets**, Mount Keys, Mounts to Merge, and Hammers. Total eggs/pets combines all eggs to hatch and pets to merge into one quantity. Existing entries that stored twelve separate egg and pet rarity quantities are automatically added together when read; their other resources, costs, notes, and timestamps are preserved. An explicitly saved combined value, including zero, takes precedence over older rarity fields. All quantities are nonnegative whole numbers and default to zero. Input boxes can be cleared while typing; saving an empty box stores zero. A uniqueness constraint keeps one entry per member per week. Saving an existing entry updates it.
+Additional tables store live banks, append-only bank/profile histories, weekly and manual snapshots, clan settings, snipe plans/responses, and virtual Dew balances/ownership. Migrations preserve original weekly submissions and initialize a stable live-history activation date.
+
+Resource banks remain active across weeks until members update them. Weekly history uses **Monday at 00:00 UTC** boundaries (10am AEST / 11am AEDT in Sydney), labelled by the Monday's `YYYY-MM-DD` date. Each entry contains Skill Tickets, **Total eggs/pets**, Mount Keys, Mounts to Merge, and Hammers. Total eggs/pets combines all eggs to hatch and pets to merge into one quantity. Existing entries that stored twelve separate egg and pet rarity quantities are automatically added together when read; their other resources, costs, notes, and timestamps are preserved. An explicitly saved combined value, including zero, takes precedence over older rarity fields. All quantities are nonnegative whole numbers and default to zero. Input boxes can be cleared while typing; saving an empty box stores zero. A uniqueness constraint keeps one entry per member per week. Saving an existing entry updates it.
 
 Members can edit only their own entries; admins can edit any active member's entry. The database preserves historical weeks. Clan totals sum active members' saved quantities for the selected week, and members with no submission contribute zero. Export and clipboard actions apply to the currently selected week.
 
 Choose a week, open **My Resources**, enter quantities, and select **Save resources** to persist the entry and update the clan totals. Enter **Cost of summoning 5 skills** beneath Skill Tickets: it must be **150–200 inclusive**, with up to **one decimal place**, such as **175.5**. **Cost per mount summon**, beneath Mount Keys, must be **37.5–50 inclusive** and accepts decimals. Both costs are required when saving; blank or zero costs are invalid. They can still be cleared while typing. Other blank resource quantities save as zero. Costs belong to that member's selected week. Existing historical prices remain stored, including legacy missing costs, and must meet the current ranges when an entry is edited and saved.
 
-The Skill Tickets and Mount Keys dashboard cards include **Total skill summons** and **Total mount summons**. For each active member with a saved entry and a positive cost, skill summons are `skillTickets / fiveSkillsCost × 5` and mount summons are `mountKeys / mountCost`. The tracker adds everyone's exact results first, then rounds each clan total to the nearest whole number; a final `.5` rounds up. For example, members with 10 tickets at a cost of 3 and 5 tickets at a cost of 2 contribute approximately 16.667 and 12.5 skill summons, totaling approximately 29.167, displayed as **29**. The dashboard, member contributions table, CSV, and clipboard export use the same five resource quantities, including the combined Total eggs/pets. Summoning costs and calculated summon totals appear outside the member table and inventory exports.
+The Skill Tickets and Mount Keys dashboard cards include **Total skill summons** and **Total mount summons**. For each active member with a saved entry and a positive cost, skill summons are `skillTickets / fiveSkillsCost × 5` and mount summons are `mountKeys / mountCost`. Planning counts whole affordable summons for each member before adding them: `floor(skillTickets × 5 / fiveSkillsCost)` and `floor(mountKeys / mountCost)`. Spare resources cannot be pooled between members. For example, 122,000 tickets at a five-skill cost of 160 estimates 3,812 skill summons. The legacy weekly API retains its previous aggregate rounding for compatibility. The dashboard, member contributions table, CSV, and clipboard export use the same five resource quantities, including the combined Total eggs/pets. Summoning costs and calculated summon totals appear outside the member table and inventory exports.
 
 A legacy zero or missing cost contributes zero summons for that resource, while the member's saved tickets and keys still count in the inventory totals. Each affected card shows how many members have positive inventory but a missing cost, so the clan knows its summon count is incomplete. Members with zero corresponding inventory or no saved entry do not trigger that notice. Submissions from older clients that omit the entire `summoningCosts` field preserve an entry's stored costs; a supplied cost object must include both numeric fields and meet the current ranges and precision rules.
 
 The Skill Tickets card also shows **Potential clan war points** as the displayed Total skill summons multiplied by **225**. The Mounts to Merge card shows its selected week's combined Mounts to Merge multiplied by **1,080**. The Hammers card estimates a range from the selected week's combined Hammers multiplied by **2** to Hammers multiplied by **5**; for example, 1,000 hammers estimates **2,000–5,000 points**. These points estimates use whole numbers, update with the selected week's resources, and remain outside the member table and inventory exports. **Total eggs/pets** appears in the dashboard's top row alongside Skill Tickets and Mount Keys, and first on mobile. Missing skill costs also make the skill-points estimate incomplete, as indicated by that card's missing-cost notice.
 
-**Copy previous week** copies quantities, both summoning costs, and notes from the immediately preceding week and saves them in the selected week; it replaces any existing selected-week entry after confirmation. The **Weeks** view includes saved weeks, the current week, and your selected week. The date picker can open a week with no entry yet.
+Current bank values, costs, levels, and explicit action counts carry forward automatically. Historical bank views are read-only. Weekly History compares clan or individual values and movement between captures. Completed-week snapshots are captured automatically on application access and before bank/roster writes; delayed access replays the immutable version ledger at each missed Monday cutoff. Manual snapshots have separate IDs and never suppress the completed-week capture. Archived rosters and totals survive later edits or deactivation. These application snapshots do not replace provider database backups.
+
+## Planning and rewards
+
+Leadership can set the registered-member capacity and scoring rates. Defaults are 225 per skill summon, 1,080 per mount summon or merge, 2,250 per egg/pet merge action, and a 2–5 range per hammer. Existing mounts/eggs available to merge and newly summoned merge actions are separate inputs; enter each planned merge only once. Egg actions are explicit counts, not inferred from the combined Total eggs/pets inventory. New-mount merge counts are limited to available mount summons. Levels are retained informational inputs, not guessed conversion formulas.
+
+Snipe plans use local browser date/time converted to a stored UTC instant. Only administrators create, edit, or archive plans. Members answer Yes or No; unanswered members stay distinct. Only Yes participants contribute to an open plan's points. Responses close at the event start. Archiving freezes participants, responses, and estimates.
+
+Changing your own resource quantities earns one Dew per UTC day. Repeated saves, notes/cost/level-only changes, and editing another member's bank earn no extra Dew. Dew is virtual and buys cosmetic badges only; Discord identity and avatars stay intact. Purchases and daily rewards are transactional and cannot overspend or duplicate charges.
+
+An optional scheduler can call `GET /api/cron/snapshots` with `Authorization: Bearer <CRON_SECRET>`. Set `CRON_SECRET` securely on the hosting provider before using that endpoint. It rejects all calls when the secret is absent. Scheduling is optional: the automatic cutoff replay described above operates without it.
 
 ## Deploy to Vercel
 
@@ -140,7 +155,7 @@ The Skill Tickets card also shows **Potential clan war points** as the displayed
 4. Choose the production hostname and set `APP_URL` to its HTTPS origin. Add the corresponding full `/api/auth/callback` URL to the Discord application. Repeat these settings if you add a custom domain.
 5. The app initializes its tables automatically on first database access. For optional manual initialization, run `npm run db:migrate` from a trusted environment with the same database configuration. Protect connection credentials; do not paste them into source code or build commands.
 6. Deploy. Open the application in a browser and log in as the designated initial admin, or let the first approved member establish the Admin account when no ID is designated.
-7. Verify that a second clan member can save a weekly entry and that the dashboard shows its quantities. Verify that a Discord account outside the configured server is denied.
+7. Verify that a second clan member can save their resource bank and that the dashboard shows its quantities. Verify that a Discord account outside the configured server is denied.
 
 Local PGlite data is not a production database: Vercel filesystems are temporary and separate across instances. Set `DATABASE_URL` for hosted deployment. Demo mode is rejected in production. The application requires the Node.js runtime for its database driver; do not configure these server routes as Edge functions.
 
@@ -156,7 +171,7 @@ npm run build
 
 `npm run dev` starts the development server. `npm run start` serves a production build. `npm run db:migrate` initializes the configured database. Real Discord login requires an OAuth application and an authorized Discord account; local demo checks do not substitute for that integration check.
 
-The browser suite covers desktop and mobile layouts, resource and summoning-cost persistence, blank inputs, copying a previous week, per-member summon totals and missing-cost notices, CSV export, and admin changes. Start the demo server in one terminal:
+The browser suite covers desktop/mobile layouts, persistent banks and planning counts, numeric ranges, whole per-member summon estimates, CSV export, sortable rosters, legacy-client compatibility, Monday rollover, frozen snapshots, snipe attendance/archive, virtual Dew purchases, and admin permissions. Start the demo server in one terminal:
 
 ```bash
 DEMO_MODE=true npm run dev

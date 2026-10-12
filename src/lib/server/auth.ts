@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { cookies } from "next/headers";
 import type { Member } from "../types";
-import { database, lockAdministration, type Database } from "./db";
+import { database, lockAdministration, type Database, type SqlConnection } from "./db";
 import { decrypt, encrypt, hashToken, randomToken } from "./crypto";
 import { isDemo, requireConfiguration } from "./config";
 import {
@@ -18,13 +18,41 @@ import { seedDemo } from "./demo";
 
 export const SESSION_COOKIE = "turmoil_session";
 export const OAUTH_COOKIE = "turmoil_oauth";
-export const SESSION_SECONDS = 7 * 24 * 60 * 60;
+// Remember this browser for 180 days after its most recent validated visit.
+export const SESSION_SECONDS = 180 * 24 * 60 * 60;
 export const cookieOptions = () => ({
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
   sameSite: "lax" as const,
   path: "/",
 });
+export const sessionCookieOptions = () => ({
+  ...cookieOptions(),
+  maxAge: SESSION_SECONDS,
+});
+
+async function recordMemberProfile(
+  tx: SqlConnection,
+  member: Member,
+  previous?: Member,
+): Promise<void> {
+  const baseline = previous ?? member;
+  // Existing accounts may predate status history. Preserve their old visible
+  // profile before appending a change, so earlier cutoffs remain reconstructable.
+  await tx.query(
+    `INSERT INTO member_status_events (id,member_id,active,role,username,avatar_url,changed_at)
+     SELECT $1,$2,$3,$4,$5,$6,$7 WHERE NOT EXISTS
+       (SELECT 1 FROM member_status_events WHERE member_id=$2)
+     ON CONFLICT (id) DO NOTHING`,
+    [`initial:${baseline.id}`, baseline.id, baseline.active, baseline.role, baseline.username, baseline.avatarUrl, baseline.joinedAt],
+  );
+  if (previous && (previous.username !== member.username || previous.avatarUrl !== member.avatarUrl))
+    await tx.query(
+      `INSERT INTO member_status_events (id,member_id,active,role,username,avatar_url,changed_at)
+       VALUES ($1,$2,$3,$4,$5,$6,clock_timestamp())`,
+      [randomUUID(), member.id, member.active, member.role, member.username, member.avatarUrl],
+    );
+}
 
 export async function registerDiscordMember(
   user: DiscordUser,
@@ -39,7 +67,7 @@ export async function registerDiscordMember(
   return db.transaction(async (tx) => {
     await lockAdministration(tx, db.dialect);
     const existing = await tx.query(
-      "SELECT * FROM app_members WHERE discord_id = $1",
+      "SELECT * FROM app_members WHERE discord_id = $1 FOR UPDATE",
       [user.id],
     );
     if (existing.length) {
@@ -53,7 +81,9 @@ export async function registerDiscordMember(
         "UPDATE app_members SET username = $2, display_name = $3, avatar_url = $4, global_avatar_url = $5, global_display_name = $6 WHERE id = $1 RETURNING *",
         [existing[0].id, user.username, profile.displayName, profile.avatarUrl, profile.globalAvatarUrl, profile.globalDisplayName],
       );
-      return memberFromRow(updated[0]);
+      const member = memberFromRow(updated[0]);
+      await recordMemberProfile(tx, member, memberFromRow(existing[0]));
+      return member;
     }
     const administrators = await tx.query(
       "SELECT id FROM app_members WHERE role = 'ADMIN' AND active = TRUE LIMIT 1",
@@ -74,7 +104,9 @@ export async function registerDiscordMember(
         initialAdmin ? "ADMIN" : "MEMBER",
       ],
     );
-    return memberFromRow(rows[0]);
+    const member = memberFromRow(rows[0]);
+    await recordMemberProfile(tx, member);
+    return member;
   });
 }
 
@@ -141,8 +173,13 @@ export async function authenticatedMember(
       if (
         Date.now() - new Date(iso(session.membership_checked_at)!).getTime() <
         5 * 60 * 1000
-      )
+      ) {
+        await tx.query(
+          "UPDATE auth_sessions SET expires_at = $2 WHERE token_hash = $1",
+          [tokenHash, new Date(Date.now() + SESSION_SECONDS * 1000).toISOString()],
+        );
         return { member: memberFromRow(session) };
+      }
       try {
         let accessToken = decrypt(String(session.encrypted_access_token));
         if (
@@ -185,15 +222,17 @@ export async function authenticatedMember(
           membership.user ? undefined : previousGlobalAvatar,
           membership.user ? undefined : session.global_display_name ? String(session.global_display_name) : null,
         );
+        const previousMember = memberFromRow(session);
         const updatedMembers = await tx.query(
           "UPDATE app_members SET username = $2, display_name = $3, avatar_url = $4, global_avatar_url = $5, global_display_name = $6 WHERE id = $1 AND active = TRUE RETURNING *",
           [session.member_id, profileUser.username, profile.displayName, profile.avatarUrl, profile.globalAvatarUrl, profile.globalDisplayName],
         );
         if (!updatedMembers.length) return { member: null };
+        await recordMemberProfile(tx, memberFromRow(updatedMembers[0]), previousMember);
         Object.assign(session, updatedMembers[0]);
         await tx.query(
-          "UPDATE auth_sessions SET membership_checked_at = NOW() WHERE token_hash = $1",
-          [tokenHash],
+          "UPDATE auth_sessions SET membership_checked_at = NOW(), expires_at = $2 WHERE token_hash = $1",
+          [tokenHash, new Date(Date.now() + SESSION_SECONDS * 1000).toISOString()],
         );
       } catch (error) {
         // Transient Discord failures fail closed, while keeping the session available to retry.

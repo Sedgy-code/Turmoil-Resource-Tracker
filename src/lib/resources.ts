@@ -24,6 +24,18 @@ export interface SummoningCosts {
   fiveSkills: number;
   mount: number;
 }
+export interface PlanningDetails {
+  skillLevel: number;
+  mountLevel: number;
+  eggLevel: number;
+  newMountMerges: number;
+  eggMerges: number;
+  eggSummonMerges: number;
+}
+export const EMPTY_PLANNING_DETAILS: PlanningDetails = {
+  skillLevel: 0, mountLevel: 0, eggLevel: 0,
+  newMountMerges: 0, eggMerges: 0, eggSummonMerges: 0,
+};
 export const EMPTY_SUMMONING_COSTS: SummoningCosts = { fiveSkills: 0, mount: 0 };
 export const MOUNT_SUMMON_COST_MIN = 37.5;
 export const MOUNT_SUMMON_COST_MAX = 50;

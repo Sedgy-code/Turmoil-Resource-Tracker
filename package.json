@@ -11,7 +11,7 @@
     "start": "next start --hostname 0.0.0.0",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
-    "test:browser": "playwright test tests/browser.spec.ts --workers=1",
+    "test:browser": "playwright test tests/browser.spec.ts tests/planning.browser.spec.ts --workers=1",
     "db:migrate": "tsx scripts/migrate.ts"
   },
   "dependencies": {

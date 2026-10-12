@@ -3,6 +3,7 @@ import "@fontsource-variable/dm-sans";
 import "@fontsource-variable/manrope";
 import "./globals.css";
 import "./clan-theme.css";
+import "./planning.css";
 
 export const metadata: Metadata = {
   title: "Turmoil · Resource Tracker",

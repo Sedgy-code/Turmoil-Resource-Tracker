@@ -1,5 +1,5 @@
 import type { Member, ResourceEntry } from "../types";
-import { normalizeResources, EMPTY_SUMMONING_COSTS, type SummoningCosts } from "../resources";
+import { normalizeResources, EMPTY_SUMMONING_COSTS, EMPTY_PLANNING_DETAILS, type SummoningCosts, type PlanningDetails } from "../resources";
 
 export function iso(value: unknown): string | null {
   if (!value) return null;
@@ -17,6 +17,7 @@ export function memberFromRow(row: Record<string, unknown>): Member {
     active: row.active === true,
     lastUpdatedAt: iso(row.last_updated_at),
     joinedAt: iso(row.joined_at)!,
+    badge: row.badge ? String(row.badge) : null,
   };
 }
 export function entryFromRow(row: Record<string, unknown>): ResourceEntry {
@@ -32,12 +33,14 @@ export function entryFromRow(row: Record<string, unknown>): ResourceEntry {
     typeof row.summoning_costs === "string"
       ? JSON.parse(row.summoning_costs)
       : row.summoning_costs;
+  const planningDetails = typeof row.planning_details === "string" ? JSON.parse(row.planning_details) : row.planning_details;
   return {
     id: String(row.id),
     memberId: String(row.member_id),
     week,
     resources: normalizeResources(values),
     summoningCosts: { ...EMPTY_SUMMONING_COSTS, ...(summoningCosts as SummoningCosts) },
+    planningDetails: { ...EMPTY_PLANNING_DETAILS, ...(planningDetails as PlanningDetails) },
     notes: String(row.notes),
     updatedAt: iso(row.updated_at)!,
     updatedBy: {
