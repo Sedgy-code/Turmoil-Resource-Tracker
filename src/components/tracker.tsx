@@ -14,6 +14,7 @@ import { ContributionRanking } from "./contribution-ranking";
 import { WarWeek } from "./war-week";
 import { MemberHistoryPanel } from "./member-history";
 import { ClanTech } from "./clan-tech";
+import { MonthlyAwardsPanel } from "./monthly-awards";
 import { ApplicationsManager, LeadershipSettings } from "./leadership-applications";
 import { downloadRows } from "@/lib/csv";
 import { CountdownStrip } from "./countdown-strip";
@@ -758,6 +759,7 @@ function TrackerApp({ view }: { view: View }) {
               </div>
               {warEstimateError && <div className="error-banner" role="alert">{t("War estimate unavailable:")} {t(warEstimateError)}</div>}
               <ClanArsenal data={data} estimate={dashboardWar} rates={warRates} estimateError={warEstimateError} snapshotId={snapshotId} />
+              <MonthlyAwardsPanel members={data.members} />
               <SnipeChampions members={data.members} />
               <MemberResources
                 data={data}

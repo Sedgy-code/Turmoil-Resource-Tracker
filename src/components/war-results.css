@@ -71,3 +71,12 @@
 .latest-war-total strong { color: var(--gold); font-size: 24px; font-variant-numeric: tabular-nums; }
 @media (max-width: 800px) { .recognition-row { grid-template-columns: minmax(0, 1fr); } }
 .vial-zero { color: #ff9b8a; background: #3a1712; font-weight: 700; }
+.award-badge { margin-inline-start: 3px; font-size: 0.9em; }
+.monthly-awards { padding: 16px 20px; margin-bottom: 18px; }
+.monthly-awards ul { list-style: none; margin: 12px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+.monthly-awards li { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: #0f1512; border: 1px solid var(--border); }
+.monthly-award-emoji { font-size: 22px; line-height: 1; }
+.monthly-awards li div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.monthly-awards li strong { font-size: 12.5px; color: #f0d58a; }
+.monthly-award-winners { font-size: 13px; }
+.monthly-awards li small { color: var(--muted); font-size: 11px; }

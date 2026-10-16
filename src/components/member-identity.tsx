@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { cosmeticItem, equippedCosmetics } from "@/lib/dew";
 import type { Member } from "@/lib/types";
-import { SnipeBadge } from "./recognition";
+import { SnipeBadge, AwardBadges } from "./recognition";
 
 type IdentityMember = Pick<Member, "username" | "avatarUrl" | "badge" | "cosmetics"> & { id?: string; holidayUntil?: string | null };
 
@@ -17,6 +17,7 @@ export function MemberName({ member }: { member: IdentityMember }) {
       <span className="member-name-text">{member.username}</span>
       {badge && <span className="member-cosmetic" role="img" title={badge.name} aria-label={badge.name}>{badge.symbol}</span>}
       {member.id && <SnipeBadge memberId={member.id} />}
+      {member.id && <AwardBadges memberId={member.id} />}
       {member.holidayUntil && <span className="member-holiday" role="img" title={`On holiday until ${member.holidayUntil}`} aria-label={`On holiday until ${member.holidayUntil}`}>🏖️</span>}
     </span>
   );
