@@ -62,7 +62,7 @@
 .recognition-link { margin-top: auto; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; align-self: flex-start; }
 .champion-list { list-style: none; margin: 4px 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .champion-list li { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; background: #0c1510; border: 1px solid #ffffff0d; min-width: 0; }
-.champion-list li:first-child { border-color: #d9a52b66; background: #221d0e; }
+.snipe-champions .champion-list li.champion-top, .latest-war .champion-list li:first-child { border-color: #d9a52b66; background: #221d0e; }
 .champion-place { width: 22px; text-align: center; font-weight: 700; color: var(--muted); }
 .champion-list strong { flex: 1; min-width: 0; font-size: 13px; overflow-wrap: anywhere; }
 .champion-count { font-size: 12px; color: #f0d58a; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }

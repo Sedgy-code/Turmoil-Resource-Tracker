@@ -13,7 +13,7 @@ const MEDALS = ["🥇", "🥈", "🥉"];
 /** Dashboard boards: who joined the most snipes, and how the latest war went. */
 export function SnipeChampions({ members }: { members: Member[] }) {
   const t = useT();
-  const { data, ranking } = useRecognition();
+  const { data, ranking, placeOf } = useRecognition();
   const byId = new Map(members.map((member) => [member.id, member]));
   const champions = ranking.filter((id) => byId.has(id)).slice(0, 5);
   const war = data?.latestWar;
@@ -26,8 +26,8 @@ export function SnipeChampions({ members }: { members: Member[] }) {
         {champions.length ? <ol className="champion-list">
           {champions.map((id, index) => {
             const member = byId.get(id)!;
-            return <li key={id}>
-              <span className="champion-place">{MEDALS[index] ?? index + 1}</span>
+            return <li key={id} className={placeOf(id) === 0 ? "champion-top" : undefined}>
+              <span className="champion-place">{MEDALS[placeOf(id)] ?? index + 1}</span>
               <MemberAvatar member={member} small />
               <strong><MemberName member={member} /></strong>
               <span className="champion-count">{t("{count} snipes", { count: data?.snipes.recent[id] ?? 0 })}</span>
