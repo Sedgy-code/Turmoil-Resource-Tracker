@@ -74,8 +74,9 @@
     padding: 6px 2px;
   }
   .login-language {
-    top: 22px;
-    right: 18px;
+    position: static;
+    align-self: center;
+    margin-top: 14px;
   }
 }
 
