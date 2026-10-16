@@ -42,3 +42,18 @@
 .war-spend-week select { height: 38px; padding: 0 10px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 7px; font: inherit; font-size: 13px; }
 .war-spend-lists { margin: 0; }
 .war-spend-lists h3 { font-size: 13.5px; margin: 0 0 3px; }
+/* Contribution ranking */
+.rank-weights { list-style: none; padding: 0; margin: 10px 0; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; color: var(--text); }
+.rank-weights strong { color: var(--gold); }
+.rank-controls { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+.rank-toggle { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.rank-toggle input { width: 16px; height: 16px; accent-color: #d9a52b; }
+.rank-score { display: inline-block; min-width: 38px; text-align: center; padding: 3px 8px; border-radius: 99px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.rank-low { background: #3a1715; color: #ff9b94; border: 1px solid #d9534f88; }
+.rank-mid { background: #33280f; color: #f0c560; border: 1px solid #d9a52b88; }
+.rank-high { background: #15281a; color: #9fd3a9; border: 1px solid #3f7a4c; }
+.rank-penalty { margin-inline-start: 6px; color: #ff9b94; font-size: 10.5px; font-weight: 700; }
+.rank-sub { display: block; color: var(--muted); font-size: 10.5px; }
+.rank-new { display: inline-block; margin-top: 3px; padding: 1px 6px; border-radius: 99px; background: #1b2a3a; color: #9cc8ff; font-size: 10px; }
+.rank-table td { white-space: nowrap; }
+@media (max-width: 650px) { .rank-controls { align-items: flex-start; } }

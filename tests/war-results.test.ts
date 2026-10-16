@@ -110,3 +110,59 @@ test("snipe counts feed badges, the leaderboard and the Monday Discord thank-you
     }
   });
 });
+
+test("the daily Discord check removes members who left and restores them if they return", async () => {
+  const { syncDiscordMembers } = await import("../src/lib/server/discord-sync");
+  await withDatabase(async (db) => {
+    const admin = await addMember(db, "leader", "ADMIN");
+    const stay = [await addMember(db, "a"), await addMember(db, "b"), await addMember(db, "c"), await addMember(db, "d")];
+    const leaver = await addMember(db, "leaver");
+    let inServer = [admin, ...stay].map((member) => member.discordId);
+    const fetcher = (async () => new Response(JSON.stringify(inServer.map((id) => ({ user: { id }, roles: [] }))))) as typeof fetch;
+    const previous = { token: process.env.DISCORD_BOT_TOKEN, guild: process.env.DISCORD_GUILD_ID };
+    try {
+      delete process.env.DISCORD_BOT_TOKEN;
+      assert.equal((await syncDiscordMembers({ db, fetcher })).configured, false);
+      process.env.DISCORD_BOT_TOKEN = "bot";
+      process.env.DISCORD_GUILD_ID = "123";
+      assert.deepEqual((await syncDiscordMembers({ db, fetcher })).removed, ["leaver"]);
+      assert.equal((await db.query("SELECT active FROM app_members WHERE id=$1", [leaver.id]))[0].active, false);
+      inServer = [...inServer, leaver.discordId];
+      assert.deepEqual((await syncDiscordMembers({ db, fetcher })).restored, ["leaver"]);
+      assert.equal((await db.query("SELECT active FROM app_members WHERE id=$1", [leaver.id]))[0].active, true);
+      // An empty or broken member list never empties the roster.
+      inServer = [];
+      assert.match((await syncDiscordMembers({ db, fetcher })).skipped ?? "", /nothing was changed/);
+      assert.equal((await db.query("SELECT COUNT(*)::int AS n FROM app_members WHERE active")).at(0)?.n, 6);
+    } finally {
+      for (const [key, value] of [["DISCORD_BOT_TOKEN", previous.token], ["DISCORD_GUILD_ID", previous.guild]] as const) {
+        if (value === undefined) delete process.env[key]; else process.env[key] = value;
+      }
+    }
+  });
+});
+
+test("the contribution ranking puts the least active members first", async () => {
+  const { contributionRanking, percentile } = await import("../src/lib/server/ranking");
+  assert.equal(percentile(5, [5]), 0.5);
+  assert.equal(percentile(1, [1, 2, 3]), 0);
+  assert.equal(percentile(3, [1, 2, 3]), 1);
+  await withDatabase(async (db) => {
+    const admin = await addMember(db, "leader", "ADMIN");
+    const star = await addMember(db, "star");
+    const idle = await addMember(db, "idle");
+    await db.query("UPDATE app_members SET joined_at = NOW() - INTERVAL '60 days'");
+    await saveWarResult(admin, { week: currentWeek(), label: "", clanTotal: 100, rows: [
+      { gameName: "star", memberId: star.id, points: 900 }, { gameName: "leader", memberId: admin.id, points: 400 },
+    ], images: [] }, db);
+    await saveWarResult(admin, { kind: "vials", week: currentWeek(), label: "", clanTotal: null, rows: [{ gameName: "star", memberId: star.id, points: 50 }], images: [] }, db);
+    await db.query("INSERT INTO dew_weekly_earnings (member_id, week_start, reason, amount) VALUES ($1, $2, 'resources', 20)", [star.id, currentWeek()]);
+    await assert.rejects(contributionRanking(star, db), apiFailure("ADMIN_REQUIRED"));
+    const ranking = await contributionRanking(admin, db);
+    assert.equal(ranking.rows[0].member.id, idle.id);
+    assert.equal(ranking.rows.at(-1)?.member.id, star.id);
+    assert.equal(ranking.rows.find(({ member }) => member.id === star.id)?.vials, 50);
+    assert.equal(ranking.records.wars, 1);
+    assert.equal(ranking.weights.vials, 20);
+  });
+});

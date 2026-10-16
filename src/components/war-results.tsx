@@ -37,11 +37,34 @@ async function shrink(file: File): Promise<Screenshot> {
 }
 
 const digits = (value: string) => value.replace(/[^0-9]/g, "");
+
+export type RecordKind = "war" | "vials";
+/** Wording for each kind of record; the screenshot flow is the same. */
+const TEXT = {
+  war: {
+    add: "Add war results", step1: "Add the end-of-war screenshots (clan total and the member list).",
+    total: "Clan total", points: "Points", saved: "War results saved.", deleted: "War result deleted.",
+    confirmDelete: "Delete this war result? This can’t be undone.", save: "Save war results",
+    empty: "No war results yet. An admin can add them from the end-of-war screenshots.", chart: "Clan total over time",
+    history: "Clan war totals", historySub: "Final clan scores from each war.", link: "War Results", top: "Top scorer",
+    labelExample: "e.g. Season 30 · War 4", date: "War date", column: "War",
+  },
+  vials: {
+    add: "Add vial donations", step1: "Add the clan tech donation screenshots (the member list with vials).",
+    total: "Total vials", points: "Vials", saved: "Vial donations saved.", deleted: "Vial record deleted.",
+    confirmDelete: "Delete this vial record? This can’t be undone.", save: "Save vial donations",
+    empty: "No vial donations yet. An admin can add them from the clan tech screenshots.", chart: "Vials donated over time",
+    history: "Tech vial donations", historySub: "Vials donated to clan tech, from each upload.", link: "Vial Donations", top: "Top donor",
+    labelExample: "e.g. Week 4 donations", date: "Date", column: "Record",
+  },
+} as const;
+const compact = (value: number) => value >= 1e6 ? `${numberFormat(Math.round(value / 1e5) / 10)}M` : value >= 1e4 ? `${numberFormat(Math.round(value / 100) / 10)}K` : numberFormat(value);
 let rowCounter = 0;
 const newRow = (row?: Partial<DraftRow>): DraftRow => ({ key: `row-${++rowCounter}`, gameName: "", memberId: "", points: "", ...row });
 
-function AddWarResult({ members, onSaved, notify }: { members: Member[]; onSaved: () => void; notify: (message: string, error?: boolean) => void }) {
+function AddWarResult({ kind, members, onSaved, notify }: { kind: RecordKind; members: Member[]; onSaved: () => void; notify: (message: string, error?: boolean) => void }) {
   const t = useT();
+  const words = TEXT[kind];
   const [open, setOpen] = useState(false);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [label, setLabel] = useState("");
@@ -79,7 +102,7 @@ function AddWarResult({ members, onSaved, notify }: { members: Member[]; onSaved
     setMessage("");
     try {
       const { reading } = await request<{ reading: WarReading }>("/api/war-results/read", {
-        method: "POST", body: JSON.stringify({ images: shots.map(({ mime, data }) => ({ mime, data })) }),
+        method: "POST", body: JSON.stringify({ kind, images: shots.map(({ mime, data }) => ({ mime, data })) }),
       });
       setRows(reading.rows.map((row) => newRow({ gameName: row.gameName, memberId: row.memberId ?? "", points: String(row.points) })));
       if (reading.clanTotal !== null) setClanTotal(String(reading.clanTotal));
@@ -109,6 +132,7 @@ function AddWarResult({ members, onSaved, notify }: { members: Member[]; onSaved
       await request("/api/war-results", {
         method: "POST",
         body: JSON.stringify({
+          kind,
           week: currentWeek(new Date(`${date}T12:00:00Z`)),
           label: label.trim(),
           clanTotal: clanTotal ? Number(clanTotal) : null,
@@ -120,7 +144,7 @@ function AddWarResult({ members, onSaved, notify }: { members: Member[]; onSaved
           images: shots.map(({ mime, data }) => ({ mime, data })),
         }),
       });
-      notify(t("War results saved."));
+      notify(t(words.saved));
       setShots([]); setRows([]); setClanTotal(""); setLabel(""); setMessage(""); setOpen(false);
       onSaved();
     } catch (error) {
@@ -130,20 +154,20 @@ function AddWarResult({ members, onSaved, notify }: { members: Member[]; onSaved
   }
 
   const update = (key: string, change: Partial<DraftRow>) => setRows((current) => current.map((row) => row.key === key ? { ...row, ...change } : row));
-  if (!open) return <button className="button primary war-add-open" onClick={() => setOpen(true)}><Plus size={16} />{t("Add war results")}</button>;
+  if (!open) return <button className="button primary war-add-open" onClick={() => setOpen(true)}><Plus size={16} />{t(words.add)}</button>;
   return <section className="panel war-add">
     <div className="war-add-head">
-      <h2><Trophy size={17} />{t("Add war results")}</h2>
+      <h2><Trophy size={17} />{t(words.add)}</h2>
       <button className="icon-button" aria-label={t("Close")} onClick={() => setOpen(false)}><X size={17} /></button>
     </div>
     <ol className="war-steps">
-      <li>{t("Add the end-of-war screenshots (clan total and the member list).")}</li>
+      <li>{t(words.step1)}</li>
       <li>{t("Press “Read screenshots”. The site fills in the table for you.")}</li>
       <li>{t("Check the numbers, fix anything wrong, then press Save.")}</li>
     </ol>
     <div className="war-form-grid">
-      <label><span>{t("War date")}</span><input type="date" value={date} onChange={(event) => event.target.value && setDate(event.target.value)} /></label>
-      <label><span>{t("Name (optional)")}</span><input value={label} maxLength={120} placeholder={t("e.g. Season 30 · War 4")} onChange={(event) => setLabel(event.target.value)} /></label>
+      <label><span>{t(words.date)}</span><input type="date" value={date} onChange={(event) => event.target.value && setDate(event.target.value)} /></label>
+      <label><span>{t("Name (optional)")}</span><input value={label} maxLength={120} placeholder={t(words.labelExample)} onChange={(event) => setLabel(event.target.value)} /></label>
     </div>
     <div className="war-shots">
       {shots.map((shot, index) => <figure key={index}>
@@ -164,40 +188,40 @@ function AddWarResult({ members, onSaved, notify }: { members: Member[]; onSaved
     </div>
     {message && <p className="war-message" role="status">{message}</p>}
     {(rows.length > 0 || clanTotal) && <>
-      <label className="war-total-field"><span>{t("Clan total")}</span><input inputMode="numeric" value={clanTotal} onChange={(event) => setClanTotal(digits(event.target.value))} placeholder="0" /></label>
+      <label className="war-total-field"><span>{t(words.total)}</span><input inputMode="numeric" value={clanTotal} onChange={(event) => setClanTotal(digits(event.target.value))} placeholder="0" /></label>
       <div className="table-scroll"><table className="resource-table war-edit-table">
-        <thead><tr><th>{t("Name in game")}</th><th>{t("Clan member")}</th><th>{t("Points")}</th><th><span className="visually-hidden">{t("Remove")}</span></th></tr></thead>
+        <thead><tr><th>{t("Name in game")}</th><th>{t("Clan member")}</th><th>{t(words.points)}</th><th><span className="visually-hidden">{t("Remove")}</span></th></tr></thead>
         <tbody>{rows.map((row) => <tr key={row.key} className={row.memberId ? undefined : "war-unmatched"}>
           <td><input aria-label={t("Name in game")} value={row.gameName} maxLength={80} onChange={(event) => update(row.key, { gameName: event.target.value })} /></td>
           <td><select aria-label={t("Clan member")} value={row.memberId} onChange={(event) => update(row.key, { memberId: event.target.value })}>
             <option value="">{t("— Pick a member —")}</option>
             {sortedMembers.map((member) => <option key={member.id} value={member.id}>{member.username}</option>)}
           </select></td>
-          <td><input aria-label={t("Points")} inputMode="numeric" value={row.points} onChange={(event) => update(row.key, { points: digits(event.target.value) })} /></td>
+          <td><input aria-label={t(words.points)} inputMode="numeric" value={row.points} onChange={(event) => update(row.key, { points: digits(event.target.value) })} /></td>
           <td><button className="icon-button" aria-label={t("Remove")} onClick={() => setRows((current) => current.filter((item) => item.key !== row.key))}><Trash2 size={15} /></button></td>
         </tr>)}</tbody>
       </table></div>
       <div className="war-actions">
         <button className="button subtle" onClick={() => setRows((current) => [...current, newRow()])}><Plus size={15} />{t("Add a row")}</button>
-        <button className="button primary" disabled={busy !== ""} onClick={() => void save()}>{busy === "saving" && <LoaderCircle size={15} className="spin" />}{t("Save war results")}</button>
+        <button className="button primary" disabled={busy !== ""} onClick={() => void save()}>{busy === "saving" && <LoaderCircle size={15} className="spin" />}{t(words.save)}</button>
       </div>
       <p className="war-hint">{t("Names you match are remembered, so next time they’re matched automatically.")}</p>
     </>}
   </section>;
 }
 
-function useWarResults() {
+function useWarResults(kind: RecordKind) {
   const [results, setResults] = useState<WarResult[] | null>(null);
   const [error, setError] = useState("");
   const load = useCallback(async () => {
-    try { setResults((await request<WarResultsResponse>("/api/war-results")).results); setError(""); }
+    try { setResults((await request<WarResultsResponse>(`/api/war-results?kind=${kind}`)).results); setError(""); }
     catch (e) { setError(e instanceof Error ? e.message : "Please try again."); }
-  }, []);
+  }, [kind]);
   useEffect(() => { void load(); }, [load]);
   return { results, error, load };
 }
 
-function WarPlayersTable({ result, byId }: { result: WarResult; byId: Map<string, Member> }) {
+function WarPlayersTable({ kind, result, byId }: { kind: RecordKind; result: WarResult; byId: Map<string, Member> }) {
   const t = useT();
   const ranked = result.points.map((point, rank) => ({ ...point, rank }));
   const name = (point: (typeof ranked)[number]) => (point.memberId ? byId.get(point.memberId)?.username : undefined) ?? point.gameName;
@@ -207,7 +231,7 @@ function WarPlayersTable({ result, byId }: { result: WarResult; byId: Map<string
     points: (point) => point.points,
   }, { key: "points", direction: "desc" });
   return <div className="table-scroll"><table className="resource-table war-table">
-    <thead><tr>{header("rank", "#")}{header("member", t("Member"))}{header("points", t("Points"))}</tr></thead>
+    <thead><tr>{header("rank", "#")}{header("member", t("Member"))}{header("points", t(TEXT[kind].points))}</tr></thead>
     <tbody>{sorted.map((point) => {
       const member = point.memberId ? byId.get(point.memberId) : undefined;
       return <tr key={point.position}>
@@ -219,18 +243,19 @@ function WarPlayersTable({ result, byId }: { result: WarResult; byId: Map<string
   </table></div>;
 }
 
-export function WarResults({ members, admin, notify }: { members: Member[]; admin: boolean; notify: (message: string, error?: boolean) => void }) {
+export function WarResults({ kind = "war", members, admin, notify }: { kind?: RecordKind; members: Member[]; admin: boolean; notify: (message: string, error?: boolean) => void }) {
   const t = useT();
-  const { results, error, load } = useWarResults();
+  const words = TEXT[kind];
+  const { results, error, load } = useWarResults(kind);
   const { reload: reloadRecognition } = useRecognition();
   const byId = new Map(members.map((member) => [member.id, member]));
   const chart = [...(results ?? [])].filter((result) => result.clanTotal !== null).slice(0, 12).reverse();
   const highest = Math.max(1, ...chart.map((result) => result.clanTotal ?? 0));
   async function remove(result: WarResult) {
-    if (!window.confirm(t("Delete this war result? This can’t be undone."))) return;
+    if (!window.confirm(t(words.confirmDelete))) return;
     try {
       await request(`/api/war-results/${result.id}`, { method: "DELETE" });
-      notify(t("War result deleted."));
+      notify(t(words.deleted));
       await load(); await reloadRecognition();
     } catch (e) {
       const text = e instanceof Error ? e.message : "Please try again.";
@@ -238,30 +263,30 @@ export function WarResults({ members, admin, notify }: { members: Member[]; admi
     }
   }
   return <div className="war-page">
-    {admin && <AddWarResult members={members} notify={notify} onSaved={() => { void load(); void reloadRecognition(); }} />}
+    {admin && <AddWarResult kind={kind} members={members} notify={notify} onSaved={() => { void load(); void reloadRecognition(); }} />}
     {chart.length > 1 && <section className="panel war-chart">
-      <h2>{t("Clan total over time")}</h2>
+      <h2>{t(words.chart)}</h2>
       <div className="war-bars" role="list">{chart.map((result) => <div key={result.id} role="listitem" className="war-bar" title={`${result.label || formatWeek(result.week)}: ${numberFormat(result.clanTotal ?? 0)}`}>
-        <span className="war-bar-value">{numberFormat(Math.round((result.clanTotal ?? 0) / 1e6))}M</span>
+        <span className="war-bar-value">{compact(result.clanTotal ?? 0)}</span>
         <i style={{ height: `${Math.max(4, ((result.clanTotal ?? 0) / highest) * 100)}%` }} />
         <span className="war-bar-label">{formatWeek(result.week)}</span>
       </div>)}</div>
     </section>}
     {error && <div className="error-banner" role="alert">{t(error)}<button onClick={() => void load()}>{t("Retry")}</button></div>}
     {!results ? <section className="panel war-empty"><LoaderCircle size={22} className="spin" /></section>
-      : !results.length ? <section className="panel war-empty"><Trophy size={30} /><p>{t("No war results yet. An admin can add them from the end-of-war screenshots.")}</p></section>
+      : !results.length ? <section className="panel war-empty"><Trophy size={30} /><p>{t(words.empty)}</p></section>
         : results.map((result, index) => {
           const previous = results.slice(index + 1).find((item) => item.clanTotal !== null);
           const change = result.clanTotal !== null && previous?.clanTotal != null ? result.clanTotal - previous.clanTotal : null;
           return <article className="panel war-card" key={result.id}>
             <header>
               <div><h2>{result.label || t("Week of {date}", { date: formatWeek(result.week) })}</h2>{result.label && <p>{t("Week of {date}", { date: formatWeek(result.week) })}</p>}</div>
-              <div className="war-card-total"><span>{t("Clan total")}</span><strong>{result.clanTotal === null ? "—" : numberFormat(result.clanTotal)}</strong>
+              <div className="war-card-total"><span>{t(words.total)}</span><strong>{result.clanTotal === null ? "—" : numberFormat(result.clanTotal)}</strong>
                 {change !== null && <small className={change >= 0 ? "movement-up" : "movement-down"}>{change >= 0 ? "+" : ""}{numberFormat(change)}</small>}</div>
             </header>
             {result.points.length > 0 && <details className="war-members" open={index === 0}>
               <summary>{t("{count} players", { count: result.points.length })}</summary>
-              <WarPlayersTable result={result} byId={byId} />
+              <WarPlayersTable kind={kind} result={result} byId={byId} />
             </details>}
             <footer>
               {result.imageIds.length > 0 && <div className="war-thumbs">{result.imageIds.map((id, n) => <a key={id} href={`/api/war-results/images/${id}`} target="_blank" rel="noreferrer">
@@ -276,9 +301,10 @@ export function WarResults({ members, admin, notify }: { members: Member[]; admi
 }
 
 /** Short table of clan war totals for the Weekly History page. */
-export function WarTotalsHistory() {
+export function WarTotalsHistory({ kind = "war" }: { kind?: RecordKind }) {
   const t = useT();
-  const { results } = useWarResults();
+  const words = TEXT[kind];
+  const { results } = useWarResults(kind);
   const rows = (results ?? []).map((result, index, all) => {
     const previous = all.slice(index + 1).find((item) => item.clanTotal !== null);
     const change = result.clanTotal !== null && previous?.clanTotal != null ? result.clanTotal - previous.clanTotal : null;
@@ -292,10 +318,10 @@ export function WarTotalsHistory() {
   }, { key: "war", direction: "desc" });
   if (!results?.length) return null;
   return <section className="panel war-history">
-    <div className="table-section-heading"><div><h2>{t("Clan war totals")}</h2><p>{t("Final clan scores from each war.")}</p></div>
-      <Link className="text-link" href="/war-results">{t("War Results")}</Link></div>
+    <div className="table-section-heading"><div><h2>{t(words.history)}</h2><p>{t(words.historySub)}</p></div>
+      <Link className="text-link" href={kind === "war" ? "/war-results" : "/vial-donations"}>{t(words.link)}</Link></div>
     <div className="table-scroll"><table className="resource-table">
-      <thead><tr>{header("war", t("War"))}{header("total", t("Clan total"))}{header("change", t("Change"))}{header("top", t("Top scorer"))}</tr></thead>
+      <thead><tr>{header("war", t(words.column))}{header("total", t(words.total))}{header("change", t("Change"))}{header("top", t(words.top))}</tr></thead>
       <tbody>{sorted.map(({ result, change, top }) => <tr key={result.id}>
         <td><strong>{result.label || t("Week of {date}", { date: formatWeek(result.week) })}</strong></td>
         <td>{result.clanTotal === null ? "—" : numberFormat(result.clanTotal)}</td>

@@ -12,6 +12,6 @@ export async function POST(request: Request) {
     assertSameOrigin(request);
     const actor = await requireMember();
     const input = readWarSchema.parse(await request.json());
-    return privateResponse({ reading: await readWarScreenshots(actor, input.images) });
+    return privateResponse({ reading: await readWarScreenshots(actor, input.images, { kind: input.kind }) });
   } catch (error) { return errorResponse(error); }
 }
