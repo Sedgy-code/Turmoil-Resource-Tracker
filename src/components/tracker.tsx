@@ -10,6 +10,7 @@ import { HoardingWatch } from "./hoarding-watch";
 import { RecognitionProvider, useRecognition } from "./recognition";
 import { WarResults, WarTotalsHistory } from "./war-results";
 import { SnipeChampions } from "./snipe-champions";
+import { useSortable } from "./sortable";
 import { ClanPointsBalance } from "./clan-points-balance";
 import { announceClanPointsUpdate } from "@/lib/clan-points";
 import { MemberAvatar as Avatar, MemberName, MemberTitle } from "./member-identity";
@@ -1669,7 +1670,7 @@ function MembersManager({
   const [filter, setFilter] = useState("active");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const [sort, setSort] = useState("oldest");
+  type RosterSort = "member" | "role" | "status" | "updated" | "joined";
   const [capacity, setCapacity] = useState(50);
   const [capacityDraft, setCapacityDraft] = useState("50");
   const [capacitySaving, setCapacitySaving] = useState(false);
@@ -1744,18 +1745,23 @@ function MembersManager({
       setBusy(null);
     }
   }
-  const filtered = members
+  const shown = members
     .filter((member) =>
       member.username.toLowerCase().includes(search.toLowerCase()),
     )
     .filter(
       (member) => filter === "all" || member.active === (filter === "active"),
-    )
-    .sort((a, b) => {
-      if (sort === "alphabetical") return a.username.localeCompare(b.username, undefined, { sensitivity: "base", numeric: true });
-      const difference = new Date(a.lastUpdatedAt ?? 0).getTime() - new Date(b.lastUpdatedAt ?? 0).getTime();
-      return sort === "oldest" ? difference : -difference;
-    });
+    );
+  const { sorted: filtered, sort: rosterSort, setSort: setRosterSort, header: rosterHeader } = useSortable<Member, RosterSort>(shown, {
+    member: (member) => member.username,
+    role: (member) => member.role === "ADMIN" ? "Admin" : "Member",
+    status: (member) => member.active ? "Active" : "Inactive",
+    // Never-updated members count as the oldest.
+    updated: (member) => new Date(member.lastUpdatedAt ?? 0).getTime(),
+    joined: (member) => new Date(member.joinedAt).getTime(),
+  }, { key: "updated", direction: "asc" });
+  const sort = rosterSort.key === "member" ? "alphabetical" : rosterSort.key === "updated" ? (rosterSort.direction === "asc" ? "oldest" : "newest") : "";
+  const setSort = (value: string) => setRosterSort(value === "alphabetical" ? { key: "member", direction: "asc" } : { key: "updated", direction: value === "newest" ? "desc" : "asc" });
   const activeCount = members.filter((member) => member.active).length;
   const openSlots = Math.max(0, capacity - activeCount);
   return (
@@ -1821,7 +1827,7 @@ function MembersManager({
           ))}
         </div>
         <div className="roster-tools">
-          <label><span>Sort</span><select aria-label="Sort roster" value={sort} onChange={(event) => setSort(event.target.value)}><option value="oldest">Oldest update first</option><option value="newest">Newest update first</option><option value="alphabetical">A–Z</option></select></label>
+          <label><span>Sort</span><select aria-label="Sort roster" value={sort} onChange={(event) => setSort(event.target.value)}>{sort === "" && <option value="">By column</option>}<option value="oldest">Oldest update first</option><option value="newest">Newest update first</option><option value="alphabetical">A–Z</option></select></label>
           <div className="freshness-legend"><span className="freshness fresh"><i />Under 24h</span><span className="freshness aging"><i />1–7 days</span><span className="freshness stale"><i />A week or never</span></div>
         </div>
         {error && (
@@ -1834,11 +1840,11 @@ function MembersManager({
           <table className="management-table">
             <thead>
               <tr>
-                <th>Member</th>
-                <th>Role</th>
-                <th>Status</th>
-                <th>Last resource update</th>
-                <th>Joined</th>
+                {rosterHeader("member", "Member")}
+                {rosterHeader("role", "Role")}
+                {rosterHeader("status", "Status")}
+                {rosterHeader("updated", "Last resource update")}
+                {rosterHeader("joined", "Joined")}
                 <th>Actions</th>
               </tr>
             </thead>

@@ -196,3 +196,15 @@ export interface RecognitionResponse {
   /** Latest war's points per member. */
   latestWar: { id: string; week: string; label: string; clanTotal: number | null; points: Record<string, number> } | null;
 }
+export interface WarSpendingRow {
+  member: Member;
+  /** Holdings (estimated war points) before the war week; null if they never saved before it. */
+  before: number | null;
+  /** Holdings at their first-available save after the war started; null if not updated since. */
+  after: number | null;
+  /** before − after: positive means resources were spent, negative means they grew. */
+  spent: number | null;
+  warPoints: number | null;
+  savedAfterAt: string | null;
+}
+export interface WarSpendingResponse { week: string; warWeeks: string[]; rows: WarSpendingRow[] }
