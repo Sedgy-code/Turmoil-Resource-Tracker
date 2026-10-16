@@ -1535,8 +1535,8 @@ function ResourceForm({
                 icon={<InputIcon size={15} />}
                 help={cost ? `${t(guide.help)} ${t(cost.help)}` : t(guide.help)}
                 guide={!readOnly && <>
-                  <FieldGuide field={key} hint={t(guide.where)} />
-                  {cost && <FieldGuide field={cost.key} hint={t(cost.where)} />}
+                  <FieldGuide field={key} hint={t(guide.where)} label={cost ? t("Where’s the amount?") : undefined} />
+                  {cost && <FieldGuide field={cost.key} hint={t(cost.where)} label={t("Where’s the cost?")} />}
                 </>}
                 boxes={boxes}
               />

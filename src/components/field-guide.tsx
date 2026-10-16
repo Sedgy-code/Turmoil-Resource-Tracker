@@ -23,7 +23,7 @@ export const FIELD_PICTURES = {
 export type GuidedField = keyof typeof FIELD_PICTURES;
 
 /** "Where do I find this?" — opens a picture of the game screen with the number boxed in gold. */
-export function FieldGuide({ field, hint }: { field: GuidedField; hint: string }) {
+export function FieldGuide({ field, hint, label }: { field: GuidedField; hint: string; label?: string }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const id = useId();
@@ -37,7 +37,7 @@ export function FieldGuide({ field, hint }: { field: GuidedField; hint: string }
         onClick={() => setOpen(!open)}
       >
         <ImageIcon size={13} aria-hidden="true" />
-        {t("Where do I find this?")}
+        {label ?? t("Where do I find this?")}
         <ChevronDown size={13} aria-hidden="true" className={open ? "open" : undefined} />
       </button>
       {open && (

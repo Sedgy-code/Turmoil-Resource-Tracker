@@ -371,6 +371,8 @@
  "Welcome to Turmoil Clan Hub": "Turmoil Clan Hubへようこそ",
  "What each member has saved.": "各メンバーが保存した内容。",
  "Where do I find this?": "どこで見つけられる？",
+ "Where’s the amount?": "数はどこ？",
+ "Where’s the cost?": "コストはどこ？",
  "Whole estimated skill summons, using each member's saved cost for five skills.": "スキル召喚の見込み（整数）。各メンバーが保存したスキル5個のコストを使います。",
  "Whole summons available from saved mount keys and summon cost.": "保存したマウントキーと召喚コストから出した召喚回数（整数）。",
  "Whole summons, worked out for each member.": "召喚回数（整数）。メンバーごとに計算。",
