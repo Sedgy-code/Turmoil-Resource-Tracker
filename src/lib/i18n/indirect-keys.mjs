@@ -7,6 +7,8 @@ export const INDIRECT_KEYS = [
   "Pick activities to estimate the clan’s war points.", "Plan events and say when you can join.",
   "Earn Clan Points by saving your resources each week and joining snipes.", "Saved weekly totals for the clan.",
   "View saved resources", "Update my resources", "Add my resources", "Resources saved", "Not saved yet",
+  // Guide page sections
+  "Skills screen", "Mounts screen", "Pets screen", "Tech Tree", "Forge screen",
   // Navigation
   "Dashboard", "My Resources", "Manage Members", "Weekly History", "Estimated War Points", "Snipe Plans", "Reward Shop",
   // Resource fields

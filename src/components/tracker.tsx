@@ -816,6 +816,10 @@ function TrackerApp({ view }: { view: View }) {
                 <p>{t("Every Monday at 00:00 UTC the clan totals are saved. You can view past weeks, but not change them.")}</p>
               </div>
             </div>
+            <Link className="button secondary guide-modal-link" href="/guide">
+              {t("See the picture guide")}
+              <ArrowRight size={16} />
+            </Link>
             <button className="button primary" onClick={() => setHelp(false)}>
               {t("Got it")}
               <Check size={16} />
