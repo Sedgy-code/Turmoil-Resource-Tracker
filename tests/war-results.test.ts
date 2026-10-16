@@ -164,5 +164,8 @@ test("the contribution ranking puts the least active members first", async () =>
     assert.equal(ranking.rows.find(({ member }) => member.id === star.id)?.vials, 50);
     assert.equal(ranking.records.wars, 1);
     assert.equal(ranking.weights.vials, 20);
+    // Members there from the start aren't "new", even though the site is young.
+    await db.query("UPDATE app_members SET joined_at = NOW() - INTERVAL '5 days'");
+    assert.equal((await contributionRanking(admin, db)).rows.some((row) => row.isNew), false);
   });
 });
