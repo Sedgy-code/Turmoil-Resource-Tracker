@@ -14,7 +14,7 @@ type SortValue = string | number | null | undefined;
 export function useSortable<T, K extends string>(
   rows: T[],
   getters: Record<K, (row: T) => SortValue>,
-  initial: SortState<K>,
+  initial: SortState<NoInfer<K>>,
 ) {
   const [sort, setSort] = useState<SortState<K>>(initial);
   const sorted = [...rows].sort((a, b) => {
