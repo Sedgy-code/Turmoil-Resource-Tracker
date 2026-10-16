@@ -89,11 +89,14 @@ export async function contributionRanking(actor: Member, db?: Database, now = ne
   const totalWeight = available.reduce((sum, metric) => sum + RANKING_WEIGHTS[metric], 0);
   const values = (metric: RankingMetric) => raw.map((row) => Number(row[metric] ?? 0));
 
+  // Everyone who signed up in the first few days was already in the clan when the site launched.
+  const launch = Math.min(...members.map((member) => new Date(member.joinedAt).getTime()));
+  const joinedAfterLaunch = (member: Member) => new Date(member.joinedAt).getTime() > launch + 3 * DAY;
   const rows: ContributionRow[] = raw.map((row) => {
     const parts = Object.fromEntries(available.map((metric) => [metric, percentile(Number(row[metric] ?? 0), values(metric))])) as Partial<Record<RankingMetric, number>>;
     const base = totalWeight ? available.reduce((sum, metric) => sum + (parts[metric] ?? 0) * RANKING_WEIGHTS[metric], 0) / totalWeight * 100 : 50;
     const penalty = (row.hoarding === "high" ? 15 : row.hoarding === "watch" ? 5 : 0) + Math.min(15, row.noShows * 5);
-    return { ...row, parts, penalty, score: Math.max(0, Math.round(base - penalty)), isNew: row.daysInClan < NEW_MEMBER_DAYS, rank: 0 };
+    return { ...row, parts, penalty, score: Math.max(0, Math.round(base - penalty)), isNew: row.daysInClan < NEW_MEMBER_DAYS && joinedAfterLaunch(row.member), rank: 0 };
   });
   rows.sort((a, b) => a.score - b.score || (a.lastSavedAt ?? "").localeCompare(b.lastSavedAt ?? ""));
   rows.forEach((row, index) => { row.rank = index + 1; });
