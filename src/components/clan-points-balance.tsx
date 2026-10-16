@@ -5,8 +5,10 @@ import { Coins } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CLAN_POINTS_UPDATED, type ClanPointsUpdate } from "@/lib/clan-points";
 import { numberFormat } from "@/lib/resources";
+import { useT } from "@/lib/i18n";
 
 export function ClanPointsBalance({ memberId, revision }: { memberId: string; revision?: string | null }) {
+  const t = useT();
   const [wallet, setWallet] = useState<{ memberId: string; balance: number } | null>(null);
   const [unavailable, setUnavailable] = useState(false);
   const controller = useRef<AbortController | null>(null);
@@ -65,7 +67,7 @@ export function ClanPointsBalance({ memberId, revision }: { memberId: string; re
     aria-label={balance === null ? "Clan Points. Open Reward Shop." : `${numberFormat(balance)} Clan Points. Open Reward Shop.`}
     title={unavailable ? "Unable to refresh your balance. Open Reward Shop to retry." : "Your current Clan Points. Open Reward Shop."}>
     <Coins size={17} aria-hidden="true" />
-    <span className="topbar-points-label">Clan Points</span>
+    <span className="topbar-points-label">{t("Clan Points")}</span>
     <strong aria-live="polite" aria-atomic="true">{balance === null ? "—" : numberFormat(balance)}</strong>
   </Link>;
 }

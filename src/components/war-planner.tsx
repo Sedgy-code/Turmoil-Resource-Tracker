@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { Check, LoaderCircle, Settings2, Swords } from "lucide-react";
 import { numberFormat } from "@/lib/resources";
 import { DEFAULT_WAR_RATES, WAR_ACTIVITIES, estimateWar } from "@/lib/war";
+import { useT } from "@/lib/i18n";
 import type { ClanSettings, DashboardResponse, WarActivity, WarEstimate, WarRates } from "@/lib/types";
 
 type Props = {
@@ -39,6 +40,7 @@ const RATE_FIELDS: { key: keyof WarRates; label: string }[] = [
 ];
 
 export function WarPlanner({ data, notify }: Props) {
+  const t = useT();
   const [scope, setScope] = useState<"mine" | "clan" | "member">("mine");
   const [memberId, setMemberId] = useState(data.currentUser.id);
   const [activities, setActivities] = useState<WarActivity[]>(WAR_ACTIVITIES.map(({ key }) => key));
@@ -79,7 +81,7 @@ export function WarPlanner({ data, notify }: Props) {
       };
     }
   }, [entries, rates, activities, data.live]);
-  const scopeName = scope === "clan" ? "Clan totals" : scope === "mine" ? "My totals" : members.find((member) => member.id === memberId)?.username || "Member";
+  const scopeName = scope === "clan" ? t("Clan totals") : scope === "mine" ? t("My totals") : members.find((member) => member.id === memberId)?.username || t("Member");
 
   function toggleActivity(activity: WarActivity) {
     setActivities((selected) => selected.includes(activity) ? selected.filter((key) => key !== activity) : [...selected, activity]);
@@ -104,31 +106,31 @@ export function WarPlanner({ data, notify }: Props) {
   }
 
   if (!loaded) return <section className="planning-panel planning-state" aria-live="polite">
-    {loadError ? <><h2>War estimates are unavailable</h2><p>{loadError}</p><button className="planning-button" onClick={() => void load()}>Try again</button></> : <><LoaderCircle className="spin" size={24} /><p>Loading clan war rates…</p></>}
+    {loadError ? <><h2>{t("War estimates are unavailable")}</h2><p>{t(loadError)}</p><button className="planning-button" onClick={() => void load()}>{t("Try again")}</button></> : <><LoaderCircle className="spin" size={24} /><p>{t("Loading…")}</p></>}
   </section>;
 
   return <div className="planning-stack">
     <section className="planning-panel">
-      <div className="planning-heading"><div><span className="planning-eyebrow">Make every resource count</span><h2>Estimated war points</h2><p>Choose a bank and the activities you plan to use.</p></div><Swords size={28} className="planning-gold" aria-hidden="true" /></div>
+      <div className="planning-heading"><div><span className="planning-eyebrow">{t("Make every resource count")}</span><h2>{t("Estimated war points")}</h2><p>{t("Choose whose resources to use and which activities to count.")}</p></div><Swords size={28} className="planning-gold" aria-hidden="true" /></div>
       <div className="planning-controls">
-        <div className="planning-tabs" aria-label="War estimate scope">
-          <button type="button" aria-pressed={scope === "mine"} onClick={() => setScope("mine")}>My totals</button>
-          <button type="button" aria-pressed={scope === "clan"} onClick={() => setScope("clan")}>Clan totals</button>
-          <button type="button" aria-pressed={scope === "member"} onClick={() => setScope("member")}>Individual member</button>
+        <div className="planning-tabs" aria-label={t("Estimated war points")}>
+          <button type="button" aria-pressed={scope === "mine"} onClick={() => setScope("mine")}>{t("My totals")}</button>
+          <button type="button" aria-pressed={scope === "clan"} onClick={() => setScope("clan")}>{t("Clan totals")}</button>
+          <button type="button" aria-pressed={scope === "member"} onClick={() => setScope("member")}>{t("Individual member")}</button>
         </div>
-        {scope === "member" && <label className="planning-field planning-member-select"><span>Select member</span><select aria-label="Select member" value={memberId} onChange={(event) => setMemberId(event.target.value)}>{members.map((member) => <option key={member.id} value={member.id}>{member.username}</option>)}</select></label>}
+        {scope === "member" && <label className="planning-field planning-member-select"><span>{t("Select member")}</span><select aria-label={t("Select member")} value={memberId} onChange={(event) => setMemberId(event.target.value)}>{members.map((member) => <option key={member.id} value={member.id}>{member.username}</option>)}</select></label>}
       </div>
-      <fieldset className="planning-activities"><legend>Include activities</legend>{WAR_ACTIVITIES.map(({ key, label, description }) => <label key={key} className="planning-check"><input type="checkbox" aria-label={label} checked={activities.includes(key)} onChange={() => toggleActivity(key)} /><span><strong>{label}</strong><small>{key === "hammers" ? `${points(rates.hammersMin, rates.hammersMax)} points per hammer.` : description}</small></span></label>)}</fieldset>
-      {estimateError && <p className="planning-notice" role="alert">{estimateError} You can also select fewer activities or view an individual member’s estimate.</p>}
-      <div className="planning-table-wrap"><table className="planning-table"><caption className="planning-sr-only">{scopeName} estimated war points</caption><thead><tr><th scope="col">Activity</th><th scope="col">Estimated actions</th><th scope="col">Points each</th><th scope="col">Estimated points</th></tr></thead><tbody>{estimate.rows.map((row) => <tr key={row.activity}><th scope="row">{row.label}</th><td>{numberFormat(row.quantity)}</td><td>{row.activity === "hammers" ? points(rates.hammersMin, rates.hammersMax) : numberFormat(rates[row.activity])}</td><td className="planning-gold">{points(row.minimum, row.maximum)}</td></tr>)}{estimate.rows.length === 0 && <tr><td colSpan={4} className="planning-table-empty">{estimateError ? "Estimate unavailable until the selected points are reduced." : "Select an activity to calculate an estimate."}</td></tr>}</tbody></table></div>
-      <div className="planning-total"><div><span>{scopeName}</span><small>Total selected points</small></div><strong className="war-estimate-total" aria-live="polite">{estimateError ? "--" : points(estimate.minimum, estimate.maximum)}</strong></div>
-      {estimate.missingCosts > 0 && <p className="planning-notice" role="status">{numberFormat(estimate.missingCosts)} missing summon {estimate.missingCosts === 1 ? "cost is" : "costs are"} leaving some resources out of this estimate. Add the costs in My Resources to include them.</p>}
-      {entries.length === 0 && <p className="planning-notice">No saved resource bank for this selection yet. Save a bank in My Resources to start planning.</p>}
-      <p className="planning-footnote">Summons use each member’s saved costs. Bonus mount merges = mount summons × extra mount chance ÷ 100. Existing egg/pet merges use Total eggs/pets, assuming every egg and pet will be ascended when needed. Egg/pet summon then merge = eggshells ÷ 100 × extra pet summon chance ÷ 100. Chances estimate expected actions and can produce fractions; point estimates are rounded to whole points. Summoning and merging are separate scoring actions. {data.live === false && "Older snapshots retain their original saved merge counts."}</p>
+      <fieldset className="planning-activities"><legend>{t("Include activities")}</legend>{WAR_ACTIVITIES.map(({ key, label, description }) => <label key={key} className="planning-check"><input type="checkbox" aria-label={t(label)} checked={activities.includes(key)} onChange={() => toggleActivity(key)} /><span><strong>{t(label)}</strong><small>{key === "hammers" ? t("{points} points per hammer.", { points: points(rates.hammersMin, rates.hammersMax) }) : t(description)}</small></span></label>)}</fieldset>
+      {estimateError && <p className="planning-notice" role="alert">{t(estimateError)} {t("Try selecting fewer activities or one member.")}</p>}
+      <div className="planning-table-wrap"><table className="planning-table"><caption className="planning-sr-only">{scopeName} · {t("Estimated war points")}</caption><thead><tr><th scope="col">{t("Activity")}</th><th scope="col">{t("Estimated actions")}</th><th scope="col">{t("Points each")}</th><th scope="col">{t("Estimated points")}</th></tr></thead><tbody>{estimate.rows.map((row) => <tr key={row.activity}><th scope="row">{t(row.label)}</th><td>{numberFormat(row.quantity)}</td><td>{row.activity === "hammers" ? points(rates.hammersMin, rates.hammersMax) : numberFormat(rates[row.activity])}</td><td className="planning-gold">{points(row.minimum, row.maximum)}</td></tr>)}{estimate.rows.length === 0 && <tr><td colSpan={4} className="planning-table-empty">{t(estimateError ? "Estimate unavailable until the selected points are reduced." : "Select an activity to calculate an estimate.")}</td></tr>}</tbody></table></div>
+      <div className="planning-total"><div><span>{scopeName}</span><small>{t("Total selected points")}</small></div><strong className="war-estimate-total" aria-live="polite">{estimateError ? "--" : points(estimate.minimum, estimate.maximum)}</strong></div>
+      {estimate.missingCosts > 0 && <p className="planning-notice" role="status">{t("{count} summon cost(s) missing, so some resources are left out. Add them in My Resources.", { count: numberFormat(estimate.missingCosts) })}</p>}
+      {entries.length === 0 && <p className="planning-notice">{t("No saved resources yet. Save yours in My Resources first.")}</p>}
+      <p className="planning-footnote">{t("Summons use each member’s saved costs. Bonus mount merges = mount summons × extra mount chance ÷ 100. Existing egg/pet merges use Total eggs/pets. Egg/pet summon then merge = eggshells ÷ 100 × extra pet summon chance ÷ 100. Bonus numbers are averages, so points are rounded.")} {data.live === false && t("Older weeks keep their original saved merge counts.")}</p>
     </section>
     <section className="planning-panel">
-      <div className="planning-heading"><div><h2>Clan point rates</h2><p>{isAdmin ? "Saved rates apply to every member’s estimates and open snipe plans." : "Your clan leadership sets the point rates used for these estimates."}</p></div>{isAdmin && <button className="planning-button planning-button-subtle" onClick={() => { setRateDraft(rates); setEditingRates((open) => !open); }} aria-expanded={editingRates}><Settings2 size={15} />{editingRates ? "Cancel" : "Edit rates"}</button>}</div>
-      {editingRates && isAdmin ? <form onSubmit={saveRates} className="planning-form"><div className="planning-form-grid">{RATE_FIELDS.map(({ key, label }) => <label className="planning-field" key={key}><span>{label}</span><input type="number" min="0" max="100000" step="1" required value={rateDraft[key]} onChange={(event) => setRateDraft((draft) => ({ ...draft, [key]: Number(event.target.value) }))} /></label>)}</div><div className="planning-form-actions"><button type="submit" className="planning-button" disabled={saving}>{saving ? <LoaderCircle size={15} className="spin" /> : <Check size={15} />}Save point rates</button></div></form> : <div className="planning-rate-list">{WAR_ACTIVITIES.map(({ key, label }) => <div key={key}><span>{label}</span><strong>{key === "hammers" ? points(rates.hammersMin, rates.hammersMax) : numberFormat(rates[key])}</strong></div>)}</div>}
+      <div className="planning-heading"><div><h2>{t("Clan point rates")}</h2><p>{isAdmin ? "Saved rates apply to every member’s estimates and open snipe plans." : t("Clan leadership sets these point rates.")}</p></div>{isAdmin && <button className="planning-button planning-button-subtle" onClick={() => { setRateDraft(rates); setEditingRates((open) => !open); }} aria-expanded={editingRates}><Settings2 size={15} />{editingRates ? "Cancel" : "Edit rates"}</button>}</div>
+      {editingRates && isAdmin ? <form onSubmit={saveRates} className="planning-form"><div className="planning-form-grid">{RATE_FIELDS.map(({ key, label }) => <label className="planning-field" key={key}><span>{label}</span><input type="number" min="0" max="100000" step="1" required value={rateDraft[key]} onChange={(event) => setRateDraft((draft) => ({ ...draft, [key]: Number(event.target.value) }))} /></label>)}</div><div className="planning-form-actions"><button type="submit" className="planning-button" disabled={saving}>{saving ? <LoaderCircle size={15} className="spin" /> : <Check size={15} />}Save point rates</button></div></form> : <div className="planning-rate-list">{WAR_ACTIVITIES.map(({ key, label }) => <div key={key}><span>{t(label)}</span><strong>{key === "hammers" ? points(rates.hammersMin, rates.hammersMax) : numberFormat(rates[key])}</strong></div>)}</div>}
     </section>
   </div>;
 }

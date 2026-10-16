@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { CircleAlert } from "lucide-react";
 import type { MemberPlanningIssues } from "@/lib/planning-completeness";
 import styles from "./missing-data-indicator.module.css";
+import { useT } from "@/lib/i18n";
 
 export function MissingDataIndicator({ members, label, accessibleLabel, compact = false }: {
   members: MemberPlanningIssues[];
@@ -12,6 +13,7 @@ export function MissingDataIndicator({ members, label, accessibleLabel, compact 
   accessibleLabel?: string;
   compact?: boolean;
 }) {
+  const t = useT();
   const id = useId();
   const button = useRef<HTMLButtonElement>(null);
   const popup = useRef<HTMLDivElement>(null);
@@ -101,11 +103,11 @@ export function MissingDataIndicator({ members, label, accessibleLabel, compact 
       onPointerEnter={cancelClose}
       onPointerLeave={delayClose}
     >
-      <strong className={styles.heading}>Members with incomplete estimates</strong>
-      <p>These fields are needed to include all potential war points.</p>
+      <strong className={styles.heading}>{t("Members with missing numbers")}</strong>
+      <p>{t("These numbers are needed to count all war points.")}</p>
       <ul>{members.map((member) => <li key={member.memberId}>
         <strong>{member.username}</strong>
-        <span>{member.issues.map((issue) => issue.label).join(" · ")}</span>
+        <span>{member.issues.map((issue) => t(issue.label)).join(" · ")}</span>
       </li>)}</ul>
     </div>, document.body)}
   </>;
