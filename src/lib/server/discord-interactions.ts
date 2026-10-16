@@ -116,7 +116,10 @@ export async function handleInteraction(interaction: Interaction, db?: Database,
 /** Adds /checkin and /snipe-start to the Turmoil server (safe to repeat). */
 export async function registerCommands(fetcher: typeof fetch = fetch): Promise<boolean> {
   const token = process.env.DISCORD_BOT_TOKEN;
-  if (!token || !guildId()) return false;
+  if (!token || !guildId()) {
+    console.warn("Discord commands not registered: bot token or server id missing");
+    return false;
+  }
   const applicationId = process.env.DISCORD_CLIENT_ID || DEFAULT_APPLICATION_ID;
   const response = await fetcher(`https://discord.com/api/v10/applications/${applicationId}/guilds/${guildId()}/commands`, {
     method: "PUT",
@@ -126,5 +129,9 @@ export async function registerCommands(fetcher: typeof fetch = fetch): Promise<b
       { name: "snipe-start", description: "Admins: post the check-in button for the snipe starting now", type: 1 },
     ]),
   });
+  if (!response.ok) {
+    // Discord's error text never includes the token; it explains what's missing (e.g. "Missing Access").
+    console.warn("Discord commands not registered", response.status, (await response.text()).slice(0, 300));
+  }
   return response.ok;
 }
