@@ -11,6 +11,8 @@ import { RecognitionProvider, useRecognition } from "./recognition";
 import { WarResults, WarTotalsHistory } from "./war-results";
 import { SnipeChampions } from "./snipe-champions";
 import { ContributionRanking } from "./contribution-ranking";
+import { WarWeek } from "./war-week";
+import { CountdownStrip } from "./countdown-strip";
 import { useSortable } from "./sortable";
 import { ClanPointsBalance } from "./clan-points-balance";
 import { announceClanPointsUpdate } from "@/lib/clan-points";
@@ -39,7 +41,6 @@ import {
   ArrowUp,
   ArrowUpDown,
   Droplets,
-  Target,
   ArrowRight,
   ArrowUpRight,
   Backpack,
@@ -64,10 +65,7 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
-  ScanEye,
   Trophy,
-  FlaskConical,
-  ListOrdered,
   Crosshair,
   Swords,
   Ticket,
@@ -106,7 +104,7 @@ import type {
   WarRates,
 } from "@/lib/types";
 
-type View = "dashboard" | "resources" | "members" | "weeks" | "war" | "snipes" | "store" | "hoarding" | "warResults" | "vials" | "ranking";
+type View = "dashboard" | "resources" | "members" | "weeks" | "war" | "warWeek" | "snipes" | "store" | "hoarding" | "warResults" | "vials" | "ranking";
 const ADMIN_VIEWS: View[] = ["members", "hoarding", "ranking"];
 type Icon = ComponentType<{
   size?: number;
@@ -119,6 +117,7 @@ const viewNames = {
   members: "Manage Members",
   weeks: "Weekly History",
   war: "Estimated War Points",
+  warWeek: "War Week",
   snipes: "Snipe Plans",
   store: "Reward Shop",
   hoarding: "Hoarding Watch",
@@ -126,19 +125,31 @@ const viewNames = {
   vials: "Vial Donations",
   ranking: "Contribution Ranking",
 };
-const navigation: { view: View; href: string; icon: Icon }[] = [
-  { view: "dashboard", href: "/", icon: LayoutDashboard },
-  { view: "resources", href: "/resources", icon: Backpack },
-  { view: "war", href: "/war-points", icon: Swords },
-  { view: "snipes", href: "/snipes", icon: Target },
-  { view: "warResults", href: "/war-results", icon: Trophy },
-  { view: "vials", href: "/vial-donations", icon: FlaskConical },
-  { view: "store", href: "/reward-shop", icon: Droplets },
-  { view: "members", href: "/members", icon: Users },
-  { view: "hoarding", href: "/hoarding-watch", icon: ScanEye },
-  { view: "ranking", href: "/contribution-ranking", icon: ListOrdered },
-  { view: "weeks", href: "/weeks", icon: CalendarDays },
+const VIEW_HREF: Record<View, string> = {
+  dashboard: "/",
+  resources: "/resources",
+  warWeek: "/war",
+  snipes: "/snipes",
+  war: "/war-points",
+  warResults: "/war-results",
+  vials: "/vial-donations",
+  weeks: "/weeks",
+  store: "/reward-shop",
+  members: "/members",
+  ranking: "/contribution-ranking",
+  hoarding: "/hoarding-watch",
+};
+type Section = "home" | "resources" | "war" | "records" | "store" | "leadership";
+/** The menu: each section opens its first tab; sections with more than one page show tabs. */
+const SECTIONS: { section: Section; label: string; short: string; icon: Icon; tabs: { view: View; label: string }[]; admin?: boolean }[] = [
+  { section: "home", label: "Home", short: "Home", icon: LayoutDashboard, tabs: [{ view: "dashboard", label: "Home" }] },
+  { section: "resources", label: "My Resources", short: "Resources", icon: Backpack, tabs: [{ view: "resources", label: "My Resources" }] },
+  { section: "war", label: "War", short: "War", icon: Swords, tabs: [{ view: "warWeek", label: "This Week" }, { view: "snipes", label: "Snipes" }, { view: "war", label: "Points Calculator" }] },
+  { section: "records", label: "Records", short: "Records", icon: Trophy, tabs: [{ view: "warResults", label: "War Results" }, { view: "vials", label: "Vials" }, { view: "weeks", label: "Weekly History" }] },
+  { section: "store", label: "Reward Shop", short: "Shop", icon: Droplets, tabs: [{ view: "store", label: "Reward Shop" }] },
+  { section: "leadership", label: "Leadership", short: "Leadership", icon: ShieldCheck, admin: true, tabs: [{ view: "members", label: "Members" }, { view: "ranking", label: "Ranking" }, { view: "hoarding", label: "Hoarding" }] },
 ];
+const sectionOf = (view: View) => SECTIONS.find((entry) => entry.tabs.some((tab) => tab.view === view))!;
 const essentials: {
   key: ResourceKey;
   icon: Icon;
@@ -358,7 +369,7 @@ function TrackerApp({ view }: { view: View }) {
     const renew = () => {
       if (document.visibilityState === "visible") {
         void checkSession();
-        if (sessionUserId && ["dashboard", "war", "snipes"].includes(view)) void refresh();
+        if (sessionUserId && ["dashboard", "war", "warWeek", "snipes"].includes(view)) void refresh();
       }
     };
     const interval = setInterval(() => {
@@ -373,7 +384,7 @@ function TrackerApp({ view }: { view: View }) {
     };
   }, [sessionUserId, view, checkSession, refresh]);
   useEffect(() => {
-    if (!["dashboard", "war", "snipes"].includes(view) || !sessionUserId) return;
+    if (!["dashboard", "war", "warWeek", "snipes"].includes(view) || !sessionUserId) return;
     const interval = setInterval(() => {
       if (document.visibilityState === "visible") void refresh();
     }, 30000);
@@ -484,25 +495,29 @@ function TrackerApp({ view }: { view: View }) {
         </Link>
         <span className="sidebar-label">{t("CLAN WORKSPACE")}</span>
         <nav aria-label={t("Main navigation")}>
-          {navigation
-            .filter((item) => !ADMIN_VIEWS.includes(item.view) || user.role === "ADMIN")
-            .map(({ view: target, href, icon: NavIcon }) => (
-              <Link
-                href={href}
-                key={target}
-                className={`nav-link ${target === view ? "active" : ""}`}
-                onClick={() => setMobileOpen(false)}
-              >
-                <NavIcon size={19} />
-                <span>{t(viewNames[target])}</span>
-                {ADMIN_VIEWS.includes(target) && (
-                  <span className="nav-admin">
-                    <ShieldCheck size={13} />
-                  </span>
-                )}
-                {target === view && <span className="nav-active-dot" />}
-              </Link>
-            ))}
+          {SECTIONS
+            .filter((entry) => !entry.admin || user.role === "ADMIN")
+            .map(({ section, label, icon: NavIcon, tabs, admin }) => {
+              const active = sectionOf(view).section === section;
+              return (
+                <Link
+                  href={VIEW_HREF[tabs[0].view]}
+                  key={section}
+                  className={`nav-link ${active ? "active" : ""}`}
+                  aria-current={active ? "page" : undefined}
+                  onClick={() => setMobileOpen(false)}
+                >
+                  <NavIcon size={19} />
+                  <span>{t(label)}</span>
+                  {admin && (
+                    <span className="nav-admin">
+                      <ShieldCheck size={13} />
+                    </span>
+                  )}
+                  {active && <span className="nav-active-dot" />}
+                </Link>
+              );
+            })}
         </nav>
         <div className="sidebar-bottom">
           <div className="game-card">
@@ -591,6 +606,15 @@ function TrackerApp({ view }: { view: View }) {
           </div>
         </header>
         <main className="main-content">
+          {sectionOf(view).tabs.length > 1 && (!sectionOf(view).admin || user.role === "ADMIN") && (
+            <nav className="section-tabs" aria-label={t(sectionOf(view).label)}>
+              {sectionOf(view).tabs.map((tab) => (
+                <Link key={tab.view} href={VIEW_HREF[tab.view]} className={tab.view === view ? "active" : ""} aria-current={tab.view === view ? "page" : undefined}>
+                  {t(tab.label)}
+                </Link>
+              ))}
+            </nav>
+          )}
           <div className="page-heading">
             <div>
               <h1>
@@ -608,6 +632,7 @@ function TrackerApp({ view }: { view: View }) {
                       : view === "vials" ? "Clan tech vial donations, read from the donation screenshots."
                       : view === "ranking" ? "Everyone ranked by how much they contribute. The bottom of the list is who to talk to first when space is needed."
                       : view === "war" ? "Pick activities to estimate the clan’s war points."
+                      : view === "warWeek" ? "What scores on each war day, and how much the clan has saved for it."
                         : view === "snipes" ? "Plan events and say when you can join."
                           : view === "store" ? "Earn Clan Points by saving your resources each week and joining snipes."
                             : "Saved weekly totals for the clan.")}
@@ -664,6 +689,7 @@ function TrackerApp({ view }: { view: View }) {
             <DashboardSkeleton />
           ) : data && dataMatches && view === "dashboard" ? (
             <>
+              {data.live !== false && <CountdownStrip lastSavedAt={ownEntry?.updatedAt ?? null} />}
               <section className="welcome-strip">
                 <ClanBrand variant="full" className="welcome-crest" size={84} sizes="84px" decorative />
                 <div className="welcome-copy">
@@ -746,6 +772,8 @@ function TrackerApp({ view }: { view: View }) {
             <MembersManager currentUser={user} notify={notify} refresh={refresh} />
           ) : data && dataMatches && view === "weeks" ? (
             <Weeks data={data} week={week} selectWeek={selectWeek} notify={notify} refresh={refresh} />
+          ) : data && view === "warWeek" ? (
+            <WarWeek data={data} />
           ) : data && view === "war" ? (
             <WarPlanner data={data} notify={notify} refresh={refresh} />
           ) : data && view === "snipes" ? (
@@ -761,6 +789,14 @@ function TrackerApp({ view }: { view: View }) {
           </footer>
         </main>
       </div>
+      <nav className="bottom-bar" aria-label={t("Quick navigation")}>
+        {SECTIONS.filter((entry) => !entry.admin).map(({ section, short, icon: NavIcon, tabs }) => (
+          <Link key={section} href={VIEW_HREF[tabs[0].view]} className={sectionOf(view).section === section ? "active" : ""} aria-current={sectionOf(view).section === section ? "page" : undefined}>
+            <NavIcon size={20} />
+            <span>{t(short)}</span>
+          </Link>
+        ))}
+      </nav>
       {toast && (
         <div
           className={`toast ${toast.error ? "toast-error" : ""}`}
@@ -2057,8 +2093,8 @@ function Weeks({
       <div className="archive-note">
         <CircleHelp size={16} />
         <span>
-          Weeks begin Monday 00:00 UTC, which is Monday 10am AEST or 11am AEDT
-          in Sydney. Historical views are read-only; live banks carry forward.
+          Weeks begin Monday 00:00 UTC. Historical views are read-only; live
+          banks carry forward.
         </span>
       </div>
     </>
