@@ -39,6 +39,7 @@ export const INDIRECT_KEYS = [
   "Newly summoned mount merges", "Existing egg/pet merges", "Egg/pet summon then merge",
   "Saved for reference alongside the original planned actions.", "Original planned merge count saved in this snapshot.",
   "Original existing merge count saved in this snapshot.", "Original future summon/merge count saved in this snapshot.",
+  "Cost ×5", "Cost ×1",
   // Completeness labels
   "Cost for 5 skills", "Mount summon cost",
   // Freshness
