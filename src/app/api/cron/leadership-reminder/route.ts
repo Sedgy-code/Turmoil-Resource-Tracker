@@ -10,6 +10,8 @@ export async function GET(request: Request) {
     if (!secret || !timingSafeMatch(request.headers.get("authorization") ?? "", `Bearer ${secret}`)) {
       throw new ApiError(401, "Scheduled leadership reminder is not authorized.", "UNAUTHORIZED_JOB");
     }
-    return privateResponse(await sendLeadershipReminder());
+    const which = new URL(request.url).searchParams.get("for");
+    const kinds = which === "war" ? ["war" as const] : which === "vials" ? ["vials" as const] : undefined;
+    return privateResponse(await sendLeadershipReminder({ kinds }));
   } catch (error) { return errorResponse(error); }
 }

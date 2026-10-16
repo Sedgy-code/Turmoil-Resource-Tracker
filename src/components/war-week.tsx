@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, Clock } from "lucide-react";
 import { numberFormat } from "@/lib/resources";
-import { WAR_DAYS, countdown, warDay, weekStart } from "@/lib/war-calendar";
+import { WAR_DAYS, countdown, warDay, warStart } from "@/lib/war-calendar";
 import { useT } from "@/lib/i18n";
 import type { DashboardResponse } from "@/lib/types";
 import "./war-week.css";
@@ -32,7 +32,7 @@ export function WarWeek({ data }: { data: DashboardResponse }) {
   const t = useT();
   const now = useNow();
   const current = warDay(now);
-  const start = weekStart(now);
+  const start = warStart(now);
   return <div className="war-week">
     <section className="panel war-week-now">
       <div>

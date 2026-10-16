@@ -1,3 +1,4 @@
+import { warWeekOf } from "../war-calendar";
 import { currentWeek } from "../resources";
 import { appUrl } from "./config";
 import { database, type Database } from "./db";
@@ -118,14 +119,22 @@ export async function sendSnipeShoutout(
   return { posted: true, members: champions.length };
 }
 
-/** #the-dictators-den, where leadership gets the Sunday upload reminder. */
+/** #the-dictators-den, where leadership gets the upload reminders (vials Sunday, war results Monday). */
 const LEADERSHIP_CHANNEL_ID = "1504758222974746645";
 
 /** Which uploads are still missing for this clan week. */
-export async function missingUploads(db: Database, week = currentWeek()): Promise<("war" | "vials")[]> {
-  const rows = await db.query("SELECT DISTINCT kind FROM war_results WHERE week_start = $1", [week]);
-  const done = new Set(rows.map((row) => String(row.kind)));
-  return (["war", "vials"] as const).filter((kind) => !done.has(kind));
+/**
+ * Which uploads are still missing. Vials belong to the current Monday–Monday race week; war results
+ * belong to the war that ran Tuesday to Monday (its week is the Monday before Day 1).
+ */
+export async function missingUploads(db: Database, now = new Date(), kinds: ("war" | "vials")[] = ["war", "vials"]): Promise<("war" | "vials")[]> {
+  const missing: ("war" | "vials")[] = [];
+  for (const kind of kinds) {
+    const week = kind === "war" ? warWeekOf(now) : currentWeek(now);
+    const rows = await db.query("SELECT 1 FROM war_results WHERE week_start = $1 AND kind = $2 LIMIT 1", [week, kind]);
+    if (!rows.length) missing.push(kind);
+  }
+  return missing;
 }
 
 export function leadershipReminderMessage(missing: ("war" | "vials")[], base: string): string {
@@ -139,12 +148,16 @@ export function leadershipReminderMessage(missing: ("war" | "vials")[], base: st
   ].join("\n");
 }
 
-/** Sunday evening: posts in the leadership channel with the site's bot, only if something is missing. */
-export async function sendLeadershipReminder(dependencies: { db?: Database; fetcher?: typeof fetch } = {}): Promise<{ posted: boolean; missing: string[] }> {
+/**
+ * Posts in the leadership channel with the site's bot, only if something is missing:
+ * Sunday 10:00 UTC for vials (the race ends Monday 00:00 UTC), Monday 10:00 UTC for war results
+ * (the Day 6 battle ends Monday 00:00 UTC).
+ */
+export async function sendLeadershipReminder(dependencies: { db?: Database; fetcher?: typeof fetch; now?: Date; kinds?: ("war" | "vials")[] } = {}): Promise<{ posted: boolean; missing: string[] }> {
   const token = process.env.DISCORD_BOT_TOKEN;
   if (!token) throw new ApiError(503, "Set DISCORD_BOT_TOKEN so the bot can post reminders.", "REMINDER_NOT_CONFIGURED");
   const db = dependencies.db ?? await database();
-  const missing = await missingUploads(db);
+  const missing = await missingUploads(db, dependencies.now ?? new Date(), dependencies.kinds);
   if (!missing.length) return { posted: false, missing };
   const channel = process.env.DISCORD_LEADERSHIP_CHANNEL_ID || LEADERSHIP_CHANNEL_ID;
   const response = await (dependencies.fetcher ?? fetch)(`https://discord.com/api/v10/channels/${channel}/messages`, {

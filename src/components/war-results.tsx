@@ -9,6 +9,7 @@ import type { Member, WarReading, WarResult, WarResultsResponse } from "@/lib/ty
 import { MemberName } from "./member-identity";
 import { useRecognition } from "./recognition";
 import { VialDaily } from "./vial-daily";
+import { warWeekOf } from "@/lib/war-calendar";
 import { useSortable } from "./sortable";
 import "./war-results.css";
 
@@ -134,7 +135,8 @@ function AddWarResult({ kind, members, onSaved, notify }: { kind: RecordKind; me
         method: "POST",
         body: JSON.stringify({
           kind,
-          week: currentWeek(new Date(`${date}T12:00:00Z`)),
+          // A war runs Tuesday–Monday, so results saved on Day 7 (Monday) belong to the war that just ended.
+          week: kind === "war" ? warWeekOf(new Date(`${date}T12:00:00Z`)) : currentWeek(new Date(`${date}T12:00:00Z`)),
           label: label.trim(),
           clanTotal: clanTotal ? Number(clanTotal) : null,
           rows: cleaned.map((row) => ({

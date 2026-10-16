@@ -17,12 +17,16 @@
       "schedule": "30 17 * * *"
     },
     {
-      "path": "/api/cron/leadership-reminder",
+      "path": "/api/cron/monthly-awards",
+      "schedule": "20 0 1 * *"
+    },
+    {
+      "path": "/api/cron/leadership-reminder?for=vials",
       "schedule": "0 10 * * 0"
     },
     {
-      "path": "/api/cron/monthly-awards",
-      "schedule": "20 0 1 * *"
+      "path": "/api/cron/leadership-reminder?for=war",
+      "schedule": "0 10 * * 1"
     }
   ]
 }
