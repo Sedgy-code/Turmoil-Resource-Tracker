@@ -1,0 +1,24 @@
+# Runs the automatic checks on GitHub's computers every time code changes,
+# so nobody has to run anything by hand. Results show as a green tick or red
+# cross next to each change on GitHub.
+name: Checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Type check
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test
+      - name: Every interface text has a translation
+        run: node scripts/i18n-keys.mjs
