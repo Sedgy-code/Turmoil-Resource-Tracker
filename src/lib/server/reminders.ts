@@ -150,7 +150,8 @@ export async function sendLeadershipReminder(dependencies: { db?: Database; fetc
   const response = await (dependencies.fetcher ?? fetch)(`https://discord.com/api/v10/channels/${channel}/messages`, {
     method: "POST",
     headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ content: leadershipReminderMessage(missing, appUrl()), allowed_mentions: { parse: [] } }),
+    // flags 4 = no link previews, so the reminder stays short.
+    body: JSON.stringify({ content: leadershipReminderMessage(missing, appUrl()), allowed_mentions: { parse: [] }, flags: 4 }),
   });
   if (!response.ok) throw new ApiError(502, "Discord did not accept the leadership reminder.", "REMINDER_FAILED");
   return { posted: true, missing };

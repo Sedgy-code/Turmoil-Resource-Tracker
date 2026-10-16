@@ -206,4 +206,5 @@ CREATE TABLE IF NOT EXISTS hoarding_rules (
   spend_percent NUMERIC NOT NULL CHECK (spend_percent >= 0 AND spend_percent <= 100),
   wars INTEGER NOT NULL CHECK (wars BETWEEN 1 AND 10)
 );
+ALTER TABLE app_members ADD COLUMN IF NOT EXISTS never_signed_in BOOLEAN NOT NULL DEFAULT FALSE;
 `;

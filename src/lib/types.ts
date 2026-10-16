@@ -14,6 +14,8 @@ export interface Member {
   joinedAt: string;
   badge?: string | null;
   cosmetics?: EquippedCosmetics;
+  /** In the clan on Discord but has never signed in to the Clan Hub. */
+  neverSignedIn?: boolean;
 }
 
 export interface ResourceEntry {

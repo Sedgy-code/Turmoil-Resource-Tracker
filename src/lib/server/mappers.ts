@@ -25,6 +25,8 @@ export function memberFromRow(row: Record<string, unknown>): Member {
       accent: cosmeticItem(row.cosmetic_accent, "accent")?.id ?? null,
       frame: cosmeticItem(row.cosmetic_frame, "frame")?.id ?? null,
     },
+    // Added from the Discord member list but has never signed in to the Clan Hub.
+    ...(row.never_signed_in === true ? { neverSignedIn: true } : {}),
   };
 }
 export function entryFromRow(row: Record<string, unknown>): ResourceEntry {

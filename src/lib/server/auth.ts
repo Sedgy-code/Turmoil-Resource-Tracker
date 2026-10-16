@@ -35,7 +35,7 @@ export const sessionCookieOptions = () => ({
   maxAge: SESSION_SECONDS,
 });
 
-async function recordMemberProfile(
+export async function recordMemberProfile(
   tx: SqlConnection,
   member: Member,
   previous?: Member,
@@ -82,7 +82,7 @@ export async function registerDiscordMember(
           "ACCOUNT_INACTIVE",
         );
       const updated = await tx.query(
-        "UPDATE app_members SET username = $2, display_name = $3, avatar_url = $4, global_avatar_url = $5, global_display_name = $6 WHERE id = $1 RETURNING *",
+        "UPDATE app_members SET username = $2, display_name = $3, avatar_url = $4, global_avatar_url = $5, global_display_name = $6, never_signed_in = FALSE WHERE id = $1 RETURNING *",
         [existing[0].id, user.username, profile.displayName, profile.avatarUrl, profile.globalAvatarUrl, profile.globalDisplayName],
       );
       const member = memberFromRow(updated[0]);

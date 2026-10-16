@@ -1150,7 +1150,7 @@ function MemberResources({
                           <i
                             className={entry ? "updated-dot" : "pending-dot"}
                           />
-                          {t(entry ? "Resources saved" : "Not saved yet")}
+                          {t(entry ? "Resources saved" : member.neverSignedIn ? "Never signed in" : "Not saved yet")}
                         </span>
                         {missingInformation && <small className="row-missing"><CircleAlert size={12} aria-hidden="true" />{t("Missing:")} {missingInformation.issues.map((issue) => t(issue.label)).join(", ")}</small>}
                       </div>
@@ -1875,7 +1875,7 @@ function MembersManager({
                           )}
                         </strong>
                         <MemberTitle member={member} />
-                        <span>Discord · {member.discordId}</span>
+                        <span>Discord · {member.discordId}{member.neverSignedIn ? " · Never signed in" : ""}</span>
                       </div>
                     </div>
                   </td>
