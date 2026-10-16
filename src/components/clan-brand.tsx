@@ -21,7 +21,7 @@ export function ClanBrand({
 }: ClanBrandProps) {
   return (
     <Image
-      src={variant === "full" ? "/turmoil-crest.png" : "/clan-emblem.svg"}
+      src={variant === "full" ? "/turmoil-crest.png" : "/turmoil-crest-mark.webp"}
       width={size}
       height={size}
       alt={decorative ? "" : alt}

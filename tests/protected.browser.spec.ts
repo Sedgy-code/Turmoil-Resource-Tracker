@@ -35,7 +35,7 @@ test("every unauthenticated browser route shows the Discord login screen", async
   for (const path of ["/", "/resources", "/members", "/weeks", "/war-points", "/snipes", "/reward-shop", "/dew-store"]) {
     await page.goto(path);
     await expect(
-      page.getByRole("heading", { name: "One clan. Endless potential." }),
+      page.getByRole("heading", { name: "Turmoil Clan Hub" }),
     ).toBeVisible();
     await expect(
       page.getByText("Continue with Discord", { exact: true }),

@@ -1,4 +1,4 @@
-# Turmoil Resource Tracker
+# Turmoil Clan Hub
 
 A responsive, browser-based resource tracker for the Turmoil Forge Masters clan. Members sign in with Discord, keep a persistent resource bank, and plan clan events using combined inventory and war estimates. The dark interface works on phones, tablets, and desktops; no native app is required.
 

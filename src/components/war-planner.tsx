@@ -111,7 +111,7 @@ export function WarPlanner({ data, notify }: Props) {
 
   return <div className="planning-stack">
     <section className="planning-panel">
-      <div className="planning-heading"><div><span className="planning-eyebrow">{t("Make every resource count")}</span><h2>{t("Estimated war points")}</h2><p>{t("Choose whose resources to use and which activities to count.")}</p></div><Swords size={28} className="planning-gold" aria-hidden="true" /></div>
+      <div className="planning-heading"><div><h2>{t("Estimated war points")}</h2><p>{t("Choose whose resources to use and which activities to count.")}</p></div><Swords size={28} className="planning-gold" aria-hidden="true" /></div>
       <div className="planning-controls">
         <div className="planning-tabs" aria-label={t("Estimated war points")}>
           <button type="button" aria-pressed={scope === "mine"} onClick={() => setScope("mine")}>{t("My totals")}</button>

@@ -141,3 +141,27 @@ export interface ApiErrorResponse {
   error: string;
   code?: string;
 }
+
+export type HoardingReason = "large" | "growing" | "skipsSnipes" | "stale";
+export type HoardingLevel = "high" | "watch" | "ok";
+export interface HoardingRow {
+  member: Member;
+  /** Estimated war points of everything the member holds. */
+  warValue: number;
+  /** How many times the clan's typical (median) member this is. */
+  timesTypical: number | null;
+  /** Change in war value over the last four weeks; null without enough history. */
+  change: number | null;
+  trackedWeeks: number;
+  /** Saves in the last eight weeks where their holdings dropped (resources spent). */
+  spendsRecently: number;
+  lastSpendAt: string | null;
+  snipes: { held: number; saidYes: number; attended: number };
+  lastSavedAt: string | null;
+  reasons: HoardingReason[];
+  level: HoardingLevel;
+  note: string;
+  noteUpdatedAt: string | null;
+  noteBy: string | null;
+}
+export interface HoardingResponse { typicalWarValue: number; rows: HoardingRow[]; generatedAt: string }

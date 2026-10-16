@@ -268,7 +268,8 @@ test("snipe archives freeze member profiles, responses and estimates against lat
     assert.deepEqual(listed, archived);
     await assert.rejects(respondToSnipe(admin, plan.id, { answer: "yes" }, db), apiFailure("SNIPE_ARCHIVED"));
     await assert.rejects(updateSnipe(admin, plan.id, { title: "Rewrite history" }, db), apiFailure("SNIPE_ARCHIVED"));
-    await assert.rejects(updateSnipe(admin, plan.id, { archived: false }, db), apiFailure("SNIPE_ARCHIVED"));
+    const reopened = await updateSnipe(admin, plan.id, { archived: false }, db);
+    assert.equal(reopened.archived, false);
   });
 });
 

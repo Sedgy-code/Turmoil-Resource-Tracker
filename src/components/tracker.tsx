@@ -6,6 +6,7 @@ import { BankHistory } from "./bank-history";
 import { WarPlanner } from "./war-planner";
 import { SnipePlanner } from "./snipe-planner";
 import { DewStore } from "./dew-store";
+import { HoardingWatch } from "./hoarding-watch";
 import { ClanPointsBalance } from "./clan-points-balance";
 import { announceClanPointsUpdate } from "@/lib/clan-points";
 import { MemberAvatar as Avatar, MemberName, MemberTitle } from "./member-identity";
@@ -25,6 +26,7 @@ import {
   useState,
   type ComponentType,
   type FormEvent,
+  type ReactNode,
 } from "react";
 import {
   ArrowDownToLine,
@@ -57,6 +59,7 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
+  ScanEye,
   Swords,
   Ticket,
   Users,
@@ -94,7 +97,8 @@ import type {
   WarRates,
 } from "@/lib/types";
 
-type View = "dashboard" | "resources" | "members" | "weeks" | "war" | "snipes" | "store";
+type View = "dashboard" | "resources" | "members" | "weeks" | "war" | "snipes" | "store" | "hoarding";
+const ADMIN_VIEWS: View[] = ["members", "hoarding"];
 type Icon = ComponentType<{
   size?: number;
   className?: string;
@@ -108,6 +112,7 @@ const viewNames = {
   war: "Estimated War Points",
   snipes: "Snipe Plans",
   store: "Reward Shop",
+  hoarding: "Hoarding Watch",
 };
 const navigation: { view: View; href: string; icon: Icon }[] = [
   { view: "dashboard", href: "/", icon: LayoutDashboard },
@@ -116,6 +121,7 @@ const navigation: { view: View; href: string; icon: Icon }[] = [
   { view: "snipes", href: "/snipes", icon: Target },
   { view: "store", href: "/reward-shop", icon: Droplets },
   { view: "members", href: "/members", icon: Users },
+  { view: "hoarding", href: "/hoarding-watch", icon: ScanEye },
   { view: "weeks", href: "/weeks", icon: CalendarDays },
 ];
 const essentials: {
@@ -432,7 +438,7 @@ function TrackerApp({ view }: { view: View }) {
     data?.currentUser.id === session.user.id
       ? data.currentUser
       : session.user;
-  const denied = view === "members" && user.role !== "ADMIN";
+  const denied = ADMIN_VIEWS.includes(view) && user.role !== "ADMIN";
   const dataMatches = !!data && data.week === week && loadedSnapshotId === snapshotId;
   const ownEntry = data?.entries.find((entry) => entry.memberId === user.id);
   let dashboardWar: ReturnType<typeof estimateWar> | null = null;
@@ -457,13 +463,13 @@ function TrackerApp({ view }: { view: View }) {
           </span>
           <span>
             <strong>TURMOIL</strong>
-            <small>{t("RESOURCE TRACKER")}</small>
+            <small>{t("CLAN HUB")}</small>
           </span>
         </Link>
         <span className="sidebar-label">{t("CLAN WORKSPACE")}</span>
         <nav aria-label={t("Main navigation")}>
           {navigation
-            .filter((item) => item.view !== "members" || user.role === "ADMIN")
+            .filter((item) => !ADMIN_VIEWS.includes(item.view) || user.role === "ADMIN")
             .map(({ view: target, href, icon: NavIcon }) => (
               <Link
                 href={href}
@@ -473,7 +479,7 @@ function TrackerApp({ view }: { view: View }) {
               >
                 <NavIcon size={19} />
                 <span>{t(viewNames[target])}</span>
-                {target === "members" && (
+                {ADMIN_VIEWS.includes(target) && (
                   <span className="nav-admin">
                     <ShieldCheck size={13} />
                   </span>
@@ -487,10 +493,8 @@ function TrackerApp({ view }: { view: View }) {
             <Swords size={22} />
             <div>
               <strong>Forge Masters</strong>
-              <span>{t("Built for the next battle.")}</span>
             </div>
           </div>
-          <LanguagePicker className="sidebar-language" />
           <button className="nav-link help-link" onClick={() => setHelp(true)}>
             <CircleHelp size={18} />
             {t("Tracker guide")}
@@ -526,7 +530,7 @@ function TrackerApp({ view }: { view: View }) {
             >
               <Menu size={22} />
             </button>
-            <span>{t("Clan workspace")}</span>
+            <span>Turmoil Clan Hub</span>
             <ChevronRight size={13} />
             <strong>{t(viewNames[view])}</strong>
           </div>
@@ -573,17 +577,6 @@ function TrackerApp({ view }: { view: View }) {
         <main className="main-content">
           <div className="page-heading">
             <div>
-              <div className="eyebrow">
-                {t(view === "dashboard"
-                  ? "CLAN OVERVIEW"
-                  : view === "resources"
-                    ? "YOUR CONTRIBUTION"
-                    : view === "members"
-                      ? "CLAN ROSTER"
-                      : view === "war" ? "BATTLE PREPARATION"
-                        : view === "snipes" ? "PLAN TOGETHER"
-                          : view === "store" ? "YOUR CLAN REWARDS" : "THE CLAN ARCHIVE")}
-              </div>
               <h1>
                 {view === "dashboard" ? t("Resource Dashboard") : t(viewNames[view])}
               </h1>
@@ -594,6 +587,7 @@ function TrackerApp({ view }: { view: View }) {
                     ? "Copy your numbers from the game, then press Save."
                     : view === "members"
                       ? "Manage who can use the tracker."
+                      : view === "hoarding" ? "Spot members who hold a lot but don’t spend it. Only admins can see this page."
                       : view === "war" ? "Pick activities to estimate the clan’s war points."
                         : view === "snipes" ? "Plan events and say when you can join."
                           : view === "store" ? "Earn Clan Points by saving your resources each week and joining snipes."
@@ -651,45 +645,20 @@ function TrackerApp({ view }: { view: View }) {
             <DashboardSkeleton />
           ) : data && dataMatches && view === "dashboard" ? (
             <>
-              <section className="hero">
-                <div className="hero-copy">
-                  <span className="hero-eyebrow">
-                    <span /> {t("UNITED WE FORGE")}
-                  </span>
-                  <h2>{t("Stronger, together.")}</h2>
+              <section className="welcome-strip">
+                <ClanBrand variant="full" className="welcome-crest" size={84} sizes="84px" decorative />
+                <div className="welcome-copy">
+                  <h2>{t("Welcome to Turmoil Clan Hub")}</h2>
                   <p>{t("Save your resources so the clan can plan the next war.")}</p>
-                  <Link
-                    href={`/resources?week=${week}${snapshotId ? `&snapshot=${encodeURIComponent(snapshotId)}` : ""}`}
-                    className="button primary"
-                  >
-                    {t(data.live === false ? "View saved resources" : ownEntry ? "Update my resources" : "Add my resources")}
-                    <ArrowRight size={16} />
-                  </Link>
                 </div>
-                <ClanBrand
-                  variant="full"
-                  className="hero-crest"
-                  size={360}
-                  sizes="(max-width: 650px) 125px, (max-width: 1100px) 260px, 360px"
-                  decorative
-                />
-                <span className="hero-tag">
-                  <Sparkles size={13} />
-                  {t("THE TURMOIL WAY")}
-                </span>
-                <div className="hero-participation">
-                  <div className="avatar-stack">
-                    {data.members.slice(0, 4).map((member) => (
-                      <Avatar member={member} small key={member.id} />
-                    ))}
-                  </div>
+                <div className="welcome-progress">
                   <div>
                     <strong>
                       {t("{count} of {total} members", { count: data.stats.submittedMembers, total: data.stats.totalMembers })}
                     </strong>
                     <span>{t(data.live === false ? "had resources in this saved week" : "have saved their resources")}</span>
                   </div>
-                  <div className="participation-track">
+                  <div className="welcome-track">
                     <i
                       style={{
                         width: `${data.stats.totalMembers ? (data.stats.submittedMembers / data.stats.totalMembers) * 100 : 0}%`,
@@ -697,6 +666,13 @@ function TrackerApp({ view }: { view: View }) {
                     />
                   </div>
                 </div>
+                <Link
+                  href={`/resources?week=${week}${snapshotId ? `&snapshot=${encodeURIComponent(snapshotId)}` : ""}`}
+                  className="button primary"
+                >
+                  {t(data.live === false ? "View saved resources" : ownEntry ? "Update my resources" : "Add my resources")}
+                  <ArrowRight size={16} />
+                </Link>
               </section>
               <div className="section-heading">
                 <div>
@@ -738,6 +714,8 @@ function TrackerApp({ view }: { view: View }) {
               notify={notify}
               refresh={refresh}
             />
+          ) : data && view === "hoarding" ? (
+            <HoardingWatch notify={notify} />
           ) : data && view === "members" ? (
             <MembersManager currentUser={user} notify={notify} refresh={refresh} />
           ) : data && dataMatches && view === "weeks" ? (
@@ -752,9 +730,8 @@ function TrackerApp({ view }: { view: View }) {
           <footer className="page-footer">
             <span>
               <Flame size={13} />
-              {t("FORGED FOR TURMOIL")}
+              {t("THE TURMOIL WAY")}
             </span>
-            <span>{t("Plan together. Forge ahead.")}</span>
           </footer>
         </main>
       </div>
@@ -871,14 +848,13 @@ function Login({ configured, error }: { configured: boolean; error: string }) {
             size={480}
             sizes="(max-width: 650px) 195px, (max-width: 900px) 340px, 480px"
           />
-          <span className="crest-caption">{t("FORGED IN UNITY")}</span>
+          <span className="crest-caption">{t("THE TURMOIL WAY")}</span>
         </div>
         <section className="login-card">
-          <div className="eyebrow">{t("THE TURMOIL RESOURCE TRACKER")}</div>
           <h1>
-            {t("One clan.")}
+            Turmoil
             <br />
-            <span>{t("Endless potential.")}</span>
+            <span>Clan Hub</span>
           </h1>
           <p>{t("Sign in with Discord once. This device will remember you.")}</p>
           {message && (
@@ -908,7 +884,6 @@ function Login({ configured, error }: { configured: boolean; error: string }) {
           )}
         </section>
       </div>
-      <footer>{t("Plan together. Forge ahead.")}</footer>
     </main>
   );
 }
@@ -948,6 +923,15 @@ function ClanArsenal({ data, estimate, rates, estimateError, snapshotId }: { dat
           <article className={`stat-card arsenal-card arsenal-${key}`} key={key}>
             <div className="stat-label"><span className={`resource-icon ${color}`}><StatIcon size={19} strokeWidth={1.8} /></span><span>{t(label)}</span></div>
             <strong className="stat-number">{numberFormat(data.totals[key])}</strong>
+            <div className="stat-war-points">
+              <span className="war-points-label">{t("Potential clan war points")}</span>
+              {key === "hammers" ? <WarPointRange minimum={estimateError ? null : cardPoints} maximum={estimateError ? null : estimate?.rows.find((row) => row.activity === "hammers")?.maximum ?? 0} /> : <strong className="war-points-total">{estimateError ? "--" : numberFormat(cardPoints)}</strong>}
+            </div>
+            <MissingDataIndicator members={cardIssues} label={missingCosts > 0
+              ? `${t("Incomplete: {count} member(s) missing a summon cost.", { count: missingCosts })}${missingChances > 0 ? ` ${t("Extra chances are also missing.")}` : ""}`
+              : t("{count} member(s) missing an extra chance, so bonus points are incomplete.", { count: missingChances })} />
+            <details className="arsenal-more">
+            <summary>{t("Details")}</summary>
             <div className="arsenal-details">
               {key === "skillTickets" && <div className="arsenal-metric"><span>{t("Total skill summons")}</span><strong>{estimateError ? "--" : numberFormat(quantity("skillSummons"))}</strong></div>}
               {key === "mountKeys" && <>
@@ -963,28 +947,22 @@ function ClanArsenal({ data, estimate, rates, estimateError, snapshotId }: { dat
               {key === "hammers" && <p className="arsenal-note">{t("{min}–{max} points per hammer.", { min: numberFormat(rates.hammersMin), max: numberFormat(rates.hammersMax) })}</p>}
               {(key === "skillTickets" || key === "mountKeys") && <p className="arsenal-note">{t("Whole summons, worked out for each member.")}{key === "mountKeys" && chanceHistory ? ` ${t("Bonus merges use each member’s extra mount chance.")}` : ""}</p>}
               {key === "eggsPetsTotal" && <p className="arsenal-note">{t(mixedHistory ? "Older entries keep their original counts; newer ones use totals and extra chances." : chanceHistory ? "All eggs/pets can be merged. Extra pets = eggshells ÷ 100 × each member’s extra chance." : "This week keeps its original saved merge counts.")}</p>}
-              <MissingDataIndicator members={cardIssues} label={missingCosts > 0
-                ? `${t("Incomplete: {count} member(s) missing a summon cost.", { count: missingCosts })}${missingChances > 0 ? ` ${t("Extra chances are also missing.")}` : ""}`
-                : t("{count} member(s) missing an extra chance, so bonus points are incomplete.", { count: missingChances })} />
-            </div>
-            <div className="stat-war-points">
-              <span className="war-points-label">{t("Potential clan war points")}</span>
-              {key === "hammers" ? <WarPointRange minimum={estimateError ? null : cardPoints} maximum={estimateError ? null : estimate?.rows.find((row) => row.activity === "hammers")?.maximum ?? 0} /> : <strong className="war-points-total">{estimateError ? "--" : numberFormat(cardPoints)}</strong>}
-              <span className="war-points-note">{key === "skillTickets" ? t("{points} points per skill summon.", { points: numberFormat(rates.skillSummons) })
+              <p className="war-points-note">{key === "skillTickets" ? t("{points} points per skill summon.", { points: numberFormat(rates.skillSummons) })
                 : key === "mountKeys" ? t("Summons {summon} + bonus merges {bonus} points each.", { summon: numberFormat(rates.mountSummons), bonus: numberFormat(rates.newMountMerges) })
                   : key === "eggsPetsTotal" ? t("Existing merges {existing} + extra pet merges {extra} points each.", { existing: numberFormat(rates.eggMerges), extra: numberFormat(rates.eggSummonMerges) })
-                    : key === "mountsToMerge" ? t("{points} points per existing mount merge.", { points: numberFormat(rates.mountMerges) }) : t("Shows the lowest and highest hammer estimate.")}</span>
+                    : key === "mountsToMerge" ? t("{points} points per existing mount merge.", { points: numberFormat(rates.mountMerges) }) : t("Shows the lowest and highest hammer estimate.")}</p>
             </div>
+            </details>
           </article>
         );
       })}
       <article className="stat-card arsenal-card arsenal-summary">
-        <div className="stat-label"><span className="resource-icon gold"><Sparkles size={19} /></span><span>{t("Total Potential War Points")}</span></div>
-        <p className="arsenal-summary-copy">{t("The clan’s combined war estimate")}</p>
+        <div className="arsenal-summary-head">
+          <div className="stat-label"><span className="resource-icon gold"><Sparkles size={19} /></span><span>{t("Total Potential War Points")}</span></div>
+          <p className="arsenal-summary-copy">{t("The clan’s combined war estimate")}</p>
+        </div>
         <WarPointRange minimum={estimateError ? null : estimate?.minimum ?? 0} maximum={estimateError ? null : estimate?.maximum ?? 0} />
         <div className="arsenal-summary-footer">
-          <span className="arsenal-summary-tag"><Swords size={13} />{t("All seven scoring activities")}</span>
-          <p className="arsenal-note">{t("The five cards above added together. Bonus actions are averages, so points are rounded.")}</p>
           <MissingDataIndicator members={incompleteMembers} label={t(membersMissingCosts.length > 0
             ? "Some summon costs are missing. This total is incomplete."
             : "Add missing extra chances to include all bonus points.")} />
@@ -1202,6 +1180,53 @@ function MemberResources({
         </span>
       </div>
     </section>
+  );
+}
+
+/** One line of the resource form: what to enter on the left, a small box on the right. */
+function EntryRow({ id, label, icon, help, guide, sub = false, input }: {
+  id: string;
+  label: string;
+  icon?: ReactNode;
+  help: string;
+  guide?: ReactNode;
+  sub?: boolean;
+  input: {
+    inputMode: "numeric" | "decimal";
+    min: number;
+    max: number;
+    step: string;
+    placeholder?: string;
+    value: string;
+    onChange: (value: string) => void;
+    suffix?: string;
+  };
+}) {
+  return (
+    <div className={`entry-row${sub ? " entry-row-sub" : ""}`}>
+      <div className="entry-row-text">
+        <label htmlFor={`field-${id}`}>{icon}{label}</label>
+        <small className="field-help" id={`help-${id}`}>{help}</small>
+      </div>
+      <div className="entry-row-box">
+        <input
+          id={`field-${id}`}
+          aria-label={label}
+          aria-describedby={`help-${id}`}
+          type="number"
+          inputMode={input.inputMode}
+          min={input.min}
+          max={input.max}
+          step={input.step}
+          required
+          placeholder={input.placeholder}
+          value={input.value}
+          onChange={(event) => input.onChange(event.target.value)}
+        />
+        {input.suffix && <span className="entry-row-suffix" aria-hidden="true">{input.suffix}</span>}
+      </div>
+      {guide ? <div className="entry-row-guide">{guide}</div> : null}
+    </div>
   );
 }
 
@@ -1463,130 +1488,71 @@ function ResourceForm({
           <Backpack size={19} />
           {t("Main resources")}
         </h3>
-        <div className="essential-inputs">
-          {essentials.map(({ key, label, icon: InputIcon, color }) => {
-            const costField =
-              key === "skillTickets"
-                ? {
-                    key: "fiveSkills" as const,
-                    label: "Skill summon cost (×5)",
-                    min: SKILL_SUMMON_COST_MIN,
-                    max: SKILL_SUMMON_COST_MAX,
-                    step: "0.1",
-                    help: "On the blue Summon ×5 button. Between 150 and 200.",
-                    where: "Skills screen → the number on the blue “Summon x5” button.",
-                  }
-                : key === "mountKeys"
-                  ? {
-                      key: "mount" as const,
-                      label: "Mount summon cost (×1)",
-                      min: MOUNT_SUMMON_COST_MIN,
-                      max: MOUNT_SUMMON_COST_MAX,
-                      step: "any",
-                      help: "On the blue Summon ×1 button. Between 37.5 and 50.",
-                      where: "Mounts screen → the number on the blue “Summon x1” button.",
-                    }
-                  : null;
+        <div className="entry-list">
+          {essentials.flatMap(({ key, label, icon: InputIcon }) => {
             const guide = RESOURCE_GUIDE[key];
-            return (
-              <div className="essential-field" key={key}>
-                <label>
-                  <span>
-                    <InputIcon size={15} />
-                    {t(label)}
-                  </span>
-                  <div className={`number-input ${color}`}>
-                    <input
-                      aria-label={t(label)}
-                      aria-describedby={`resource-help-${key}`}
-                      type="number"
-                      inputMode="numeric"
-                      min="0"
-                      max={resourceMaximum(key)}
-                      step="1"
-                      required
-                      placeholder="0"
-                      value={values[key]}
-                      onChange={(e) => update(key, e.target.value)}
-                    />
-                  </div>
-                </label>
-                <small className="field-help" id={`resource-help-${key}`}>{t(guide.help)}</small>
-                {!readOnly && <FieldGuide field={key} hint={t(guide.where)} />}
-                {costField && (
-                  <div className="summoning-cost-wrap">
-                    <label className="summoning-cost-field">
-                      <span>{t(costField.label)}</span>
-                      <input
-                        aria-label={t(costField.label)}
-                        aria-describedby={`summoning-cost-help-${costField.key}`}
-                        type="number"
-                        inputMode="decimal"
-                        min={costField.min}
-                        max={costField.max}
-                        step={costField.step}
-                        required
-                        value={costValues[costField.key]}
-                        onChange={(e) =>
-                          setCostValues((existing) => ({
-                            ...existing,
-                            [costField.key]: e.target.value,
-                          }))
-                        }
-                      />
-                      <small id={`summoning-cost-help-${costField.key}`}>
-                        {t(costField.help)}
-                      </small>
-                    </label>
-                    {!readOnly && <FieldGuide field={costField.key} hint={t(costField.where)} />}
-                  </div>
-                )}
-              </div>
+            const rows = [
+              <EntryRow
+                key={key}
+                id={`resource-${key}`}
+                label={t(label)}
+                icon={<InputIcon size={15} />}
+                help={t(guide.help)}
+                guide={!readOnly && <FieldGuide field={key} hint={t(guide.where)} />}
+                input={{ inputMode: "numeric", min: 0, max: resourceMaximum(key), step: "1", placeholder: "0", value: values[key], onChange: (value) => update(key, value) }}
+              />,
+            ];
+            const cost = key === "skillTickets"
+              ? { key: "fiveSkills" as const, label: "Skill summon cost (×5)", min: SKILL_SUMMON_COST_MIN, max: SKILL_SUMMON_COST_MAX, step: "0.1", help: "On the blue Summon ×5 button. Between 150 and 200.", where: "Skills screen → the number on the blue “Summon x5” button." }
+              : key === "mountKeys"
+                ? { key: "mount" as const, label: "Mount summon cost (×1)", min: MOUNT_SUMMON_COST_MIN, max: MOUNT_SUMMON_COST_MAX, step: "any", help: "On the blue Summon ×1 button. Between 37.5 and 50.", where: "Mounts screen → the number on the blue “Summon x1” button." }
+                : null;
+            if (cost) rows.push(
+              <EntryRow
+                key={cost.key}
+                id={`cost-${cost.key}`}
+                label={t(cost.label)}
+                help={t(cost.help)}
+                sub
+                guide={!readOnly && <FieldGuide field={cost.key} hint={t(cost.where)} />}
+                input={{ inputMode: "decimal", min: cost.min, max: cost.max, step: cost.step, value: costValues[cost.key], onChange: (value) => setCostValues((existing) => ({ ...existing, [cost.key]: value })) }}
+              />,
             );
+            return rows;
           })}
         </div>
       </section>
-      <section className="panel form-section eggs-pets-form">
+      <section className="panel form-section">
         <h3>
           <Egg size={19} />{t("Eggs and pets")}
         </h3>
-        <div className="eggs-bank-inputs">
+        <div className="entry-list">
           {(["eggsPetsTotal", "eggshellsTotal"] as const).map((key) => (
-            <div className="eggs-pets-field" key={key}>
-              <label className="eggs-pets-input">
-                <span>{t(key === "eggsPetsTotal" ? "Total eggs/pets" : "Eggshells total")}</span>
-                <input
-                  aria-label={t(key === "eggsPetsTotal" ? "Total eggs/pets" : "Eggshells total")}
-                  aria-describedby={`resource-help-${key}`}
-                  type="number"
-                  inputMode="numeric"
-                  min="0"
-                  max={resourceMaximum(key)}
-                  step="1"
-                  required
-                  placeholder="0"
-                  value={values[key]}
-                  onChange={(e) => update(key, e.target.value)}
-                />
-              </label>
-              <small className="field-help" id={`resource-help-${key}`}>{t(RESOURCE_GUIDE[key].help)}</small>
-              {!readOnly && <FieldGuide field={key} hint={t(RESOURCE_GUIDE[key].where)} />}
-            </div>
+            <EntryRow
+              key={key}
+              id={`resource-${key}`}
+              label={t(key === "eggsPetsTotal" ? "Total eggs/pets" : "Eggshells total")}
+              help={t(RESOURCE_GUIDE[key].help)}
+              guide={!readOnly && <FieldGuide field={key} hint={t(RESOURCE_GUIDE[key].where)} />}
+              input={{ inputMode: "numeric", min: 0, max: resourceMaximum(key), step: "1", placeholder: "0", value: values[key], onChange: (value) => update(key, value) }}
+            />
           ))}
         </div>
       </section>
-      <section className="panel form-section planning-bank-section">
+      <section className="panel form-section">
         <h3><Swords size={19} />{legacyHistory ? t("Saved levels and planned actions") : t("Levels and extra chances")}</h3>
         <p className="form-section-subtitle">{legacyHistory ? t("This week keeps its original saved counts.") : t("Copy these from the game. The tracker does the maths for you.")}</p>
-        <div className="planning-bank-grid">
-          {planningFields.map(({ key, label, help, picture, where }) => <div className="bank-planning-field" key={key}>
-            <label>
-              <span>{t(label)}</span>
-              <input aria-label={t(label)} aria-describedby={`planning-help-${key}`} type="number" inputMode={isChance(key) ? "decimal" : "numeric"} min="0" max={planningMaximum(key)} step={isChance(key) ? "0.01" : "1"} required placeholder={isChance(key) ? t("Enter 0 if none") : t("e.g. 100")} value={planningValues[key]} onChange={(e) => setPlanningValues((old) => ({ ...old, [key]: e.target.value }))} />
-              <small id={`planning-help-${key}`}>{t(help)}</small>
-            </label>
-            {!readOnly && picture && where && <FieldGuide field={picture} hint={t(where)} />}
-          </div>)}
+        <div className="entry-list">
+          {planningFields.map(({ key, label, help, picture, where }) => (
+            <EntryRow
+              key={key}
+              id={`planning-${key}`}
+              label={t(label)}
+              help={t(help)}
+              guide={!readOnly && picture && where && <FieldGuide field={picture} hint={t(where)} />}
+              input={{ inputMode: isChance(key) ? "decimal" : "numeric", min: 0, max: planningMaximum(key), step: isChance(key) ? "0.01" : "1", placeholder: isChance(key) ? t("Enter 0 if none") : t("e.g. 100"), value: planningValues[key], onChange: (value) => setPlanningValues((old) => ({ ...old, [key]: value })), suffix: isChance(key) ? "%" : undefined }}
+            />
+          ))}
         </div>
       </section>
       <section className="panel form-section">

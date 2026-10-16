@@ -7,10 +7,10 @@ import "./planning.css";
 import "./member-help.css";
 
 export const metadata: Metadata = {
-  title: "Turmoil · Resource Tracker",
+  title: "Turmoil Clan Hub",
   description:
-    "The Forge Masters resource hub for the Turmoil clan. Plan together. Forge ahead.",
-  applicationName: "Turmoil Resource Tracker",
+    "The Turmoil clan hub for Forge Masters. The Turmoil Way.",
+  applicationName: "Turmoil Clan Hub",
 };
 
 export default function RootLayout({

@@ -1,0 +1,36 @@
+/* Admin-only hoarding watch */
+.hoard-page { display: flex; flex-direction: column; gap: 16px; }
+.hoard-intro { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 18px 20px; }
+.hoard-intro h2 { font-size: 15px; margin: 0 0 6px; }
+.hoard-intro p { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.6; max-width: 760px; }
+.hoard-intro .hoard-typical { margin-top: 8px; color: #dec486; }
+.hoard-tabs { padding: 0; border-bottom: 0; }
+.hoard-state { padding: 30px; display: flex; flex-direction: column; align-items: center; gap: 12px; color: var(--muted); }
+.hoard-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.hoard-card { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; border-left: 3px solid var(--border); }
+.hoard-card.hoard-high { border-left-color: #d9534f; }
+.hoard-card.hoard-watch { border-left-color: #d9a52b; }
+.hoard-card header { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.hoard-card header strong { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
+.hoard-level { font-size: 10.5px; font-weight: 700; padding: 4px 8px; border-radius: 99px; white-space: nowrap; border: 1px solid; }
+.hoard-level-high { color: #ff9b94; border-color: #d9534f88; background: #3a1715; }
+.hoard-level-watch { color: #f0c560; border-color: #d9a52b88; background: #33280f; }
+.hoard-level-ok { color: #9fd3a9; border-color: #3f7a4c; background: #15281a; }
+.hoard-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; margin: 0; }
+.hoard-facts div { min-width: 0; }
+.hoard-facts dt { color: var(--muted); font-size: 10.5px; margin-bottom: 2px; }
+.hoard-facts dd { margin: 0; font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text); }
+.hoard-facts dd small { display: block; color: #dec486; font-size: 10.5px; font-weight: 600; }
+.hoard-up { color: #f0c560 !important; }
+.hoard-down { color: #8fdc6a !important; }
+.hoard-reasons { margin: 0; padding-left: 18px; color: #e8d7a6; font-size: 12px; line-height: 1.6; }
+.hoard-note { border-top: 1px solid #ffffff10; padding-top: 10px; }
+.hoard-note p { margin: 0 0 6px; font-size: 12px; color: var(--text); white-space: pre-wrap; }
+.hoard-note p small { color: var(--muted); }
+.hoard-note .text-link { display: inline-flex; align-items: center; gap: 5px; background: none; border: 0; padding: 0; cursor: pointer; font-size: 12px; }
+.hoard-note textarea { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 7px; padding: 9px; font: inherit; font-size: 13px; }
+.hoard-note-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+@media (max-width: 650px) {
+  .hoard-intro { flex-direction: column; }
+  .hoard-list { grid-template-columns: minmax(0, 1fr); }
+}

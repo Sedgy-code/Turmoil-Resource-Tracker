@@ -167,7 +167,7 @@ export function DewStore({ data, notify, refresh }: Props) {
     <div className="planning-stack planning-reward-shop">
       <section className="planning-panel planning-dew-intro">
         <div className="planning-heading">
-          <div><span className="planning-eyebrow">{t("Stay ready. Make it yours.")}</span><h2>{t("Reward Shop")}</h2><p>{t("Earn up to 30 Clan Points each week. Spend them on a badge, title, name colour and avatar frame.")}</p></div>
+          <div><h2>{t("Reward Shop")}</h2><p>{t("Earn up to 30 Clan Points each week. Spend them on a badge, title, name colour and avatar frame.")}</p></div>
           <div className="planning-dew-balance" aria-label={`${wallet.balance} Clan Points available`}><Coins size={20} aria-hidden="true" /><strong>{numberFormat(wallet.balance)}</strong><span>{t("Clan Points")}</span></div>
         </div>
         <div className="planning-weekly-rewards" aria-label="This week’s Clan Point rewards">

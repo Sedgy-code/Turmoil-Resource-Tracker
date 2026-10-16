@@ -124,6 +124,11 @@ export async function updateSnipe(actor: Member, id: string, input: Partial<Snip
     const freshActor = await activeActor(tx, actor.id);
     requireAdministrator(freshActor);
     let row = await findPlan(tx, id);
+    if (input.archived === false) {
+      // Moving a plan back to Open makes it live again, using everyone's latest resources.
+      if (row.archived === true) [row] = await tx.query("UPDATE snipe_plans SET archived = FALSE, archived_result = NULL WHERE id = $1 RETURNING *", [id]);
+      return planFromRow(tx, row);
+    }
     requireOpen(row);
     if (input.title !== undefined || input.startsAt !== undefined || input.activities !== undefined) {
       const values = validatedSnipe({
@@ -156,27 +161,64 @@ export async function respondToSnipe(actor: Member, id: string, input: { answer:
   });
 }
 
-/** Attendance is an administrator's record of actual participation, separate from an RSVP. */
-export async function confirmSnipeAttendance(actor: Member, id: string, input: { memberId: string; attended: true }, db?: Database): Promise<SnipePlan> {
+/** A snipe's attendance can still earn its reward when confirmed up to this long after it started. */
+export const SNIPE_REWARD_WINDOW_MS = 8 * 24 * 60 * 60 * 1000;
+
+async function attendeesFor(tx: SqlConnection, snipeId: string): Promise<NonNullable<SnipePlan["attendees"]>> {
+  const rows = await tx.query(`SELECT attendance.member_id, attendance.confirmed_by, attendance.confirmed_at, member.*
+    FROM snipe_attendance attendance JOIN app_members member ON member.id = attendance.member_id
+    WHERE attendance.snipe_id = $1 ORDER BY attendance.confirmed_at, attendance.member_id`, [snipeId]);
+  return rows.map((row) => ({ memberId: String(row.member_id), confirmedBy: String(row.confirmed_by), confirmedAt: iso(row.confirmed_at)!, member: memberFromRow(row) }));
+}
+
+/**
+ * Attendance is an administrator's record of actual participation, separate from an RSVP.
+ * Admins can tick or untick members after the snipe starts, including on archived snipes.
+ * A confirmation earns that snipe week's 10 Clan Points (once per member per week) when it is
+ * made within eight days of the start; removing a member's last attendance that week takes it back.
+ */
+export async function confirmSnipeAttendance(actor: Member, id: string, input: { memberId: string; attended: boolean }, db?: Database): Promise<SnipePlan> {
   const connection = db ?? await database();
   return connection.transaction(async (tx) => {
     await lockAdministration(tx, connection.dialect);
     const freshActor = await activeActor(tx, actor.id);
     requireAdministrator(freshActor);
-    const row = await findPlan(tx, id);
-    requireOpen(row);
-    if (input.attended !== true) throw new ApiError(400, "Confirm actual attendance for this member.", "INVALID_SNIPE_ATTENDANCE");
+    let row = await findPlan(tx, id);
+    if (typeof input.attended !== "boolean") throw new ApiError(400, "Confirm actual attendance for this member.", "INVALID_SNIPE_ATTENDANCE");
     const startsAt = new Date(iso(row.starts_at)!);
     const now = new Date();
     if (startsAt.getTime() > now.getTime()) throw new ApiError(409, "Confirm attendance after this snipe has started.", "SNIPE_NOT_STARTED");
-    const target = await tx.query("SELECT id FROM app_members WHERE id = $1 AND active = TRUE FOR UPDATE", [input.memberId]);
-    if (!target.length) throw new ApiError(404, "Choose an active clan member to confirm attendance.", "MEMBER_NOT_FOUND");
-    await tx.query(`INSERT INTO snipe_attendance (snipe_id, member_id, confirmed_by)
-      VALUES ($1, $2, $3) ON CONFLICT (snipe_id, member_id) DO NOTHING`, [id, input.memberId, freshActor.id]);
-    // Older plans can retain an attendance record, but cannot generate this week's reward.
-    if (currentWeek(startsAt) === currentWeek(now)) await awardWeeklyDew(tx, input.memberId, "snipe", currentWeek(now));
+    const snipeWeek = currentWeek(startsAt);
+    if (input.attended) {
+      const target = await tx.query("SELECT id FROM app_members WHERE id = $1 AND active = TRUE FOR UPDATE", [input.memberId]);
+      if (!target.length) throw new ApiError(404, "Choose an active clan member to confirm attendance.", "MEMBER_NOT_FOUND");
+      await tx.query(`INSERT INTO snipe_attendance (snipe_id, member_id, confirmed_by)
+        VALUES ($1, $2, $3) ON CONFLICT (snipe_id, member_id) DO NOTHING`, [id, input.memberId, freshActor.id]);
+      // Old snipes keep their attendance record but cannot be used to farm points.
+      if (now.getTime() - startsAt.getTime() <= SNIPE_REWARD_WINDOW_MS) await awardWeeklyDew(tx, input.memberId, "snipe", snipeWeek);
+    } else {
+      const removed = await tx.query("DELETE FROM snipe_attendance WHERE snipe_id = $1 AND member_id = $2 RETURNING member_id", [id, input.memberId]);
+      if (removed.length) await withdrawSnipeReward(tx, input.memberId, snipeWeek);
+    }
+    if (row.archived === true && row.archived_result) {
+      // Keep the frozen snapshot, refreshing only who attended. Earlier attendees keep their saved names.
+      const frozen = jsonValue<SnipePlan>(row.archived_result);
+      const previous = new Map((frozen.attendees ?? []).map((attendee) => [attendee.memberId, attendee]));
+      frozen.attendees = (await attendeesFor(tx, id)).map((attendee) => previous.get(attendee.memberId) ?? attendee);
+      [row] = await tx.query("UPDATE snipe_plans SET archived_result = $2::jsonb WHERE id = $1 RETURNING *", [id, JSON.stringify(frozen)]);
+    }
     return planFromRow(tx, row);
   });
+}
+
+/** Takes back a week's snipe reward when the member no longer has any confirmed snipe that week. */
+async function withdrawSnipeReward(tx: SqlConnection, memberId: string, week: string): Promise<void> {
+  const plans = await tx.query(`SELECT plan.starts_at FROM snipe_attendance attendance
+    JOIN snipe_plans plan ON plan.id = attendance.snipe_id WHERE attendance.member_id = $1`, [memberId]);
+  if (plans.some((plan) => currentWeek(new Date(iso(plan.starts_at)!)) === week)) return;
+  const earned = await tx.query(`DELETE FROM dew_weekly_earnings WHERE member_id = $1 AND week_start = $2 AND reason = 'snipe'
+    RETURNING amount`, [memberId, week]);
+  if (earned.length) await tx.query("UPDATE dew_balances SET balance = GREATEST(balance - $2, 0) WHERE member_id = $1", [memberId, Number(earned[0].amount)]);
 }
 
 async function dewResponse(tx: SqlConnection, actor: Member): Promise<DewResponse> {

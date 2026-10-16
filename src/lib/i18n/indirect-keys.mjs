@@ -10,7 +10,12 @@ export const INDIRECT_KEYS = [
   // Guide page sections
   "Skills screen", "Mounts screen", "Pets screen", "Tech Tree", "Forge screen",
   // Navigation
-  "Dashboard", "My Resources", "Manage Members", "Weekly History", "Estimated War Points", "Snipe Plans", "Reward Shop",
+  "Dashboard", "My Resources", "Manage Members", "Weekly History", "Estimated War Points", "Snipe Plans", "Reward Shop", "Hoarding Watch",
+  "Spot members who hold a lot but don’t spend it. Only admins can see this page.",
+  // Hoarding watch labels
+  "Hoarding", "Keep an eye on", "OK",
+  "Holds at least twice as much as a typical member", "Pile keeps growing with no spending in 4 weeks",
+  "Missed every snipe with ticked attendance (last 8 weeks)", "Hasn’t saved resources in over 2 weeks",
   // Resource fields
   "Skill Tickets", "Mount Keys", "Mounts to Merge", "Hammers", "Total eggs/pets", "Eggshells total",
   "Skill summon cost (×5)", "Mount summon cost (×1)",
