@@ -1,5 +1,6 @@
 import { timingSafeMatch } from "@/lib/server/crypto";
 import { syncDiscordMembers } from "@/lib/server/discord-sync";
+import { registerCommands } from "@/lib/server/discord-interactions";
 import { ApiError, errorResponse, privateResponse } from "@/lib/server/errors";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,6 +11,8 @@ export async function GET(request: Request) {
     if (!secret || !timingSafeMatch(request.headers.get("authorization") ?? "", `Bearer ${secret}`)) {
       throw new ApiError(401, "Scheduled member check is not authorized.", "UNAUTHORIZED_JOB");
     }
-    return privateResponse(await syncDiscordMembers());
+    // Also keeps the /checkin and /snipe-start commands installed.
+    const commands = await registerCommands().catch(() => false);
+    return privateResponse({ ...(await syncDiscordMembers()), commands });
   } catch (error) { return errorResponse(error); }
 }

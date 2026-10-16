@@ -4,19 +4,55 @@ import { useCallback, useEffect, useState } from "react";
 import { LoaderCircle, NotebookPen, RefreshCw } from "lucide-react";
 import { numberFormat } from "@/lib/resources";
 import { useT } from "@/lib/i18n";
-import type { HoardingLevel, HoardingReason, HoardingResponse, HoardingRow, WarSpendingResponse, WarSpendingRow } from "@/lib/types";
+import type { HoardingLevel, HoardingReason, HoardingResponse, HoardingRow, HoardingRules, WarSpendingResponse, WarSpendingRow } from "@/lib/types";
 import { currentWeek, formatWeek, shiftWeek } from "@/lib/resources";
 import { useSortable } from "./sortable";
 import { MemberAvatar, MemberName } from "./member-identity";
 import "./hoarding-watch.css";
 
-const LEVELS: Record<HoardingLevel, string> = { high: "Hoarding", watch: "Keep an eye on", ok: "OK" };
+const LEVELS: Record<HoardingLevel, string> = { high: "Hoarding", watch: "Keep an eye on", saver: "💰 Good saver", ok: "OK" };
 const REASONS: Record<HoardingReason, string> = {
-  large: "Holds at least twice as much as a typical member",
+  large: "Holds at least {times}× as much as a typical member",
   growing: "Pile keeps growing with no spending in 4 weeks",
   skipsSnipes: "Missed every snipe with ticked attendance (last 8 weeks)",
   stale: "Hasn’t saved resources in over 2 weeks",
+  noWarSpending: "Used less than {percent}% of their pile in the last {wars} war(s)",
+  spendsInWars: "Saves up, but uses it in wars ({used}% in the last {wars} war(s))",
 };
+
+function RulesEditor({ rules, measuredWars, onSaved, notify }: { rules: HoardingRules; measuredWars: number; onSaved: () => void; notify: (message: string, error?: boolean) => void }) {
+  const t = useT();
+  const [draft, setDraft] = useState(rules);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => setDraft(rules), [rules]);
+  const changed = draft.largeMultiple !== rules.largeMultiple || draft.spendPercent !== rules.spendPercent || draft.wars !== rules.wars;
+  async function save() {
+    setSaving(true);
+    try {
+      await request("/api/hoarding/rules", { method: "PUT", body: JSON.stringify(draft) });
+      notify(t("Hoarding rules saved."));
+      onSaved();
+    } catch (e) {
+      const text = e instanceof Error ? e.message : "Please try again.";
+      notify(t(text), true);
+    } finally { setSaving(false); }
+  }
+  const field = (key: keyof HoardingRules, label: string, min: number, max: number, step: number, suffix: string) => <label className="rule-field">
+    <span>{label}</span>
+    <span className="rule-input"><input type="number" min={min} max={max} step={step} value={draft[key]} onChange={(event) => setDraft((old) => ({ ...old, [key]: Number(event.target.value) }))} />{suffix}</span>
+  </label>;
+  return <section className="panel hoard-rules">
+    <h2>{t("Saver or hoarder? Your rules")}</h2>
+    <p>{t("Saving is fine. Someone only counts as hoarding when all three are true: they hold a lot, their pile keeps growing, and they barely used it in recent wars. Big holders who do spend in wars are marked as good savers.")}</p>
+    <div className="rule-grid">
+      {field("largeMultiple", t("Holds at least … × a typical member"), 1, 20, 0.5, "×")}
+      {field("spendPercent", t("Must use at least … of their pile in wars"), 0, 100, 5, "%")}
+      {field("wars", t("Looking at the last … wars"), 1, 10, 1, "")}
+    </div>
+    {measuredWars === 0 && <p className="war-hint">{t("No war results saved yet, so nobody can be called a hoarder yet. Add war results after each war.")}</p>}
+    {changed && <button className="button primary" disabled={saving} onClick={() => void save()}>{saving && <LoaderCircle size={14} className="spin" />}{t("Save rules")}</button>}
+  </section>;
+}
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, { ...options, headers: { "Content-Type": "application/json", ...options?.headers }, cache: "no-store" });
@@ -136,7 +172,7 @@ export function HoardingWatch({ notify }: { notify: (message: string, error?: bo
   const [report, setReport] = useState<HoardingResponse | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [filter, setFilter] = useState<"flagged" | "all">("flagged");
+  const [filter, setFilter] = useState<"flagged" | "savers" | "all">("flagged");
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -146,8 +182,9 @@ export function HoardingWatch({ notify }: { notify: (message: string, error?: bo
   }, []);
   useEffect(() => { void load(); }, [load]);
   if (!report) return <section className="panel hoard-state">{error ? <><p>{t(error)}</p><button className="button primary" onClick={() => void load()}>{t("Try again")}</button></> : <LoaderCircle size={24} className="spin" />}</section>;
-  const flagged = report.rows.filter((row) => row.level !== "ok");
-  const rows = filter === "flagged" ? flagged : report.rows;
+  const flagged = report.rows.filter((row) => row.level === "high" || row.level === "watch");
+  const savers = report.rows.filter((row) => row.level === "saver");
+  const rows = filter === "flagged" ? flagged : filter === "savers" ? savers : report.rows;
   const updateNote = (memberId: string, note: string) => setReport((current) => current && ({
     ...current, rows: current.rows.map((row) => row.member.id === memberId ? { ...row, note, noteBy: note ? row.noteBy : null } : row),
   }));
@@ -160,9 +197,11 @@ export function HoardingWatch({ notify }: { notify: (message: string, error?: bo
       </div>
       <button className="button subtle" onClick={() => void load()} disabled={loading}><RefreshCw size={15} className={loading ? "spin" : undefined} />{t("Refresh")}</button>
     </section>
+    <RulesEditor rules={report.rules} measuredWars={report.measuredWars} notify={notify} onSaved={() => void load()} />
     <WarSpending />
     <div className="table-tabs hoard-tabs">
       <button className={filter === "flagged" ? "active" : ""} onClick={() => setFilter("flagged")}>{t("Flagged")}<span>{flagged.length}</span></button>
+      <button className={filter === "savers" ? "active" : ""} onClick={() => setFilter("savers")}>{t("Good savers")}<span>{savers.length}</span></button>
       <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>{t("All members")}<span>{report.rows.length}</span></button>
     </div>
     {rows.length === 0 ? <section className="panel hoard-state"><p>{t("Nobody is flagged right now.")}</p></section> : <div className="hoard-list">
@@ -180,9 +219,10 @@ export function HoardingWatch({ notify }: { notify: (message: string, error?: bo
             <div><dt>{t("Last 4 weeks")}</dt><dd className={row.change !== null && row.change > 0 ? "hoard-up" : row.change !== null && row.change < 0 ? "hoard-down" : undefined}>{row.change === null ? t("Not enough history") : `${row.change > 0 ? "+" : ""}${numberFormat(Math.round(row.change))}`}</dd></div>
             <div><dt>{t("Last spent")}</dt><dd>{spent === null ? t("Never seen") : t("{days} days ago", { days: spent })}</dd></div>
             <div><dt>{t("Snipes attended")}</dt><dd>{row.snipes.held ? `${row.snipes.attended} / ${row.snipes.held}` : "—"}</dd></div>
+            <div><dt>{t("Used in wars")}</dt><dd>{row.warUsePercent === null ? "—" : `${row.warUsePercent}%`}</dd></div>
             <div><dt>{t("Last saved")}</dt><dd>{saved === null ? t("Never") : t("{days} days ago", { days: saved })}</dd></div>
           </dl>
-          {row.reasons.length > 0 && <ul className="hoard-reasons">{row.reasons.map((reason) => <li key={reason}>{t(REASONS[reason])}</li>)}</ul>}
+          {row.reasons.length > 0 && <ul className="hoard-reasons">{row.reasons.map((reason) => <li key={reason} className={reason === "spendsInWars" ? "hoard-good" : undefined}>{t(REASONS[reason], { times: report.rules.largeMultiple, percent: report.rules.spendPercent, wars: report.measuredWars, used: row.warUsePercent ?? 0 })}</li>)}</ul>}
           <NoteEditor row={row} notify={notify} onSaved={(note) => updateNote(row.member.id, note)} />
         </article>;
       })}

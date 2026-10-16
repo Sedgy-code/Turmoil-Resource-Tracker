@@ -200,4 +200,10 @@ CREATE TABLE IF NOT EXISTS member_auto_removals (
   removed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ALTER TABLE war_results ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'war';
+CREATE TABLE IF NOT EXISTS hoarding_rules (
+  id TEXT PRIMARY KEY,
+  large_multiple NUMERIC NOT NULL CHECK (large_multiple >= 1 AND large_multiple <= 20),
+  spend_percent NUMERIC NOT NULL CHECK (spend_percent >= 0 AND spend_percent <= 100),
+  wars INTEGER NOT NULL CHECK (wars BETWEEN 1 AND 10)
+);
 `;

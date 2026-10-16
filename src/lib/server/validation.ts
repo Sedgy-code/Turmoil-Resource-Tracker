@@ -174,3 +174,8 @@ export const saveWarSchema = z.object({
   }).strict()).max(200),
   images: z.array(screenshotSchema).max(6),
 }).strict();
+export const hoardingRulesSchema = z.object({
+  largeMultiple: z.number().min(1).max(20),
+  spendPercent: z.number().min(0).max(100),
+  wars: z.number().int().min(1).max(10),
+}).strict();

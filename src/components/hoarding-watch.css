@@ -57,3 +57,14 @@
 .rank-new { display: inline-block; margin-top: 3px; padding: 1px 6px; border-radius: 99px; background: #1b2a3a; color: #9cc8ff; font-size: 10px; }
 .rank-table td { white-space: nowrap; }
 @media (max-width: 650px) { .rank-controls { align-items: flex-start; } }
+.hoard-card.hoard-saver { border-left-color: #4caf61; }
+.hoard-level-saver { color: #9fd3a9; border-color: #3f7a4c; background: #15281a; }
+.hoard-reasons li.hoard-good { color: #9fd3a9; }
+.hoard-rules { padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.hoard-rules h2 { font-size: 15px; margin: 0; }
+.hoard-rules > p { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.6; max-width: 760px; }
+.rule-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; width: 100%; max-width: 760px; }
+.rule-field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--muted); }
+.rule-input { display: flex; align-items: center; gap: 6px; color: var(--text); font-weight: 700; }
+.rule-input input { width: 90px; height: 38px; padding: 0 10px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 7px; font: inherit; font-size: 14px; font-weight: 700; }
+@media (max-width: 650px) { .rule-grid { grid-template-columns: minmax(0, 1fr); } }

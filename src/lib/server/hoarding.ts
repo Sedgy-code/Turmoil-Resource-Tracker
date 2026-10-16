@@ -1,5 +1,5 @@
 import { currentWeek } from "../resources";
-import type { HoardingLevel, HoardingReason, HoardingResponse, HoardingRow, Member, ResourceEntry, WarRates, WarSpendingResponse, WarSpendingRow } from "../types";
+import type { HoardingLevel, HoardingReason, HoardingResponse, HoardingRow, HoardingRules, Member, ResourceEntry, WarRates, WarSpendingResponse, WarSpendingRow } from "../types";
 import { estimateWar, WAR_ACTIVITIES } from "../war";
 import { database, type Database, type SqlConnection } from "./db";
 import { ApiError } from "./errors";
@@ -13,8 +13,23 @@ const GROWTH_WINDOW = 28 * DAY;
 const ACTIVITY_WINDOW = 56 * DAY;
 /** A drop of at least this share of the previous value counts as spending. */
 const SPEND_THRESHOLD = 0.05;
-/** Holding at least this many times the clan's typical member counts as a large stockpile. */
-const LARGE_MULTIPLE = 2;
+/** Admin-adjustable: when does saving become hoarding? */
+export const DEFAULT_HOARDING_RULES: HoardingRules = { largeMultiple: 2, spendPercent: 10, wars: 2 };
+
+export async function hoardingRules(connection: SqlConnection): Promise<HoardingRules> {
+  const rows = await connection.query("SELECT large_multiple, spend_percent, wars FROM hoarding_rules WHERE id = 'clan'");
+  if (!rows.length) return { ...DEFAULT_HOARDING_RULES };
+  return { largeMultiple: Number(rows[0].large_multiple), spendPercent: Number(rows[0].spend_percent), wars: Number(rows[0].wars) };
+}
+
+export async function saveHoardingRules(actor: Member, rules: HoardingRules, db?: Database): Promise<HoardingRules> {
+  const connection = db ?? await database();
+  await requireAdmin(connection, actor.id);
+  await connection.query(`INSERT INTO hoarding_rules (id, large_multiple, spend_percent, wars) VALUES ('clan', $1, $2, $3)
+    ON CONFLICT (id) DO UPDATE SET large_multiple = EXCLUDED.large_multiple, spend_percent = EXCLUDED.spend_percent, wars = EXCLUDED.wars`,
+  [rules.largeMultiple, rules.spendPercent, rules.wars]);
+  return hoardingRules(connection);
+}
 const STALE_AFTER = 14 * DAY;
 
 async function requireAdmin(connection: SqlConnection, actorId: string): Promise<Member> {
@@ -45,11 +60,16 @@ function versionEntry(row: Record<string, unknown>): ResourceEntry {
   return entryFromRow({ ...row, id: `version:${row.id}`, week_start: currentWeek(new Date(iso(row.updated_at)!)) });
 }
 
+/**
+ * Saving is fine; hoarding is holding a lot, growing it, AND not using it in wars.
+ * Holding a lot but spending in wars makes a member a "good saver".
+ */
 export function hoardingLevel(reasons: HoardingReason[]): HoardingLevel {
   const large = reasons.includes("large");
-  const pattern = reasons.includes("growing") || reasons.includes("skipsSnipes");
-  if (large && pattern) return "high";
-  if (large || pattern) return "watch";
+  if (!large) return "ok";
+  if (reasons.includes("growing") && reasons.includes("noWarSpending")) return "high";
+  if (reasons.includes("spendsInWars")) return "saver";
+  if (reasons.includes("growing") || reasons.includes("noWarSpending") || reasons.includes("skipsSnipes")) return "watch";
   return "ok";
 }
 
@@ -87,6 +107,18 @@ export async function hoardingReport(actor: Member, db?: Database, now = new Dat
   const notes = new Map(noteRows.map((row) => [String(row.member_id), row]));
   const values = new Map(members.map((member) => [member.id, banks.has(member.id) ? warValue(banks.get(member.id)!, settings.warRates) : 0]));
   const typical = median([...values.values()]);
+  const rules = await hoardingRules(connection);
+  // Share of their holdings each member used during the last few war weeks.
+  const warWeeks = (await connection.query("SELECT DISTINCT week_start::text AS week FROM war_results WHERE kind = 'war' ORDER BY week DESC LIMIT $1", [rules.wars]))
+    .map((row) => String(row.week));
+  const warUse = new Map<string, { before: number; spent: number }>();
+  for (const week of warWeeks) {
+    for (const row of (await warSpending(actor, week, connection, now)).rows) {
+      if (row.before === null || row.spent === null || row.before <= 0) continue;
+      const current = warUse.get(row.member.id) ?? { before: 0, spent: 0 };
+      warUse.set(row.member.id, { before: current.before + row.before, spent: current.spent + Math.max(0, row.spent) });
+    }
+  }
 
   const rows: HoardingRow[] = members.map((member) => {
     const value = values.get(member.id) ?? 0;
@@ -110,9 +142,12 @@ export async function hoardingReport(actor: Member, db?: Database, now = new Dat
     const attended = attendanceRows.filter((row) => String(row.member_id) === member.id).length;
     const lastSavedAt = bank?.updatedAt ?? null;
     const reasons: HoardingReason[] = [];
-    if (typical > 0 && value >= typical * LARGE_MULTIPLE) reasons.push("large");
+    if (typical > 0 && value >= typical * rules.largeMultiple) reasons.push("large");
     if (change !== null && change > 0 && trackedDays >= 14 && (lastSpendAt === null || lastSpendAt < growthStart) && value >= typical) reasons.push("growing");
     if (snipeIds.length >= 2 && attended === 0 && value >= typical) reasons.push("skipsSnipes");
+    const use = warUse.get(member.id);
+    const usedShare = use && use.before > 0 ? use.spent / use.before : null;
+    if (usedShare !== null) reasons.push(usedShare * 100 >= rules.spendPercent ? "spendsInWars" : "noWarSpending");
     if (!lastSavedAt || now.getTime() - new Date(lastSavedAt).getTime() > STALE_AFTER) reasons.push("stale");
     const note = notes.get(member.id);
     return {
@@ -125,6 +160,7 @@ export async function hoardingReport(actor: Member, db?: Database, now = new Dat
       lastSpendAt: lastSpendAt === null ? null : new Date(lastSpendAt).toISOString(),
       snipes: { held: snipeIds.length, saidYes, attended },
       lastSavedAt,
+      warUsePercent: usedShare === null ? null : Math.round(usedShare * 1000) / 10,
       reasons,
       level: hoardingLevel(reasons),
       note: note ? String(note.note) : "",
@@ -132,9 +168,9 @@ export async function hoardingReport(actor: Member, db?: Database, now = new Dat
       noteBy: note ? String(note.updated_by_username) : null,
     };
   });
-  const order: Record<HoardingLevel, number> = { high: 0, watch: 1, ok: 2 };
+  const order: Record<HoardingLevel, number> = { high: 0, watch: 1, saver: 2, ok: 3 };
   rows.sort((a, b) => order[a.level] - order[b.level] || b.warValue - a.warValue);
-  return { typicalWarValue: typical, rows, generatedAt: now.toISOString() };
+  return { typicalWarValue: typical, rows, rules, measuredWars: warWeeks.length, generatedAt: now.toISOString() };
 }
 
 export async function saveHoardingNote(actor: Member, input: { memberId: string; note: string }, db?: Database): Promise<{ note: string }> {

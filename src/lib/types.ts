@@ -142,8 +142,10 @@ export interface ApiErrorResponse {
   code?: string;
 }
 
-export type HoardingReason = "large" | "growing" | "skipsSnipes" | "stale";
-export type HoardingLevel = "high" | "watch" | "ok";
+export type HoardingReason = "large" | "growing" | "skipsSnipes" | "stale" | "noWarSpending" | "spendsInWars";
+export type HoardingLevel = "high" | "watch" | "saver" | "ok";
+/** When does saving count as hoarding? Set by admins on the Hoarding Watch page. */
+export interface HoardingRules { largeMultiple: number; spendPercent: number; wars: number }
 export interface HoardingRow {
   member: Member;
   /** Estimated war points of everything the member holds. */
@@ -158,13 +160,15 @@ export interface HoardingRow {
   lastSpendAt: string | null;
   snipes: { held: number; saidYes: number; attended: number };
   lastSavedAt: string | null;
+  /** Share of their holdings used during the last few wars (%); null without war data. */
+  warUsePercent: number | null;
   reasons: HoardingReason[];
   level: HoardingLevel;
   note: string;
   noteUpdatedAt: string | null;
   noteBy: string | null;
 }
-export interface HoardingResponse { typicalWarValue: number; rows: HoardingRow[]; generatedAt: string }
+export interface HoardingResponse { typicalWarValue: number; rows: HoardingRow[]; rules: HoardingRules; measuredWars: number; generatedAt: string }
 
 export interface WarResultPoint { position: number; gameName: string; memberId: string | null; points: number }
 export interface WarResult {
