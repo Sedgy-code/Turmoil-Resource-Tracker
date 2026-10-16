@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Pool, types as pgTypes, type CustomTypesConfig, type PoolClient } from "pg";
@@ -109,7 +110,25 @@ export async function openDatabase(
   };
 }
 
+// Changes whenever SCHEMA_SQL changes, so a deploy with new schema still migrates.
+export const SCHEMA_VERSION = createHash("sha256").update(SCHEMA_SQL).digest("hex").slice(0, 16);
+
+async function schemaIsCurrent(database: Database): Promise<boolean> {
+  try {
+    const rows = await database.query(
+      "SELECT version FROM app_schema_version WHERE id = 1",
+    );
+    return rows[0]?.version === SCHEMA_VERSION;
+  } catch {
+    // The version table does not exist yet on older databases.
+    return false;
+  }
+}
+
 export async function initializeSchema(database: Database): Promise<void> {
+  // Cold starts used to replay every schema statement one round trip at a
+  // time. One cheap version check skips that when nothing has changed.
+  if (await schemaIsCurrent(database)) return;
   // Both drivers support this SQL; PostgreSQL locks keep concurrent cold starts safe.
   await database.transaction(async (tx) => {
     if (database.dialect === "postgres")
@@ -118,6 +137,13 @@ export async function initializeSchema(database: Database): Promise<void> {
       .map((value) => value.trim())
       .filter(Boolean))
       await tx.query(statement);
+    await tx.query(
+      "CREATE TABLE IF NOT EXISTS app_schema_version (id INTEGER PRIMARY KEY, version TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())",
+    );
+    await tx.query(
+      "INSERT INTO app_schema_version (id, version, updated_at) VALUES (1, $1, NOW()) ON CONFLICT (id) DO UPDATE SET version = EXCLUDED.version, updated_at = NOW()",
+      [SCHEMA_VERSION],
+    );
   });
 }
 

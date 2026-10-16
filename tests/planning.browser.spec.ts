@@ -133,8 +133,8 @@ test("personal bank, eggshells, levels, costs, and percentage chances survive a 
     await page.getByLabel("Hammers", { exact: true }).fill("10");
     await page.getByLabel("Total eggs/pets", { exact: true }).fill("20");
     await page.getByLabel("Eggshells total", { exact: true }).fill("1250");
-    await page.getByLabel("Cost of summoning 5 skills", { exact: true }).fill("150");
-    await page.getByLabel("Cost per mount summon", { exact: true }).fill("37.5");
+    await page.getByLabel("Skill summon cost (×5)", { exact: true }).fill("150");
+    await page.getByLabel("Mount summon cost (×1)", { exact: true }).fill("37.5");
     for (const [label, value] of [
       ["Skill level", "42"], ["Mount level", "43"], ["Egg/pet level", "44"],
       ["Extra mount chance %", "20.5"], ["Extra pet summon %", "25"],
@@ -160,7 +160,7 @@ test("personal bank, eggshells, levels, costs, and percentage chances survive a 
     await expect(page.locator(".toast")).toContainText(/saved/i);
     await page.reload();
     await expect(page.getByLabel("Skill Tickets", { exact: true })).toHaveValue("600");
-    await expect(page.getByLabel("Cost per mount summon", { exact: true })).toHaveValue("37.5");
+    await expect(page.getByLabel("Mount summon cost (×1)", { exact: true })).toHaveValue("37.5");
     await expect(page.getByLabel("Extra mount chance %", { exact: true })).toHaveValue("20.5");
     await expect(page.getByLabel("Extra pet summon %", { exact: true })).toHaveValue("25");
     await expect(page.getByLabel("Eggshells total", { exact: true })).toHaveValue("1250");
@@ -314,7 +314,7 @@ test("snipe creation, attendance, selected points, and archived history use the 
       headers: { Origin: baseURL }, data: { answer: "no" },
     });
     expect(remoteResponse.ok(), await remoteResponse.text()).toBeTruthy();
-    await page.getByRole("button", { name: "Refresh plans", exact: true }).click();
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
     await expect(card.locator(".planning-no")).toHaveText("No: 1");
     await expect(card.locator(".planning-total strong")).toHaveText("0");
     await card.getByRole("button", { name: "Yes", exact: true }).click();
@@ -326,7 +326,7 @@ test("snipe creation, attendance, selected points, and archived history use the 
     });
     expect(start.ok(), await start.text()).toBeTruthy();
     await expect.poll(() => Date.now()).toBeGreaterThanOrEqual(new Date(startedAt).getTime());
-    await page.getByRole("button", { name: "Refresh plans", exact: true }).click();
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
     await card.getByRole("button", { name: `Mark ${(await ownBank(request)).data.currentUser.username} as attended`, exact: true }).click();
     await expect(card.getByText("You attended", { exact: true })).toBeVisible();
     const afterAttendance = await read<DewResponse>(request, "/api/dew");
@@ -465,7 +465,7 @@ test("weekly resource rewards are capped and four cosmetic categories equip inde
       await expect(profile).toContainText(item.name);
       await expect(page.getByRole("article", { name: item.name, exact: true }).getByText("Equipped", { exact: true })).toBeVisible();
     }
-    await page.getByRole("article", { name: selected[2].name, exact: true }).getByRole("button", { name: "Remove name accent", exact: true }).click();
+    await page.getByRole("article", { name: selected[2].name, exact: true }).getByRole("button", { name: "Remove", exact: true }).click();
     equipment.accent = null;
     await expect.poll(async () => (await read<DewResponse>(request, "/api/dew")).equippedCosmetics).toEqual(equipment);
     await expect(profile).toContainText(selected[1].name);
@@ -665,7 +665,7 @@ test("incomplete war estimates identify missing members and fields without flagg
   await expect(bonusRow).toHaveAttribute("data-planning-incomplete", "true");
   await expect(table.locator('tbody tr[data-planning-incomplete="true"]')).toHaveCount(2);
   await expect(memberRow(zero.memberId).getByRole("button", { name: /^Missing war-planning data/ })).toHaveCount(0);
-  await expect(memberRow(absent.memberId)).toContainText("No bank saved");
+  await expect(memberRow(absent.memberId)).toContainText("Not saved yet");
 
   const memberWarning = bonusRow.getByRole("button", { name: `Missing war-planning data for ${username(bonus.memberId)}`, exact: true });
   await memberWarning.click();

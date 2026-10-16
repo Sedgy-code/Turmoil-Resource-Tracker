@@ -4,6 +4,7 @@ import "@fontsource-variable/manrope";
 import "./globals.css";
 import "./clan-theme.css";
 import "./planning.css";
+import "./member-help.css";
 
 export const metadata: Metadata = {
   title: "Turmoil · Resource Tracker",

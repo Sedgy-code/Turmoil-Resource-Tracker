@@ -1,0 +1,168 @@
+/* Language picker and "Where do I find this?" picture guides. */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.language-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  min-height: 38px;
+  border: 1px solid #b4974955;
+  border-radius: 8px;
+  background: #0c1510;
+  color: var(--gold);
+  position: relative;
+}
+.language-picker select {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 4px;
+  cursor: pointer;
+  min-width: 0;
+}
+.language-picker select:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.language-picker option {
+  background: #0c1510;
+  color: var(--text);
+}
+.sidebar-language {
+  width: 100%;
+  margin-bottom: 8px;
+}
+.sidebar-language select {
+  flex: 1;
+}
+/* The sidebar holds the picker on wide screens; the top bar holds it on phones. */
+.topbar-language {
+  display: none;
+}
+.login-language {
+  position: absolute;
+  top: 30px;
+  right: 25px;
+  z-index: 2;
+}
+
+@media (max-width: 800px) {
+  .topbar-language {
+    display: inline-flex;
+    min-height: 34px;
+    padding: 0 7px;
+  }
+  .topbar-language select {
+    font-size: 12px;
+    padding: 6px 2px;
+  }
+  .login-language {
+    top: 22px;
+    right: 18px;
+  }
+}
+
+/* Short help under each box */
+.field-help {
+  display: block;
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.field-guide {
+  margin-top: 6px;
+}
+.field-guide-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 0;
+  min-height: 32px;
+  background: none;
+  border: 0;
+  color: var(--gold);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+.field-guide-toggle:hover {
+  color: var(--gold-hover);
+  text-decoration: underline;
+}
+.field-guide-toggle:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.field-guide-toggle svg.open {
+  transform: rotate(180deg);
+}
+.field-guide-panel {
+  margin-top: 4px;
+  padding: 10px;
+  border: 1px solid #b4974955;
+  border-radius: 8px;
+  background: #0a120d;
+}
+.field-guide-panel p {
+  margin: 0 0 8px;
+  color: #dec486;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.field-guide-panel img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 6px;
+}
+
+.summoning-cost-wrap {
+  display: flex;
+  flex-direction: column;
+}
+.eggs-pets-field,
+.bank-planning-field {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.bank-planning-field > label {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  font-size: 12px;
+}
+
+/* Larger, easier boxes on phones */
+@media (max-width: 650px) {
+  .resource-form input[type="number"] {
+    font-size: 16px;
+    min-height: 46px;
+  }
+  .field-help,
+  .field-guide-toggle {
+    font-size: 12.5px;
+  }
+}

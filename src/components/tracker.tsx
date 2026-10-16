@@ -13,6 +13,9 @@ import { DEFAULT_WAR_RATES, WAR_ACTIVITIES, estimateWar } from "@/lib/war";
 import { assessBankCompleteness } from "@/lib/completeness";
 import { filterPlanningIssues, memberPlanningIssues } from "@/lib/planning-completeness";
 import { MissingDataIndicator } from "./missing-data-indicator";
+import { LanguagePicker } from "./language-picker";
+import { FieldGuide, type GuidedField } from "./field-guide";
+import { LanguageProvider, useT, type Translate } from "@/lib/i18n";
 import missingDataStyles from "./missing-data-indicator.module.css";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -136,14 +139,35 @@ const dashboardResources = [
   { key: "eggsPetsTotal", icon: Egg, label: "Total eggs/pets", color: "gold" },
   ...essentials.slice(2),
 ] satisfies typeof essentials;
+/** Short help under each box, and the caption for its picture of the game screen. */
+const RESOURCE_GUIDE: Record<ResourceKey, { help: string; where: string }> = {
+  skillTickets: { help: "Top left of the Skills screen.", where: "Skills screen → the green ticket number at the top left." },
+  mountKeys: { help: "Top of the Mounts screen.", where: "Mounts screen → the key number at the top." },
+  mountsToMerge: { help: "Open a mount’s Upgrade screen, select all, and use the “Selected” number.", where: "Tap a mount → Upgrade → select all spare mounts → use the “Selected” number." },
+  hammers: { help: "The number on the anvil on the Forge screen.", where: "Forge screen → the hammer number on the anvil." },
+  eggsPetsTotal: { help: "Open a pet’s Upgrade screen, select all, and use the “Selected” number.", where: "Tap a pet → Upgrade → select all spare eggs/pets → use the “Selected” number." },
+  eggshellsTotal: { help: "Top left of the Pets screen.", where: "Pets screen → the eggshell number at the top left." },
+};
 
+const OFFLINE_MESSAGE = "Can’t reach the tracker. Check your internet connection and try again.";
 async function api<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(url, {
-    ...options,
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    cache: "no-store",
-  });
-  const data = await response.json();
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      cache: "no-store",
+    });
+  } catch {
+    // The browser's own network errors are English-only and unclear.
+    throw new Error(OFFLINE_MESSAGE);
+  }
+  let data: { error?: string; code?: string };
+  try {
+    data = await response.json();
+  } catch {
+    data = { error: response.ok ? undefined : "Something went wrong. Please try again." };
+  }
   if (!response.ok) {
     const error = new Error(data.error || "Something went wrong. Please try again.");
     Object.assign(error, { status: response.status, code: data.code });
@@ -151,16 +175,16 @@ async function api<T>(url: string, options?: RequestInit): Promise<T> {
   }
   return data as T;
 }
-function ago(date: string | null) {
-  if (!date) return "Not yet updated";
+function ago(date: string | null, t: Translate) {
+  if (!date) return t("Not yet updated");
   const minutes = Math.max(
     0,
     Math.round((Date.now() - new Date(date).getTime()) / 60000),
   );
-  if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  if (minutes < 1440) return `${Math.floor(minutes / 60)}h ago`;
-  return `${Math.floor(minutes / 1440)}d ago`;
+  if (minutes < 1) return t("Just now");
+  if (minutes < 60) return t("{count}m ago", { count: minutes });
+  if (minutes < 1440) return t("{count}h ago", { count: Math.floor(minutes / 60) });
+  return t("{count}d ago", { count: Math.floor(minutes / 1440) });
 }
 function freshness(date: string | null) {
   if (!date) return { color: "stale", label: "Never updated" };
@@ -170,8 +194,9 @@ function freshness(date: string | null) {
   return { color: "stale", label: "Updated a week ago or longer" };
 }
 function Freshness({ date }: { date: string | null }) {
+  const t = useT();
   const status = freshness(date);
-  return <span className={`freshness ${status.color}`} title={status.label}><i aria-hidden="true" />{date ? ago(date) : "Never updated"}</span>;
+  return <span className={`freshness ${status.color}`} title={t(status.label)}><i aria-hidden="true" />{date ? ago(date, t) : t("Never updated")}</span>;
 }
 function validWeekFromQuery(value: string | null): string {
   if (
@@ -202,6 +227,15 @@ function DiscordIcon() {
 }
 
 export default function Tracker({ view }: { view: View }) {
+  return (
+    <LanguageProvider>
+      <TrackerApp view={view} />
+    </LanguageProvider>
+  );
+}
+
+function TrackerApp({ view }: { view: View }) {
+  const t = useT();
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -235,6 +269,11 @@ export default function Tracker({ view }: { view: View }) {
   const checkSession = useCallback(async () => {
     try {
       const result = await api<SessionResponse>("/api/session");
+      if (result.canonicalOrigin && window.location.origin !== result.canonicalOrigin) {
+        // Opened from an old link: move to the public address so sign-in sticks.
+        window.location.replace(`${result.canonicalOrigin}${window.location.pathname}${window.location.search}`);
+        return;
+      }
       setSessionError("");
       setSession(result);
       if (!result.user) {
@@ -344,7 +383,7 @@ export default function Tracker({ view }: { view: View }) {
     link.download = `turmoil-resources-${week}.csv`;
     link.click();
     URL.revokeObjectURL(url);
-    notify("Weekly totals exported as CSV.");
+    notify(t("Weekly totals exported as CSV."));
   }
   async function copyTotals() {
     if (!data) return;
@@ -352,9 +391,9 @@ export default function Tracker({ view }: { view: View }) {
       await navigator.clipboard.writeText(
         `Turmoil · Week of ${week}\n${RESOURCE_FIELDS.map(({ key, label }) => `${label}: ${numberFormat(data.totals[key as ResourceKey])}`).join("\n")}`,
       );
-      notify("Clan totals copied to your clipboard.");
+      notify(t("Clan totals copied to your clipboard."));
     } catch {
-      notify("Clipboard unavailable. Use Export CSV instead.", true);
+      notify(t("Clipboard unavailable. Use Export CSV instead."), true);
     }
   }
   if (!session)
@@ -365,19 +404,19 @@ export default function Tracker({ view }: { view: View }) {
         </span>
         {sessionError ? (
           <>
-            <h2>Couldn’t connect to the tracker</h2>
-            <p>{sessionError}</p>
+            <h2>{t("Couldn’t connect to the tracker")}</h2>
+            <p>{t(sessionError)}</p>
             <button
               className="button primary"
               onClick={() => window.location.reload()}
             >
-              Try again
+              {t("Try again")}
             </button>
           </>
         ) : (
           <>
             <LoaderCircle className="spin" size={22} />
-            <p>Opening the forge…</p>
+            <p>{t("Loading…")}</p>
           </>
         )}
       </div>
@@ -407,7 +446,7 @@ export default function Tracker({ view }: { view: View }) {
       {mobileOpen && (
         <button
           className="sidebar-scrim"
-          aria-label="Close navigation"
+          aria-label={t("Close navigation")}
           onClick={() => setMobileOpen(false)}
         />
       )}
@@ -418,11 +457,11 @@ export default function Tracker({ view }: { view: View }) {
           </span>
           <span>
             <strong>TURMOIL</strong>
-            <small>RESOURCE TRACKER</small>
+            <small>{t("RESOURCE TRACKER")}</small>
           </span>
         </Link>
-        <span className="sidebar-label">CLAN WORKSPACE</span>
-        <nav aria-label="Main navigation">
+        <span className="sidebar-label">{t("CLAN WORKSPACE")}</span>
+        <nav aria-label={t("Main navigation")}>
           {navigation
             .filter((item) => item.view !== "members" || user.role === "ADMIN")
             .map(({ view: target, href, icon: NavIcon }) => (
@@ -433,7 +472,7 @@ export default function Tracker({ view }: { view: View }) {
                 onClick={() => setMobileOpen(false)}
               >
                 <NavIcon size={19} />
-                <span>{viewNames[target]}</span>
+                <span>{t(viewNames[target])}</span>
                 {target === "members" && (
                   <span className="nav-admin">
                     <ShieldCheck size={13} />
@@ -448,12 +487,13 @@ export default function Tracker({ view }: { view: View }) {
             <Swords size={22} />
             <div>
               <strong>Forge Masters</strong>
-              <span>Built for the next battle.</span>
+              <span>{t("Built for the next battle.")}</span>
             </div>
           </div>
+          <LanguagePicker className="sidebar-language" />
           <button className="nav-link help-link" onClick={() => setHelp(true)}>
             <CircleHelp size={18} />
-            Tracker guide
+            {t("Tracker guide")}
             <ArrowUpRight size={14} />
           </button>
           <div className="sidebar-profile">
@@ -462,13 +502,13 @@ export default function Tracker({ view }: { view: View }) {
               <strong><MemberName member={user} /></strong>
               <MemberTitle member={user} />
               <span>
-                {user.role === "ADMIN" ? "Clan admin" : "Clan member"}
+                {user.role === "ADMIN" ? t("Clan admin") : t("Clan member")}
               </span>
             </div>
             <button
               className="icon-button"
-              title="Sign out"
-              aria-label="Sign out"
+              title={t("Sign out")}
+              aria-label={t("Sign out")}
               onClick={signOut}
             >
               <LogOut size={17} />
@@ -481,26 +521,27 @@ export default function Tracker({ view }: { view: View }) {
           <div className="breadcrumb">
             <button
               className="icon-button mobile-menu"
-              aria-label="Open navigation"
+              aria-label={t("Open navigation")}
               onClick={() => setMobileOpen(true)}
             >
               <Menu size={22} />
             </button>
-            <span>Clan workspace</span>
+            <span>{t("Clan workspace")}</span>
             <ChevronRight size={13} />
-            <strong>{viewNames[view]}</strong>
+            <strong>{t(viewNames[view])}</strong>
           </div>
           <div className="topbar-actions">
+            <LanguagePicker className="topbar-language" />
             <ClanPointsBalance memberId={user.id} revision={data?.currentUser.lastUpdatedAt} />
-            {session.demo && <span className="demo-pill">Demo workspace</span>}
+            {session.demo && <span className="demo-pill">{t("Demo workspace")}</span>}
             <span className="connection">
               <i />
-              Clan connected
+              {t("Clan connected")}
             </span>
             <div className="notification-wrap">
               <button
                 className={`icon-button ${notifications ? "selected" : ""}`}
-                aria-label="Recent activity"
+                aria-label={t("Recent activity")}
                 onClick={() => setNotifications(!notifications)}
               >
                 <Bell size={19} />
@@ -508,7 +549,7 @@ export default function Tracker({ view }: { view: View }) {
               </button>
               {notifications && (
                 <div className="notification-panel">
-                  <h3>Recent clan activity</h3>
+                  <h3>{t("Recent clan activity")}</h3>
                   {data?.entries
                     .slice()
                     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
@@ -517,12 +558,12 @@ export default function Tracker({ view }: { view: View }) {
                       <div key={entry.id}>
                         <CheckCircle2 size={17} />
                         <p>
-                          <strong>{entry.updatedBy.username}</strong> updated
-                          resources<small>{ago(entry.updatedAt)}</small>
+                          <strong>{entry.updatedBy.username}</strong> {t("updated resources")}
+                          <small>{ago(entry.updatedAt, t)}</small>
                         </p>
                       </div>
                     ))}
-                  {!data?.entries.length && <p>No resource bank updates yet.</p>}
+                  {!data?.entries.length && <p>{t("No resource bank updates yet.")}</p>}
                 </div>
               )}
             </div>
@@ -533,7 +574,7 @@ export default function Tracker({ view }: { view: View }) {
           <div className="page-heading">
             <div>
               <div className="eyebrow">
-                {view === "dashboard"
+                {t(view === "dashboard"
                   ? "CLAN OVERVIEW"
                   : view === "resources"
                     ? "YOUR CONTRIBUTION"
@@ -541,39 +582,39 @@ export default function Tracker({ view }: { view: View }) {
                       ? "CLAN ROSTER"
                       : view === "war" ? "BATTLE PREPARATION"
                         : view === "snipes" ? "PLAN TOGETHER"
-                          : view === "store" ? "YOUR CLAN REWARDS" : "THE CLAN ARCHIVE"}
+                          : view === "store" ? "YOUR CLAN REWARDS" : "THE CLAN ARCHIVE")}
               </div>
               <h1>
-                {view === "dashboard" ? "Resource Dashboard" : viewNames[view]}
+                {view === "dashboard" ? t("Resource Dashboard") : t(viewNames[view])}
               </h1>
               <p>
-                {view === "dashboard"
-                  ? "Every resource. Every member. One stronger clan."
+                {t(view === "dashboard"
+                  ? "All the clan’s resources in one place."
                   : view === "resources"
-                    ? "Keep your arsenal up to date. Make every resource count."
+                    ? "Copy your numbers from the game, then press Save."
                     : view === "members"
-                      ? "A stronger clan starts with the people behind it."
-                      : view === "war" ? "Choose activities and estimate the clan’s next battle."
-                        : view === "snipes" ? "Organise events, share availability, and prepare together."
-                          : view === "store" ? "Earn Clan Points for complete weekly updates and confirmed snipe participation."
-                            : "Fixed weekly snapshots and changes in the clan’s resources."}
+                      ? "Manage who can use the tracker."
+                      : view === "war" ? "Pick activities to estimate the clan’s war points."
+                        : view === "snipes" ? "Plan events and say when you can join."
+                          : view === "store" ? "Earn Clan Points by saving your resources each week and joining snipes."
+                            : "Saved weekly totals for the clan.")}
               </p>
             </div>
             {["dashboard", "resources", "weeks"].includes(view) && (
               <div className="week-control">
                 <button
                   className="icon-button"
-                  aria-label="Previous week"
+                  aria-label={t("Previous week")}
                   onClick={() => selectWeek(shiftWeek(week, -1))}
                 >
                   <ChevronLeft size={17} />
                 </button>
                 <label className="week-picker">
                   <CalendarDays size={16} />
-                  <span>Week of {formatWeek(week)}</span>
+                  <span>{t("Week of {date}", { date: formatWeek(week) })}</span>
                   <ChevronDown size={14} />
                   <input
-                    aria-label="Select week"
+                    aria-label={t("Select week")}
                     type="date"
                     value={week}
                     onChange={(e) =>
@@ -583,7 +624,7 @@ export default function Tracker({ view }: { view: View }) {
                 </label>
                 <button
                   className="icon-button"
-                  aria-label="Next week"
+                  aria-label={t("Next week")}
                   onClick={() => selectWeek(shiftWeek(week, 1))}
                 >
                   <ChevronRight size={17} />
@@ -593,17 +634,17 @@ export default function Tracker({ view }: { view: View }) {
           </div>
           {error && (
             <div className="error-banner" role="alert">
-              <span>{error}</span>
-              <button onClick={refresh}>Retry</button>
+              <span>{t(error)}</span>
+              <button onClick={refresh}>{t("Retry")}</button>
             </div>
           )}
           {denied ? (
             <section className="empty-state">
               <ShieldCheck size={32} />
-              <h2>Admin access required</h2>
-              <p>Only clan admins can manage the member roster.</p>
+              <h2>{t("Admin access required")}</h2>
+              <p>{t("Only clan admins can manage the member roster.")}</p>
               <Link href="/" className="button primary">
-                Back to dashboard
+                {t("Back to dashboard")}
               </Link>
             </section>
           ) : !dataMatches && loading ? (
@@ -613,19 +654,15 @@ export default function Tracker({ view }: { view: View }) {
               <section className="hero">
                 <div className="hero-copy">
                   <span className="hero-eyebrow">
-                    <span /> UNITED WE FORGE
+                    <span /> {t("UNITED WE FORGE")}
                   </span>
-                  <h2>Stronger, together.</h2>
-                  <p>
-                    Your resources are the clan’s next advantage.{" "}
-                    <br />
-                    Track your arsenal. Prepare for what’s ahead.
-                  </p>
+                  <h2>{t("Stronger, together.")}</h2>
+                  <p>{t("Save your resources so the clan can plan the next war.")}</p>
                   <Link
                     href={`/resources?week=${week}${snapshotId ? `&snapshot=${encodeURIComponent(snapshotId)}` : ""}`}
                     className="button primary"
                   >
-                    {data.live === false ? "View saved resources" : ownEntry ? "Update my resources" : "Add my resources"}
+                    {t(data.live === false ? "View saved resources" : ownEntry ? "Update my resources" : "Add my resources")}
                     <ArrowRight size={16} />
                   </Link>
                 </div>
@@ -638,7 +675,7 @@ export default function Tracker({ view }: { view: View }) {
                 />
                 <span className="hero-tag">
                   <Sparkles size={13} />
-                  THE TURMOIL WAY
+                  {t("THE TURMOIL WAY")}
                 </span>
                 <div className="hero-participation">
                   <div className="avatar-stack">
@@ -648,10 +685,9 @@ export default function Tracker({ view }: { view: View }) {
                   </div>
                   <div>
                     <strong>
-                      {data.stats.submittedMembers} of {data.stats.totalMembers}{" "}
-                      members
+                      {t("{count} of {total} members", { count: data.stats.submittedMembers, total: data.stats.totalMembers })}
                     </strong>
-                    <span>{data.live === false ? "had resources in this saved week" : "have a saved resource bank"}</span>
+                    <span>{t(data.live === false ? "had resources in this saved week" : "have saved their resources")}</span>
                   </div>
                   <div className="participation-track">
                     <i
@@ -665,26 +701,26 @@ export default function Tracker({ view }: { view: View }) {
               <div className="section-heading">
                 <div>
                   <h2>
-                    {data.live === false ? "Saved weekly arsenal" : "The clan’s current arsenal"}{" "}
+                    {t(data.live === false ? "Saved weekly arsenal" : "The clan’s current arsenal")}{" "}
                     <span className="live-badge">
                       <i />
-                      {data.live === false ? "READ-ONLY HISTORY" : "LIVE TOTALS"}
+                      {t(data.live === false ? "READ-ONLY HISTORY" : "LIVE TOTALS")}
                     </span>
                   </h2>
-                  <p>{data.live === false ? "Historical totals are preserved with the roster at capture time." : "Combined persistent banks from all active Turmoil members."}</p>
+                  <p>{t(data.live === false ? "Totals as they were saved that week." : "Everyone’s saved resources added together.")}</p>
                 </div>
                 <div className="section-actions">
                   <button className="button subtle" onClick={copyTotals}>
                     <Clipboard size={15} />
-                    <span>Copy totals</span>
+                    <span>{t("Copy totals")}</span>
                   </button>
                   <button className="button secondary" onClick={downloadCsv}>
                     <ArrowDownToLine size={15} />
-                    Export CSV
+                    {t("Export CSV")}
                   </button>
                 </div>
               </div>
-              {warEstimateError && <div className="error-banner" role="alert">War estimate unavailable: {warEstimateError}</div>}
+              {warEstimateError && <div className="error-banner" role="alert">{t("War estimate unavailable:")} {t(warEstimateError)}</div>}
               <ClanArsenal data={data} estimate={dashboardWar} rates={warRates} estimateError={warEstimateError} snapshotId={snapshotId} />
               <MemberResources
                 data={data}
@@ -716,9 +752,9 @@ export default function Tracker({ view }: { view: View }) {
           <footer className="page-footer">
             <span>
               <Flame size={13} />
-              FORGED FOR TURMOIL
+              {t("FORGED FOR TURMOIL")}
             </span>
-            <span>Plan together. Forge ahead.</span>
+            <span>{t("Plan together. Forge ahead.")}</span>
           </footer>
         </main>
       </div>
@@ -728,10 +764,10 @@ export default function Tracker({ view }: { view: View }) {
           role="status"
         >
           {toast.error ? <X size={18} /> : <CheckCircle2 size={18} />}
-          {toast.message}
+          {t(toast.message)}
           <button
             className="icon-button"
-            aria-label="Dismiss notification"
+            aria-label={t("Dismiss notification")}
             onClick={() => setToast(null)}
           >
             <X size={15} />
@@ -744,12 +780,12 @@ export default function Tracker({ view }: { view: View }) {
             className="guide-modal"
             role="dialog"
             aria-modal="true"
-            aria-label="Tracker guide"
+            aria-label={t("Tracker guide")}
             onClick={(e) => e.stopPropagation()}
           >
             <button
               className="icon-button modal-close"
-              aria-label="Close guide"
+              aria-label={t("Close guide")}
               onClick={() => setHelp(false)}
             >
               <X size={20} />
@@ -757,45 +793,31 @@ export default function Tracker({ view }: { view: View }) {
             <span className="brand-mark">
               <ClanBrand decorative />
             </span>
-            <h2>Your clan’s resource hub.</h2>
-            <p>
-              Your bank carries forward until you update it. Save your current
-              Forge Masters resources in My Resources; clan totals change immediately.
-              Weekly history records fixed snapshots at Monday 00:00 UTC
-              (10am AEST or 11am AEDT in Sydney).
-            </p>
+            <h2>{t("How the tracker works")}</h2>
+            <p>{t("Open My Resources, copy each number from the game, and press Save. Your numbers stay saved until you change them.")}</p>
             <div className="guide-row">
               <Backpack size={20} />
               <div>
-                <strong>Update your arsenal</strong>
-                <p>
-                  Resource amounts are whole numbers. Your costs, levels, and
-                  inventory stay saved, so you only change what has changed.
-                </p>
+                <strong>{t("1. Fill in every box")}</strong>
+                <p>{t("Not sure where a number is? Tap “Where do I find this?” under the box to see a picture of the game screen.")}</p>
+              </div>
+            </div>
+            <div className="guide-row">
+              <Check size={20} />
+              <div>
+                <strong>{t("2. Press Save each week")}</strong>
+                <p>{t("Saving a complete form earns 20 Clan Points each week. You only need to change numbers that changed.")}</p>
               </div>
             </div>
             <div className="guide-row">
               <CalendarDays size={20} />
               <div>
-                <strong>Browse any week</strong>
-                <p>
-                  Use the date picker or Weekly History to see fixed snapshots.
-                  Past views are read-only and never change your live bank.
-                </p>
-              </div>
-            </div>
-            <div className="guide-row">
-              <ShieldCheck size={20} />
-              <div>
-                <strong>A workspace for your clan</strong>
-                <p>
-                  Discord verifies your membership. Admins can edit entries and
-                  manage members. Inactive members are excluded from totals.
-                </p>
+                <strong>{t("3. Weekly totals")}</strong>
+                <p>{t("Every Monday at 00:00 UTC the clan totals are saved. You can view past weeks, but not change them.")}</p>
               </div>
             </div>
             <button className="button primary" onClick={() => setHelp(false)}>
-              Got it
+              {t("Got it")}
               <Check size={16} />
             </button>
           </section>
@@ -806,6 +828,7 @@ export default function Tracker({ view }: { view: View }) {
 }
 
 function Login({ configured, error }: { configured: boolean; error: string }) {
+  const t = useT();
   const messages: Record<string, string> = {
     "auth-cancelled":
       "Discord authorization was cancelled. You can try signing in again.",
@@ -835,6 +858,7 @@ function Login({ configured, error }: { configured: boolean; error: string }) {
         </span>
         <strong>TURMOIL</strong>
       </div>
+      <LanguagePicker className="login-language" />
       <div className="login-stage">
         <div className="login-art">
           <ClanBrand
@@ -843,23 +867,19 @@ function Login({ configured, error }: { configured: boolean; error: string }) {
             size={480}
             sizes="(max-width: 650px) 195px, (max-width: 900px) 340px, 480px"
           />
-          <span className="crest-caption">FORGED IN UNITY</span>
+          <span className="crest-caption">{t("FORGED IN UNITY")}</span>
         </div>
         <section className="login-card">
-          <div className="eyebrow">THE TURMOIL RESOURCE TRACKER</div>
+          <div className="eyebrow">{t("THE TURMOIL RESOURCE TRACKER")}</div>
           <h1>
-            One clan.
+            {t("One clan.")}
             <br />
-            <span>Endless potential.</span>
+            <span>{t("Endless potential.")}</span>
           </h1>
-          <p>
-            Your Forge Masters arsenal, united.
-            <br />
-            Sign in once in this browser. We keep you signed in on this device.
-          </p>
+          <p>{t("Sign in with Discord once. This device will remember you.")}</p>
           {message && (
             <div className="error-banner" role="alert">
-              {message}
+              {t(message)}
             </div>
           )}
           <a
@@ -868,13 +888,13 @@ function Login({ configured, error }: { configured: boolean; error: string }) {
             aria-disabled={!configured}
           >
             <DiscordIcon />
-            Continue with Discord
+            {t("Continue with Discord")}
             <ArrowRight size={17} />
           </a>
-          <p className="login-device-note">Sign in again if you sign out, clear cookies, use private browsing, or your device session expires.</p>
+          <p className="login-device-note">{t("Opened this from Discord on your phone? Tap ⋯ and choose “Open in browser” so you stay signed in.")}</p>
           <div className="login-security">
             <ShieldCheck size={15} />
-            Exclusively for members of the Turmoil clan
+            {t("Only for members of the Turmoil clan")}
           </div>
           {!configured && (
             <p className="login-config">
@@ -884,21 +904,23 @@ function Login({ configured, error }: { configured: boolean; error: string }) {
           )}
         </section>
       </div>
-      <footer>Plan together. Forge ahead.</footer>
+      <footer>{t("Plan together. Forge ahead.")}</footer>
     </main>
   );
 }
 
 function WarPointRange({ minimum, maximum }: { minimum: number | null; maximum: number | null }) {
+  const t = useT();
   return (
     <div className="war-point-range">
-      <div><span>Low estimate</span><strong>{minimum === null ? "--" : numberFormat(minimum)}</strong></div>
-      <div><span>High estimate</span><strong>{maximum === null ? "--" : numberFormat(maximum)}</strong></div>
+      <div><span>{t("Low estimate")}</span><strong>{minimum === null ? "--" : numberFormat(minimum)}</strong></div>
+      <div><span>{t("High estimate")}</span><strong>{maximum === null ? "--" : numberFormat(maximum)}</strong></div>
     </div>
   );
 }
 
 function ClanArsenal({ data, estimate, rates, estimateError, snapshotId }: { data: DashboardResponse; estimate: WarEstimate | null; rates: WarRates; estimateError: string; snapshotId: string | null }) {
+  const t = useT();
   const quantity = (activity: WarEstimate["rows"][number]["activity"]) => estimate?.rows.find((row) => row.activity === activity)?.quantity ?? 0;
   const points = (...activities: WarEstimate["rows"][number]["activity"][]) => estimate?.rows.filter((row) => activities.includes(row.activity)).reduce((total, row) => total + row.minimum, 0) ?? 0;
   const expected = (value: number) => new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 }).format(value);
@@ -920,49 +942,49 @@ function ClanArsenal({ data, estimate, rates, estimateError, snapshotId }: { dat
         const missingChances = filterPlanningIssues(cardIssues, ["extraMountChancePercent", "extraPetSummonPercent"]).length;
         return (
           <article className={`stat-card arsenal-card arsenal-${key}`} key={key}>
-            <div className="stat-label"><span className={`resource-icon ${color}`}><StatIcon size={19} strokeWidth={1.8} /></span><span>{label}</span></div>
+            <div className="stat-label"><span className={`resource-icon ${color}`}><StatIcon size={19} strokeWidth={1.8} /></span><span>{t(label)}</span></div>
             <strong className="stat-number">{numberFormat(data.totals[key])}</strong>
             <div className="arsenal-details">
-              {key === "skillTickets" && <div className="arsenal-metric"><span>Total skill summons</span><strong>{estimateError ? "--" : numberFormat(quantity("skillSummons"))}</strong></div>}
+              {key === "skillTickets" && <div className="arsenal-metric"><span>{t("Total skill summons")}</span><strong>{estimateError ? "--" : numberFormat(quantity("skillSummons"))}</strong></div>}
               {key === "mountKeys" && <>
-                <div className="arsenal-metric"><span>Total mount summons</span><strong>{estimateError ? "--" : numberFormat(quantity("mountSummons"))}</strong></div>
-                <div className="arsenal-metric"><span>{mixedHistory ? "Bonus / planned new merges" : chanceHistory ? "Expected bonus merges" : "Planned new merges"}</span><strong>{estimateError ? "--" : expected(quantity("newMountMerges"))}</strong></div>
+                <div className="arsenal-metric"><span>{t("Total mount summons")}</span><strong>{estimateError ? "--" : numberFormat(quantity("mountSummons"))}</strong></div>
+                <div className="arsenal-metric"><span>{t(mixedHistory ? "Bonus / planned new merges" : chanceHistory ? "Expected bonus merges" : "Planned new merges")}</span><strong>{estimateError ? "--" : expected(quantity("newMountMerges"))}</strong></div>
               </>}
               {key === "eggsPetsTotal" && <>
-                <div className="arsenal-metric"><span>Eggshells total</span><strong>{numberFormat(data.totals.eggshellsTotal)}</strong></div>
-                {!live && <div className="arsenal-metric"><span>Saved existing merges</span><strong>{estimateError ? "--" : numberFormat(quantity("eggMerges"))}</strong></div>}
-                <div className="arsenal-metric"><span>{mixedHistory ? "Extra / planned pet merges" : chanceHistory ? "Expected extra pet merges" : "Planned summon/merge actions"}</span><strong>{estimateError ? "--" : expected(quantity("eggSummonMerges"))}</strong></div>
+                <div className="arsenal-metric"><span>{t("Eggshells total")}</span><strong>{numberFormat(data.totals.eggshellsTotal)}</strong></div>
+                {!live && <div className="arsenal-metric"><span>{t("Saved existing merges")}</span><strong>{estimateError ? "--" : numberFormat(quantity("eggMerges"))}</strong></div>}
+                <div className="arsenal-metric"><span>{t(mixedHistory ? "Extra / planned pet merges" : chanceHistory ? "Expected extra pet merges" : "Planned summon/merge actions")}</span><strong>{estimateError ? "--" : expected(quantity("eggSummonMerges"))}</strong></div>
               </>}
-              {key === "mountsToMerge" && <p className="arsenal-note">Existing mounts only. Bonus mounts are counted with Mount Keys.</p>}
-              {key === "hammers" && <p className="arsenal-note">A range of {numberFormat(rates.hammersMin)}–{numberFormat(rates.hammersMax)} points per hammer.</p>}
-              {(key === "skillTickets" || key === "mountKeys") && <p className="arsenal-note">Whole summons calculated per member.{key === "mountKeys" && chanceHistory ? " Bonus merges use each member’s extra mount chance." : ""}</p>}
-              {key === "eggsPetsTotal" && <p className="arsenal-note">{mixedHistory ? "Original manual counts are preserved; newer banks use eggs/pets totals and extra chances." : chanceHistory ? "All eggs/pets are available to merge. Extra pets use eggshells ÷ 100 × each member’s chance." : "Saved manual merge counts are preserved in this history."}</p>}
+              {key === "mountsToMerge" && <p className="arsenal-note">{t("Mounts you already have. Bonus mounts are counted under Mount Keys.")}</p>}
+              {key === "hammers" && <p className="arsenal-note">{t("{min}–{max} points per hammer.", { min: numberFormat(rates.hammersMin), max: numberFormat(rates.hammersMax) })}</p>}
+              {(key === "skillTickets" || key === "mountKeys") && <p className="arsenal-note">{t("Whole summons, worked out for each member.")}{key === "mountKeys" && chanceHistory ? ` ${t("Bonus merges use each member’s extra mount chance.")}` : ""}</p>}
+              {key === "eggsPetsTotal" && <p className="arsenal-note">{t(mixedHistory ? "Older entries keep their original counts; newer ones use totals and extra chances." : chanceHistory ? "All eggs/pets can be merged. Extra pets = eggshells ÷ 100 × each member’s extra chance." : "This week keeps its original saved merge counts.")}</p>}
               <MissingDataIndicator members={cardIssues} label={missingCosts > 0
-                ? `Incomplete: ${missingCosts} ${missingCosts === 1 ? "member" : "members"} missing a summon cost.${missingChances > 0 ? " Extra chances are also missing." : ""}`
-                : `Extra chance needed for ${missingChances} ${missingChances === 1 ? "member" : "members"}; bonus points are incomplete.`} />
+                ? `${t("Incomplete: {count} member(s) missing a summon cost.", { count: missingCosts })}${missingChances > 0 ? ` ${t("Extra chances are also missing.")}` : ""}`
+                : t("{count} member(s) missing an extra chance, so bonus points are incomplete.", { count: missingChances })} />
             </div>
             <div className="stat-war-points">
-              <span className="war-points-label">Potential clan war points</span>
+              <span className="war-points-label">{t("Potential clan war points")}</span>
               {key === "hammers" ? <WarPointRange minimum={estimateError ? null : cardPoints} maximum={estimateError ? null : estimate?.rows.find((row) => row.activity === "hammers")?.maximum ?? 0} /> : <strong className="war-points-total">{estimateError ? "--" : numberFormat(cardPoints)}</strong>}
-              <span className="war-points-note">{key === "skillTickets" ? `${numberFormat(rates.skillSummons)} points per skill summon.`
-                : key === "mountKeys" ? `Summons ${numberFormat(rates.mountSummons)} + bonus merges ${numberFormat(rates.newMountMerges)} points each.`
-                  : key === "eggsPetsTotal" ? `Existing merges ${numberFormat(rates.eggMerges)} + extra pet merges ${numberFormat(rates.eggSummonMerges)} points each.`
-                    : key === "mountsToMerge" ? `${numberFormat(rates.mountMerges)} points per existing mount merge.` : "Hammer totals include both ends of the estimate."}</span>
+              <span className="war-points-note">{key === "skillTickets" ? t("{points} points per skill summon.", { points: numberFormat(rates.skillSummons) })
+                : key === "mountKeys" ? t("Summons {summon} + bonus merges {bonus} points each.", { summon: numberFormat(rates.mountSummons), bonus: numberFormat(rates.newMountMerges) })
+                  : key === "eggsPetsTotal" ? t("Existing merges {existing} + extra pet merges {extra} points each.", { existing: numberFormat(rates.eggMerges), extra: numberFormat(rates.eggSummonMerges) })
+                    : key === "mountsToMerge" ? t("{points} points per existing mount merge.", { points: numberFormat(rates.mountMerges) }) : t("Shows the lowest and highest hammer estimate.")}</span>
             </div>
           </article>
         );
       })}
       <article className="stat-card arsenal-card arsenal-summary">
-        <div className="stat-label"><span className="resource-icon gold"><Sparkles size={19} /></span><span>Total Potential War Points</span></div>
-        <p className="arsenal-summary-copy">The clan’s combined battle estimate</p>
+        <div className="stat-label"><span className="resource-icon gold"><Sparkles size={19} /></span><span>{t("Total Potential War Points")}</span></div>
+        <p className="arsenal-summary-copy">{t("The clan’s combined war estimate")}</p>
         <WarPointRange minimum={estimateError ? null : estimate?.minimum ?? 0} maximum={estimateError ? null : estimate?.maximum ?? 0} />
         <div className="arsenal-summary-footer">
-          <span className="arsenal-summary-tag"><Swords size={13} />All seven scoring activities</span>
-          <p className="arsenal-note">Adds the five resource cards once. Fractional bonus actions are expected values; points are rounded per activity.</p>
-          <MissingDataIndicator members={incompleteMembers} label={membersMissingCosts.length > 0
+          <span className="arsenal-summary-tag"><Swords size={13} />{t("All seven scoring activities")}</span>
+          <p className="arsenal-note">{t("The five cards above added together. Bonus actions are averages, so points are rounded.")}</p>
+          <MissingDataIndicator members={incompleteMembers} label={t(membersMissingCosts.length > 0
             ? "Some summon costs are missing. This total is incomplete."
-            : "Add missing extra chances to include all bonus points."} />
-          <Link className="arsenal-planner-link" href={`/war-points${data.live === false ? `?week=${data.week}${snapshotId ? `&snapshot=${encodeURIComponent(snapshotId)}` : ""}` : ""}`}>View war calculator <ArrowRight size={14} /></Link>
+            : "Add missing extra chances to include all bonus points.")} />
+          <Link className="arsenal-planner-link" href={`/war-points${data.live === false ? `?week=${data.week}${snapshotId ? `&snapshot=${encodeURIComponent(snapshotId)}` : ""}` : ""}`}>{t("View war calculator")} <ArrowRight size={14} /></Link>
         </div>
       </article>
     </div>
@@ -980,6 +1002,7 @@ function MemberResources({
   admin: boolean;
   snapshotId: string | null;
 }) {
+  const t = useT();
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("all");
   type ContributionSort = "username" | "updatedAt" | ResourceKey;
@@ -1012,16 +1035,16 @@ function MemberResources({
       <div className="table-section-heading">
         <div>
           <h2>
-            Member contributions{" "}
+            {t("Member contributions")}{" "}
             <span className="count-badge">{data.stats.totalMembers}</span>
           </h2>
-          <p>Every contribution brings us closer to the next victory.</p>
+          <p>{t("What each member has saved.")}</p>
         </div>
         <label className="search-input">
           <Search size={16} />
           <input
-            placeholder="Search members…"
-            aria-label="Search contributions"
+            placeholder={t("Search members…")}
+            aria-label={t("Search members…")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -1033,31 +1056,31 @@ function MemberResources({
           className={tab === "all" ? "active" : ""}
           onClick={() => setTab("all")}
         >
-          All members<span>{data.stats.totalMembers}</span>
+          {t("All members")}<span>{data.stats.totalMembers}</span>
         </button>
         <button
           className={tab === "submitted" ? "active" : ""}
           onClick={() => setTab("submitted")}
         >
-          Updated<span>{data.stats.submittedMembers}</span>
+          {t("Updated")}<span>{data.stats.submittedMembers}</span>
         </button>
         <button
           className={tab === "pending" ? "active" : ""}
           onClick={() => setTab("pending")}
         >
-          Pending<span>{data.stats.pendingMembers}</span>
+          {t("Pending")}<span>{data.stats.pendingMembers}</span>
         </button>
         <span className="table-scroll-hint">
-          Scroll to explore all resources
+          {t("Scroll sideways to see all resources")}
           <ArrowRight size={13} />
         </span>
       </div>
-      {incompleteMembers.length > 0 && <p className={missingDataStyles.legend}><CircleAlert size={13} aria-hidden="true" />Highlighted members have incomplete war-planning data. Hover or tap Missing data for details.</p>}
+      {incompleteMembers.length > 0 && <p className={missingDataStyles.legend}><CircleAlert size={13} aria-hidden="true" />{t("Highlighted members are missing some numbers. Tap “Missing data” to see which.")}</p>}
       <div className="table-scroll">
         <table className="resource-table">
           <thead>
             <tr>
-              <th className="sticky-member" aria-sort={sortOrder("username")}><button className="column-sort" onClick={() => changeSort("username")}>Member {sortIcon("username")}</button></th>
+              <th className="sticky-member" aria-sort={sortOrder("username")}><button className="column-sort" onClick={() => changeSort("username")}>{t("Member")} {sortIcon("username")}</button></th>
               {RESOURCE_FIELDS.map(({ key, label }) => {
                 const FieldIcon =
                   key === "eggsPetsTotal" || key === "eggshellsTotal"
@@ -1067,14 +1090,14 @@ function MemberResources({
                 return (
                   <th key={key} aria-sort={sortOrder(key)}>
                     <button className="column-sort" onClick={() => changeSort(key)}>
-                      <FieldIcon size={14} aria-hidden="true" />{label}{sortIcon(key)}
+                      <FieldIcon size={14} aria-hidden="true" />{t(label)}{sortIcon(key)}
                     </button>
                   </th>
                 );
               })}
-              <th aria-sort={sortOrder("updatedAt")}><button className="column-sort" onClick={() => changeSort("updatedAt")}>Last updated {sortIcon("updatedAt")}</button></th>
-              <th>Notes</th>
-              {admin && <th>Edit</th>}
+              <th aria-sort={sortOrder("updatedAt")}><button className="column-sort" onClick={() => changeSort("updatedAt")}>{t("Last updated")} {sortIcon("updatedAt")}</button></th>
+              <th>{t("Notes")}</th>
+              {admin && <th>{t("Edit")}</th>}
             </tr>
           </thead>
           <tbody>
@@ -1093,7 +1116,7 @@ function MemberResources({
                         <strong>
                           <MemberName member={member} />
                           {member.id === data.currentUser.id && (
-                            <span className="you-badge">you</span>
+                            <span className="you-badge">{t("you")}</span>
                           )}
                         </strong>
                         <MemberTitle member={member} />
@@ -1101,9 +1124,9 @@ function MemberResources({
                           <i
                             className={entry ? "updated-dot" : "pending-dot"}
                           />
-                          {entry ? "Resources updated" : "No bank saved"}
+                          {t(entry ? "Resources saved" : "Not saved yet")}
                         </span>
-                        {missingInformation && <MissingDataIndicator members={[missingInformation]} label="Missing data" accessibleLabel={`Missing war-planning data for ${member.username}`} compact />}
+                        {missingInformation && <MissingDataIndicator members={[missingInformation]} label={t("Missing data")} accessibleLabel={t("Missing data for {name}", { name: member.username })} compact />}
                       </div>
                     </div>
                   </td>
@@ -1126,7 +1149,7 @@ function MemberResources({
                     {entry ? (
                       <>
                         <Freshness date={entry.updatedAt} />
-                        <small>by {entry.updatedBy.username}</small>
+                        <small>{t("by {name}", { name: entry.updatedBy.username })}</small>
                       </>
                     ) : (
                       "—"
@@ -1139,7 +1162,7 @@ function MemberResources({
                         className="text-link"
                         href={`/resources?week=${week}&member=${member.id}${snapshotId ? `&snapshot=${encodeURIComponent(snapshotId)}` : ""}`}
                       >
-                        {data.live === false ? "View" : "Edit"}
+                        {t(data.live === false ? "View" : "Edit")}
                         <ArrowUpRight size={13} />
                       </Link>
                     </td>
@@ -1152,7 +1175,7 @@ function MemberResources({
         {!members.length && (
           <div className="table-empty">
             <Search size={22} />
-            <p>No members match this view.</p>
+            <p>{t("No members match this view.")}</p>
             <button
               className="text-link"
               onClick={() => {
@@ -1160,18 +1183,18 @@ function MemberResources({
                 setTab("all");
               }}
             >
-              Clear filters
+              {t("Clear filters")}
             </button>
           </div>
         )}
       </div>
       <div className="table-footer">
         <span>
-          Showing {members.length} of {data.members.length} members
+          {t("Showing {count} of {total} members", { count: members.length, total: data.members.length })}
         </span>
         <span>
           <i />
-          Totals include active members only
+          {t("Totals include active members only")}
         </span>
       </div>
     </section>
@@ -1193,6 +1216,7 @@ function ResourceForm({
   notify: (message: string, error?: boolean) => void;
   refresh: () => Promise<void>;
 }) {
+  const t = useT();
   const router = useRouter();
   const selected =
     data.currentUser.role === "ADMIN" && memberId
@@ -1208,17 +1232,17 @@ function ResourceForm({
   type PlanningFieldKey = Exclude<keyof PlanningDetails, "calculationVersion">;
   const isChance = (key: PlanningFieldKey) => key === "extraMountChancePercent" || key === "extraPetSummonPercent";
   const planningMaximum = (key: PlanningFieldKey) => isChance(key) ? 1000 : key.endsWith("Level") ? 1_000_000_000 : 1_000_000;
-  const planningFields: { key: PlanningFieldKey; label: string; help: string }[] = [
-    { key: "skillLevel", label: "Skill level", help: "Saved for reference; costs are entered separately." },
-    { key: "mountLevel", label: "Mount level", help: "Saved for reference; costs are entered separately." },
-    { key: "eggLevel", label: "Egg/pet level", help: legacyHistory ? "Saved for reference alongside the original planned actions." : "Saved for reference; all existing eggs/pets are available to merge." },
+  const planningFields: { key: PlanningFieldKey; label: string; help: string; picture?: GuidedField; where?: string }[] = [
+    { key: "skillLevel", label: "Skill level", help: "Tap ⓘ next to the Summon button on the Skills screen.", picture: "skillLevel", where: "Skills screen → tap ⓘ next to Summon. Use the Level number at the top." },
+    { key: "mountLevel", label: "Mount level", help: "Tap ⓘ next to the Summon button on the Mounts screen.", picture: "mountLevel", where: "Mounts screen → tap ⓘ next to Summon. Use the Level number at the top." },
+    { key: "eggLevel", label: "Egg/pet level", help: legacyHistory ? "Saved for reference alongside the original planned actions." : "Tap ⓘ next to the Summon button on the Pets screen.", picture: legacyHistory ? undefined : "eggLevel", where: "Pets screen → tap ⓘ next to Summon. Use the Level number at the top." },
     ...(legacyHistory ? [
       { key: "newMountMerges" as const, label: "Newly summoned mount merges", help: "Original planned merge count saved in this snapshot." },
       { key: "eggMerges" as const, label: "Existing egg/pet merges", help: "Original existing merge count saved in this snapshot." },
       { key: "eggSummonMerges" as const, label: "Egg/pet summon then merge", help: "Original future summon/merge count saved in this snapshot." },
     ] : [
-      { key: "extraMountChancePercent" as const, label: "Extra mount chance %", help: "Bonus merges = whole mount summons × this percentage. Enter 0 if you have no extra chance." },
-      { key: "extraPetSummonPercent" as const, label: "Extra pet summon %", help: "Extra pet merges = eggshells ÷ 100 × this percentage. Enter 0 if you have no extra chance." },
+      { key: "extraMountChancePercent" as const, label: "Extra mount chance %", help: "Enter the number only, e.g. 42. Enter 0 if you have none.", picture: "extraMountChancePercent" as const, where: "Tech Tree → tap ⓘ to open Total Bonuses → “Chance to summon an extra mount”." },
+      { key: "extraPetSummonPercent" as const, label: "Extra pet summon %", help: "Enter the number only, e.g. 50. Enter 0 if you have none.", picture: "extraPetSummonPercent" as const, where: "Tech Tree → tap ⓘ to open Total Bonuses → “Chance to summon an extra egg”." },
     ]),
   ];
   const planningText = (details: PlanningDetails, key: PlanningFieldKey) => details[key] === undefined || (!entry && !readOnly && key.endsWith("Level")) ? "" : String(details[key]);
@@ -1276,7 +1300,7 @@ function ResourceForm({
     event.preventDefault();
     if (readOnly) return;
     if (!completeness.complete) {
-      setFormError(`Complete all resource totals, summon costs, levels, and extra summon chances before saving to earn 20 Clan Points this week. Check: ${completeness.missing.join(", ")}.`);
+      setFormError(t("Some boxes are still empty or wrong: {fields}.", { fields: completeness.missing.map((field) => t(field)).join(", ") }));
       return;
     }
     const planningDetails = draftBank.planningDetails;
@@ -1285,7 +1309,7 @@ function ResourceForm({
       costValues.fiveSkills.trim() === "" ||
       costValues.mount.trim() === ""
     ) {
-      setFormError("Enter both summoning costs.");
+      setFormError(t("Enter both summon costs."));
       return;
     }
     const summoningCosts: SummoningCosts = {
@@ -1302,7 +1326,7 @@ function ResourceForm({
     });
     if (invalidResource) {
       setFormError(
-        `${invalidResource.label}: enter a whole number between 0 and ${numberFormat(resourceMaximum(invalidResource.key as ResourceKey))}.`,
+        t("{field}: enter a whole number from 0 to {max}, with no commas or letters.", { field: t(invalidResource.label), max: numberFormat(resourceMaximum(invalidResource.key as ResourceKey)) }),
       );
       return;
     }
@@ -1313,7 +1337,7 @@ function ResourceForm({
       !skillCostHasValidPrecision(summoningCosts.fiveSkills)
     ) {
       setFormError(
-        "Cost of summoning 5 skills must be between 150 and 200, with at most one decimal place.",
+        t("Skill summon cost (×5) must be between 150 and 200, for example 150."),
       );
       return;
     }
@@ -1322,7 +1346,7 @@ function ResourceForm({
       summoningCosts.mount < MOUNT_SUMMON_COST_MIN ||
       summoningCosts.mount > MOUNT_SUMMON_COST_MAX
     ) {
-      setFormError("Cost per mount summon must be between 37.5 and 50.");
+      setFormError(t("Mount summon cost must be between 37.5 and 50, for example 40."));
       return;
     }
     setSaving(true);
@@ -1341,10 +1365,12 @@ function ResourceForm({
       announceClanPointsUpdate(selected.id);
       await refresh();
       notify(
-        `${selected.id === data.currentUser.id ? "Your" : selected.username + "’s"} resources are saved. Clan totals are up to date.`,
+        selected.id === data.currentUser.id
+          ? t("Saved! Thank you. Clan totals are updated.")
+          : t("{name}’s resources are saved.", { name: selected.username }),
       );
     } catch (e) {
-      setFormError((e as Error).message);
+      setFormError(t((e as Error).message));
     } finally {
       setSaving(false);
     }
@@ -1355,34 +1381,34 @@ function ResourceForm({
       [key]: value,
     }));
   return (
-    <form className="resource-form" onSubmit={save}>
+    <form className="resource-form" onSubmit={save} noValidate>
       <div className="entry-profile panel">
         <Avatar member={selected} />
         <div>
           <strong>
             <MemberName member={selected} />
             <span className="role-badge">
-              {selected.role === "ADMIN" ? "Admin" : "Member"}
+              {selected.role === "ADMIN" ? t("Admin") : t("Member")}
             </span>
           </strong>
           <MemberTitle member={selected} />
           <p>
             {entry
-              ? `Last updated ${ago(entry.updatedAt)} by ${entry.updatedBy.username}`
-              : "No saved resource bank yet."}
+              ? t("Last saved {time} by {name}", { time: ago(entry.updatedAt, t), name: entry.updatedBy.username })
+              : t("Nothing saved yet.")}
           </p>
         </div>
         {data.currentUser.role === "ADMIN" && (
           <label className="member-select">
-            <span>{readOnly ? "Viewing member" : "Editing member"}</span>
+            <span>{readOnly ? t("Viewing member") : t("Editing member")}</span>
             <select
-              aria-label="Editing member"
+              aria-label={t("Editing member")}
               value={selected.id}
               onChange={(e) => {
                 if (
                   dirty &&
                   !window.confirm(
-                    "You have unsaved changes. Switch members without saving?",
+                    t("You have unsaved changes. Switch members without saving?"),
                   )
                 )
                   return;
@@ -1392,7 +1418,7 @@ function ResourceForm({
               {data.members.map((member) => (
                 <option value={member.id} key={member.id}>
                   {member.username}
-                  {member.id === data.currentUser.id ? " (you)" : ""}
+                  {member.id === data.currentUser.id ? ` (${t("you")})` : ""}
                 </option>
               ))}
             </select>
@@ -1403,23 +1429,23 @@ function ResourceForm({
         <ShieldCheck size={17} />
         <span>
           {readOnly
-            ? `Read-only history for the week of ${formatWeek(week)}. These saved amounts cannot be edited.`
-            : "Your bank is shared with the clan and carries forward until you update it. Levels and costs stay saved."}
+            ? t("These are the numbers saved for the week of {date}. They can’t be changed.", { date: formatWeek(week) })
+            : t("Your numbers are shared with the clan and stay saved until you change them.")}
         </span>
       </div>
       <div className="section-heading">
         <div>
-          <h2>{readOnly ? "Saved inventory" : "Your current inventory"}</h2>
-          <p>Use whole numbers for resources and the ranges shown for costs.</p>
+          <h2>{readOnly ? t("Saved inventory") : t("Your current inventory")}</h2>
+          <p>{t("Copy each number from the game. Not sure where it is? Tap “Where do I find this?”")}</p>
         </div>
-        {readOnly && <Link className="button primary" href={`/resources${selected.id !== data.currentUser.id ? `?member=${selected.id}` : ""}`}>Return to live bank <ArrowRight size={15} /></Link>}
+        {readOnly && <Link className="button primary" href={`/resources${selected.id !== data.currentUser.id ? `?member=${selected.id}` : ""}`}>{t("Back to this week")} <ArrowRight size={15} /></Link>}
       </div>
       {!readOnly && <div className={`bank-completeness ${completeness.complete ? "complete" : "incomplete"}`} role="status">
         <ShieldCheck size={17} />
-        <div><strong>{completeness.complete ? "Bank information is complete" : "Complete every field before saving"}</strong>
-          <p>Complete all resource totals, summon costs, levels, and extra summon chances before saving to earn 20 Clan Points this week. Zero totals, levels, and chances are valid.</p>
-          {!completeness.complete && <p className="bank-missing-fields">Check: {completeness.missing.join(", ")}.</p>}
-          {selected.id !== data.currentUser.id && <p>Editing another member’s bank does not earn your weekly reward.</p>}
+        <div><strong>{completeness.complete ? t("Every box is filled in") : t("Fill in every box to save")}</strong>
+          <p>{t("A complete save earns 20 Clan Points this week. Enter 0 if you have none.")}</p>
+          {!completeness.complete && <p className="bank-missing-fields">{t("Still to fill in:")} {completeness.missing.map((field) => t(field)).join(", ")}</p>}
+          {selected.id !== data.currentUser.id && <p>{t("Editing another member does not earn you Clan Points.")}</p>}
         </div>
       </div>}
       {formError && (
@@ -1431,7 +1457,7 @@ function ResourceForm({
       <section className="panel form-section">
         <h3>
           <Backpack size={19} />
-          The essentials
+          {t("Main resources")}
         </h3>
         <div className="essential-inputs">
           {essentials.map(({ key, label, icon: InputIcon, color }) => {
@@ -1439,67 +1465,77 @@ function ResourceForm({
               key === "skillTickets"
                 ? {
                     key: "fiveSkills" as const,
-                    label: "Cost of summoning 5 skills",
+                    label: "Skill summon cost (×5)",
                     min: SKILL_SUMMON_COST_MIN,
                     max: SKILL_SUMMON_COST_MAX,
                     step: "0.1",
-                    help: "Required: 150–200, up to one decimal place.",
+                    help: "On the blue Summon ×5 button. Between 150 and 200.",
+                    where: "Skills screen → the number on the blue “Summon x5” button.",
                   }
                 : key === "mountKeys"
                   ? {
                       key: "mount" as const,
-                      label: "Cost per mount summon",
+                      label: "Mount summon cost (×1)",
                       min: MOUNT_SUMMON_COST_MIN,
                       max: MOUNT_SUMMON_COST_MAX,
                       step: "any",
-                      help: "Required: 37.5–50. Decimals allowed.",
+                      help: "On the blue Summon ×1 button. Between 37.5 and 50.",
+                      where: "Mounts screen → the number on the blue “Summon x1” button.",
                     }
                   : null;
+            const guide = RESOURCE_GUIDE[key];
             return (
               <div className="essential-field" key={key}>
                 <label>
                   <span>
                     <InputIcon size={15} />
-                    {label}
+                    {t(label)}
                   </span>
                   <div className={`number-input ${color}`}>
                     <input
-                      aria-label={label}
+                      aria-label={t(label)}
+                      aria-describedby={`resource-help-${key}`}
                       type="number"
                       inputMode="numeric"
                       min="0"
                       max={resourceMaximum(key)}
                       step="1"
                       required
+                      placeholder="0"
                       value={values[key]}
                       onChange={(e) => update(key, e.target.value)}
                     />
                   </div>
                 </label>
+                <small className="field-help" id={`resource-help-${key}`}>{t(guide.help)}</small>
+                {!readOnly && <FieldGuide field={key} hint={t(guide.where)} />}
                 {costField && (
-                  <label className="summoning-cost-field">
-                    <span>{costField.label}</span>
-                    <input
-                      aria-label={costField.label}
-                      aria-describedby={`summoning-cost-help-${costField.key}`}
-                      type="number"
-                      inputMode="decimal"
-                      min={costField.min}
-                      max={costField.max}
-                      step={costField.step}
-                      required
-                      value={costValues[costField.key]}
-                      onChange={(e) =>
-                        setCostValues((existing) => ({
-                          ...existing,
-                          [costField.key]: e.target.value,
-                        }))
-                      }
-                    />
-                    <small id={`summoning-cost-help-${costField.key}`}>
-                      {costField.help}
-                    </small>
-                  </label>
+                  <div className="summoning-cost-wrap">
+                    <label className="summoning-cost-field">
+                      <span>{t(costField.label)}</span>
+                      <input
+                        aria-label={t(costField.label)}
+                        aria-describedby={`summoning-cost-help-${costField.key}`}
+                        type="number"
+                        inputMode="decimal"
+                        min={costField.min}
+                        max={costField.max}
+                        step={costField.step}
+                        required
+                        value={costValues[costField.key]}
+                        onChange={(e) =>
+                          setCostValues((existing) => ({
+                            ...existing,
+                            [costField.key]: e.target.value,
+                          }))
+                        }
+                      />
+                      <small id={`summoning-cost-help-${costField.key}`}>
+                        {t(costField.help)}
+                      </small>
+                    </label>
+                    {!readOnly && <FieldGuide field={costField.key} hint={t(costField.where)} />}
+                  </div>
                 )}
               </div>
             );
@@ -1508,50 +1544,56 @@ function ResourceForm({
       </section>
       <section className="panel form-section eggs-pets-form">
         <h3>
-          <Egg size={19} />Eggs and pets
+          <Egg size={19} />{t("Eggs and pets")}
         </h3>
-        <p className="form-section-subtitle">
-          Existing eggs/pets become merge actions. Eggshells supply future pet summons at 100 shells each.
-        </p>
-        <div className="eggs-bank-inputs"><label className="eggs-pets-input">
-          <span>Total eggs/pets</span>
-          <input
-            aria-label="Total eggs/pets"
-            type="number"
-            inputMode="numeric"
-            min="0"
-            max={resourceMaximum("eggsPetsTotal")}
-            step="1"
-            required
-            value={values.eggsPetsTotal}
-            onChange={(e) => update("eggsPetsTotal", e.target.value)}
-          />
-        </label>
-        <label className="eggs-pets-input">
-          <span>Eggshells total</span>
-          <input aria-label="Eggshells total" type="number" inputMode="numeric" min="0" max={resourceMaximum("eggshellsTotal")} step="1" required value={values.eggshellsTotal} onChange={(event) => update("eggshellsTotal", event.target.value)} />
-        </label></div>
+        <div className="eggs-bank-inputs">
+          {(["eggsPetsTotal", "eggshellsTotal"] as const).map((key) => (
+            <div className="eggs-pets-field" key={key}>
+              <label className="eggs-pets-input">
+                <span>{t(key === "eggsPetsTotal" ? "Total eggs/pets" : "Eggshells total")}</span>
+                <input
+                  aria-label={t(key === "eggsPetsTotal" ? "Total eggs/pets" : "Eggshells total")}
+                  aria-describedby={`resource-help-${key}`}
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  max={resourceMaximum(key)}
+                  step="1"
+                  required
+                  placeholder="0"
+                  value={values[key]}
+                  onChange={(e) => update(key, e.target.value)}
+                />
+              </label>
+              <small className="field-help" id={`resource-help-${key}`}>{t(RESOURCE_GUIDE[key].help)}</small>
+              {!readOnly && <FieldGuide field={key} hint={t(RESOURCE_GUIDE[key].where)} />}
+            </div>
+          ))}
+        </div>
       </section>
       <section className="panel form-section planning-bank-section">
-        <h3><Swords size={19} />{legacyHistory ? "Saved levels and planned actions" : "Levels and extra summon chances"}</h3>
-        <p className="form-section-subtitle">{legacyHistory ? "This snapshot retains its original manual action counts. Current banks use extra summon percentages instead." : "Enter the extra chances shown in the game; the calculator does the maths. We assume all existing eggs/pets will ascend and merge when the clan needs them. Existing mounts stay separate from bonus summons."}</p>
+        <h3><Swords size={19} />{legacyHistory ? t("Saved levels and planned actions") : t("Levels and extra chances")}</h3>
+        <p className="form-section-subtitle">{legacyHistory ? t("This week keeps its original saved counts.") : t("Copy these from the game. The tracker does the maths for you.")}</p>
         <div className="planning-bank-grid">
-          {planningFields.map(({ key, label, help }) => <label key={key}>
-            <span>{label}</span>
-            <input aria-label={label} aria-describedby={`planning-help-${key}`} type="number" inputMode={isChance(key) ? "decimal" : "numeric"} min="0" max={planningMaximum(key)} step={isChance(key) ? "0.01" : "1"} required placeholder={isChance(key) ? "Enter 0 if none" : "Enter your level"} value={planningValues[key]} onChange={(e) => setPlanningValues((old) => ({ ...old, [key]: e.target.value }))} />
-            <small id={`planning-help-${key}`}>{help}</small>
-          </label>)}
+          {planningFields.map(({ key, label, help, picture, where }) => <div className="bank-planning-field" key={key}>
+            <label>
+              <span>{t(label)}</span>
+              <input aria-label={t(label)} aria-describedby={`planning-help-${key}`} type="number" inputMode={isChance(key) ? "decimal" : "numeric"} min="0" max={planningMaximum(key)} step={isChance(key) ? "0.01" : "1"} required placeholder={isChance(key) ? t("Enter 0 if none") : t("e.g. 100")} value={planningValues[key]} onChange={(e) => setPlanningValues((old) => ({ ...old, [key]: e.target.value }))} />
+              <small id={`planning-help-${key}`}>{t(help)}</small>
+            </label>
+            {!readOnly && picture && where && <FieldGuide field={picture} hint={t(where)} />}
+          </div>)}
         </div>
       </section>
       <section className="panel form-section">
         <h3>
-          <Clipboard size={19} />A note for the clan{" "}
-          <span className="optional-badge">OPTIONAL</span>
+          <Clipboard size={19} />{t("A note for the clan")}{" "}
+          <span className="optional-badge">{t("OPTIONAL")}</span>
         </h3>
         <textarea
-          aria-label="Notes"
+          aria-label={t("Notes")}
           maxLength={1000}
-          placeholder="Anything your clan should know? Share your plans for this week…"
+          placeholder={t("Anything the clan should know? (optional)")}
           rows={3}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
@@ -1562,21 +1604,21 @@ function ResourceForm({
       {!readOnly && <div className="save-bar">
         <span className={!completeness.complete || dirty ? "unsaved" : "saved"}>
           {!completeness.complete ? (
-            <><CircleHelp size={16} />Complete your bank to save</>
+            <><CircleHelp size={16} />{t("{count} box(es) left to fill in", { count: completeness.missing.length })}</>
           ) : dirty ? (
             <>
               <span />
-              Unsaved changes
+              {t("Unsaved changes")}
             </>
           ) : entry ? (
             <>
               <CheckCircle2 size={16} />
-              All changes saved
+              {t("All changes saved")}
             </>
           ) : (
             <>
               <CircleHelp size={16} />
-              Ready to add your contribution
+              {t("Ready to save")}
             </>
           )}
         </span>
@@ -1590,7 +1632,7 @@ function ResourceForm({
           ) : (
             <Check size={17} />
           )}
-          {saving ? "Saving resources…" : "Save resources"}
+          {saving ? t("Saving…") : t("Save resources")}
         </button>
       </div>}
     </form>
@@ -1606,6 +1648,7 @@ function MembersManager({
   notify: (message: string, error?: boolean) => void;
   refresh: () => Promise<void>;
 }) {
+  const t = useT();
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -1795,7 +1838,7 @@ function MembersManager({
                         <strong>
                           <MemberName member={member} />
                           {member.id === currentUser.id && (
-                            <span className="you-badge">you</span>
+                            <span className="you-badge">{t("you")}</span>
                           )}
                         </strong>
                         <MemberTitle member={member} />
@@ -1877,7 +1920,7 @@ function MembersManager({
           {!loading && !filtered.length && (
             <div className="table-empty">
               <Users size={24} />
-              <p>No members match this view.</p>
+              <p>{t("No members match this view.")}</p>
             </div>
           )}
         </div>

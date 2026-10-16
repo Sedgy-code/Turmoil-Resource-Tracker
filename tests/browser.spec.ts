@@ -206,8 +206,8 @@ test("desktop resources persist, update live totals, preserve history, and expor
     );
     await page.getByLabel("Skill Tickets", { exact: true }).fill("54321");
     await page.getByLabel("Hammers", { exact: true }).fill("12345");
-    await page.getByLabel("Cost of summoning 5 skills", { exact: true }).fill("185.5");
-    await page.getByLabel("Cost per mount summon", { exact: true }).fill("45.25");
+    await page.getByLabel("Skill summon cost (×5)", { exact: true }).fill("185.5");
+    await page.getByLabel("Mount summon cost (×1)", { exact: true }).fill("45.25");
     await page.getByLabel("Total eggs/pets", { exact: true }).fill("16");
     await page
       .getByLabel("Notes", { exact: true })
@@ -215,15 +215,15 @@ test("desktop resources persist, update live totals, preserve history, and expor
     await page
       .getByRole("button", { name: "Save resources", exact: true })
       .click();
-    await expect(page.locator(".toast")).toContainText("resources are saved");
+    await expect(page.locator(".toast")).toContainText(/Saved!|resources are saved/);
     await page.reload();
     await expect(page.getByLabel("Skill Tickets", { exact: true })).toHaveValue(
       "54321",
     );
     await expect(page.getByLabel("Total eggs/pets", { exact: true })).toHaveValue("16");
     await expect(page.getByLabel("Hammers", { exact: true })).toHaveValue("12345");
-    await expect(page.getByLabel("Cost of summoning 5 skills", { exact: true })).toHaveValue("185.5");
-    await expect(page.getByLabel("Cost per mount summon", { exact: true })).toHaveValue("45.25");
+    await expect(page.getByLabel("Skill summon cost (×5)", { exact: true })).toHaveValue("185.5");
+    await expect(page.getByLabel("Mount summon cost (×1)", { exact: true })).toHaveValue("45.25");
     await expect(page.getByLabel("Notes", { exact: true })).toHaveValue(
       "Browser verification — saved and reloaded.",
     );
@@ -377,9 +377,9 @@ test("blank resource fields block saving while explicitly entered zero quantitie
       await input.fill("");
       await expect(input).toHaveValue("");
     }
-    await expect(page.locator(".save-bar")).toContainText("Complete your bank to save");
+    await expect(page.locator(".save-bar")).toContainText("left to fill in");
     await expect(page.getByRole("button", { name: "Save resources", exact: true })).toBeDisabled();
-    await expect(page.locator(".bank-completeness")).toContainText("Complete every field before saving");
+    await expect(page.locator(".bank-completeness")).toContainText("Fill in every box to save");
     await expect(page.locator(".bank-completeness")).toContainText("20 Clan Points");
     const tickets = page.getByLabel("Skill Tickets", { exact: true });
     await tickets.pressSequentially("42");
@@ -404,7 +404,7 @@ test("blank resource fields block saving while explicitly entered zero quantitie
     await page
       .getByRole("button", { name: "Save resources", exact: true })
       .click();
-    await expect(page.locator(".toast")).toContainText("resources are saved");
+    await expect(page.locator(".toast")).toContainText(/Saved!|resources are saved/);
     const expected = {
       ...EMPTY_RESOURCES,
       skillTickets: 42,
@@ -444,8 +444,8 @@ test("personal summoning costs persist and enforce required decimal ranges", asy
   const other = original.entries.find((entry) => entry.memberId !== own.memberId)!;
   expect(own).toBeTruthy();
   expect(other).toBeTruthy();
-  const skillCostLabel = "Cost of summoning 5 skills";
-  const mountCostLabel = "Cost per mount summon";
+  const skillCostLabel = "Skill summon cost (×5)";
+  const mountCostLabel = "Mount summon cost (×1)";
   let costSaves = 0;
   page.on("request", (outgoing) => {
     if (new URL(outgoing.url()).pathname === "/api/bank" && outgoing.method() === "PUT") costSaves++;
@@ -485,7 +485,7 @@ test("personal summoning costs persist and enforce required decimal ranges", asy
     await mountCost.pressSequentially("37.5");
     await expect(page.locator(".save-bar")).toContainText("Unsaved changes");
     await page.getByRole("button", { name: "Save resources", exact: true }).click();
-    await expect(page.locator(".toast")).toContainText("resources are saved");
+    await expect(page.locator(".toast")).toContainText(/Saved!|resources are saved/);
     expect(costSaves).toBe(1);
     await page.reload();
     await expect(page.getByLabel(skillCostLabel, { exact: true })).toHaveValue("175.5");
@@ -513,7 +513,7 @@ test("personal summoning costs persist and enforce required decimal ranges", asy
     await page.getByLabel(mountCostLabel, { exact: true }).fill("");
     await page.getByLabel("Total eggs/pets", { exact: true }).fill("");
     await expect(page.getByRole("button", { name: "Save resources", exact: true })).toBeDisabled();
-    await expect(page.locator(".bank-completeness")).toContainText("Complete every field before saving");
+    await expect(page.locator(".bank-completeness")).toContainText("Fill in every box to save");
     expect(costSaves).toBe(1);
     const blocked = await dashboard(request, original.week);
     expect(blocked.entries.find((entry) => entry.memberId === own.memberId)?.summoningCosts)
@@ -527,7 +527,7 @@ test("personal summoning costs persist and enforce required decimal ranges", asy
     await page.getByLabel(mountCostLabel, { exact: true }).fill("50");
     await page.getByLabel("Total eggs/pets", { exact: true }).fill("0");
     await page.getByRole("button", { name: "Save resources", exact: true }).click();
-    await expect(page.locator(".toast")).toContainText("resources are saved");
+    await expect(page.locator(".toast")).toContainText(/Saved!|resources are saved/);
     expect(costSaves).toBe(2);
     const cleared = await dashboard(request, original.week);
     expect(cleared.entries.find((entry) => entry.memberId === own.memberId)?.summoningCosts).toEqual({ fiveSkills: 200, mount: 50 });
@@ -665,7 +665,7 @@ test("admin can edit another member, promote, deactivate, and restore access", a
     await page
       .getByRole("button", { name: "Save resources", exact: true })
       .click();
-    await expect(page.locator(".toast")).toContainText("resources are saved");
+    await expect(page.locator(".toast")).toContainText(/Saved!|resources are saved/);
     const edited = await dashboard(request);
     expect(
       edited.entries.find((candidate) => candidate.memberId === member.id)
@@ -757,8 +757,8 @@ test("mobile dashboard, menu, complete resource form, and week navigation fit th
   await expect(page.getByLabel("Total eggs/pets", { exact: true })).toHaveCount(1);
   await expect(page.locator('input[type="number"]')).toHaveCount(13);
   await expect(page.getByLabel("Potions", { exact: true })).toHaveCount(0);
-  await expect(page.getByLabel("Cost of summoning 5 skills", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Cost per mount summon", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Skill summon cost (×5)", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Mount summon cost (×1)", { exact: true })).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Save resources", exact: true }),
   ).toBeVisible();
@@ -785,8 +785,8 @@ test("mobile dashboard, menu, complete resource form, and week navigation fit th
   });
   await page.setViewportSize({ width: 320, height: 740 });
   await noPageOverflow(page);
-  await expect(page.getByLabel("Cost of summoning 5 skills", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Cost per mount summon", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Skill summon cost (×5)", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Mount summon cost (×1)", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Open navigation", exact: true }).click();
   await page.getByRole("link", { name: "Dashboard", exact: true }).click();
   await expect(page.locator(".arsenal-card")).toHaveCount(6);

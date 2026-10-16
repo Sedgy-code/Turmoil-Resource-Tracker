@@ -20,6 +20,10 @@ export const SESSION_COOKIE = "turmoil_session";
 export const OAUTH_COOKIE = "turmoil_oauth";
 // Remember this browser for 180 days after its most recent validated visit.
 export const SESSION_SECONDS = 180 * 24 * 60 * 60;
+// How often Discord is asked again whether the member is still in the server.
+export const MEMBERSHIP_RECHECK_MS = 30 * 60 * 1000;
+// How long a confirmed membership is trusted while Discord is unreachable.
+export const MEMBERSHIP_GRACE_MS = 24 * 60 * 60 * 1000;
 export const cookieOptions = () => ({
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
@@ -149,6 +153,27 @@ export async function authenticatedMember(
   requireConfiguration();
   const db = dependencies.db ?? (await database());
   const tokenHash = hashToken(token);
+  // Fast path: most requests come from a session whose Discord membership was
+  // checked recently. Answer those with one read instead of a locking
+  // transaction, so a page's parallel API calls no longer queue behind each other.
+  const recent = await db.query(
+    `SELECT s.expires_at AS session_expires_at, s.membership_checked_at, m.*
+     FROM auth_sessions s JOIN app_members m ON m.id = s.member_id
+     WHERE s.token_hash = $1 AND s.expires_at > NOW() AND m.active = TRUE`,
+    [tokenHash],
+  );
+  if (!recent.length) return null;
+  const checkedAt = new Date(iso(recent[0].membership_checked_at)!).getTime();
+  if (Date.now() - checkedAt < MEMBERSHIP_RECHECK_MS) {
+    // Slide the 180-day window at most once a day rather than on every request.
+    const expiresAt = new Date(iso(recent[0].session_expires_at)!).getTime();
+    if (expiresAt < Date.now() + (SESSION_SECONDS - 24 * 60 * 60) * 1000)
+      await db.query(
+        "UPDATE auth_sessions SET expires_at = $2 WHERE token_hash = $1",
+        [tokenHash, new Date(Date.now() + SESSION_SECONDS * 1000).toISOString()],
+      );
+    return memberFromRow(recent[0]);
+  }
   const result = await db.transaction(
     async (tx): Promise<{ member: Member | null; error?: ApiError }> => {
       // Deactivation locks the member before deleting its sessions. Match that
@@ -172,7 +197,7 @@ export async function authenticatedMember(
       const session = sessions[0];
       if (
         Date.now() - new Date(iso(session.membership_checked_at)!).getTime() <
-        5 * 60 * 1000
+        MEMBERSHIP_RECHECK_MS
       ) {
         await tx.query(
           "UPDATE auth_sessions SET expires_at = $2 WHERE token_hash = $1",
@@ -235,9 +260,14 @@ export async function authenticatedMember(
           [tokenHash, new Date(Date.now() + SESSION_SECONDS * 1000).toISOString()],
         );
       } catch (error) {
-        // Transient Discord failures fail closed, while keeping the session available to retry.
-        if (error instanceof ApiError && error.status === 503)
+        // A brief Discord outage or rate limit should not sign members out or
+        // block the page: trust a membership confirmed within the last day.
+        if (error instanceof ApiError && error.status === 503) {
+          const lastChecked = new Date(iso(session.membership_checked_at)!).getTime();
+          if (Date.now() - lastChecked < MEMBERSHIP_GRACE_MS)
+            return { member: memberFromRow(session) };
           return { member: null, error };
+        }
         await tx.query("DELETE FROM auth_sessions WHERE token_hash = $1", [
           tokenHash,
         ]);
