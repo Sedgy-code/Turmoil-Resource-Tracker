@@ -1,0 +1,28 @@
+/* Member history side panel (Leadership → Members) */
+.history-overlay { position: fixed; inset: 0; z-index: 90; display: flex; justify-content: flex-end; }
+.history-scrim { position: absolute; inset: 0; background: #050806cc; border: 0; cursor: default; }
+.history-panel { position: relative; width: min(460px, 100%); height: 100%; overflow-y: auto; background: var(--sidebar); border-inline-start: 1px solid var(--border); padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.history-panel > header { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.history-block { padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); display: flex; flex-direction: column; gap: 10px; }
+.history-block h3 { margin: 0; display: flex; align-items: center; gap: 7px; font-size: 13.5px; }
+.history-block h3 svg { color: var(--gold); }
+.strike-count { margin-inline-start: auto; min-width: 24px; text-align: center; padding: 2px 8px; border-radius: 999px; background: #1d2620; font-size: 12px; }
+.strike-count.has { background: #4a1d17; color: #ffb4a6; }
+.history-strike { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; background: #0f1512; }
+.history-strike div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.history-strike strong { font-size: 12.5px; }
+.history-strike small, .history-hint { color: var(--muted); font-size: 11.5px; margin: 0; }
+.history-form { display: flex; gap: 8px; flex-wrap: wrap; }
+.history-form input { flex: 1 1 180px; height: 34px; padding: 0 10px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 7px; font: inherit; font-size: 12.5px; }
+.history-date { display: flex; align-items: center; gap: 6px; flex: 1 1 180px; color: var(--muted); }
+.history-date input { color-scheme: dark; }
+.history-timeline ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.history-timeline li { display: flex; gap: 10px; padding: 7px 4px; border-bottom: 1px solid #1d2620; }
+.history-timeline li div { display: flex; flex-direction: column; gap: 2px; }
+.history-timeline li strong { font-size: 12.5px; font-weight: 500; }
+.history-timeline li small { color: var(--subtle); font-size: 11px; }
+.history-icon { width: 20px; text-align: center; }
+.history-strike strong, .history-timeline li.history-strike strong { color: #ffd0c7; }
+.member-holiday { margin-inline-start: 4px; font-size: 0.9em; }
+.roster-strikes { display: inline-flex; min-width: 22px; justify-content: center; padding: 2px 7px; border-radius: 999px; font-size: 11.5px; background: #1d2620; color: var(--muted); }
+.roster-strikes.has { background: #4a1d17; color: #ffb4a6; font-weight: 700; }

@@ -207,4 +207,24 @@ CREATE TABLE IF NOT EXISTS hoarding_rules (
   wars INTEGER NOT NULL CHECK (wars BETWEEN 1 AND 10)
 );
 ALTER TABLE app_members ADD COLUMN IF NOT EXISTS never_signed_in BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE app_members ADD COLUMN IF NOT EXISTS holiday_until DATE;
+CREATE TABLE IF NOT EXISTS member_strikes (
+  id TEXT PRIMARY KEY,
+  member_id TEXT NOT NULL REFERENCES app_members(id),
+  reason TEXT NOT NULL DEFAULT '' CHECK (LENGTH(reason) <= 300),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by TEXT NOT NULL REFERENCES app_members(id),
+  removed_at TIMESTAMPTZ,
+  removed_by TEXT REFERENCES app_members(id)
+);
+CREATE INDEX IF NOT EXISTS member_strikes_member_idx ON member_strikes(member_id);
+CREATE TABLE IF NOT EXISTS member_events (
+  id TEXT PRIMARY KEY,
+  member_id TEXT NOT NULL REFERENCES app_members(id),
+  kind TEXT NOT NULL CHECK (LENGTH(kind) <= 40),
+  detail TEXT NOT NULL DEFAULT '' CHECK (LENGTH(detail) <= 300),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by TEXT REFERENCES app_members(id)
+);
+CREATE INDEX IF NOT EXISTS member_events_member_idx ON member_events(member_id, created_at DESC);
 `;

@@ -580,6 +580,7 @@
  "{count} players": "{count} 位玩家",
  "{count} said Yes": "{count} 人回覆「是」",
  "{count} snipes": "{count} 次狙擊",
+ "{count} strikes": "{count} 次警告",
  "{count} summon cost(s) missing, so some resources are left out. Add them in My Resources.": "缺少 {count} 個召喚費用，部分資源沒算進去。請到「我的資源」補上。",
  "{count}d ago": "{count} 天前",
  "{count}h ago": "{count} 小時前",

@@ -580,6 +580,7 @@
  "{count} players": "{count} joueurs",
  "{count} said Yes": "{count} ont dit Oui",
  "{count} snipes": "{count} snipes",
+ "{count} strikes": "{count} avertissements",
  "{count} summon cost(s) missing, so some resources are left out. Add them in My Resources.": "{count} coût(s) d’invocation manquant(s), donc certaines ressources ne sont pas comptées. Ajoute-les dans Mes ressources.",
  "{count}d ago": "il y a {count} j",
  "{count}h ago": "il y a {count} h",

@@ -16,6 +16,10 @@ export interface Member {
   cosmetics?: EquippedCosmetics;
   /** In the clan on Discord but has never signed in to the Clan Hub. */
   neverSignedIn?: boolean;
+  /** Away until this date (YYYY-MM-DD, inclusive); shown to everyone. */
+  holidayUntil?: string | null;
+  /** Active strikes. Only included for admins. */
+  strikes?: number;
 }
 
 export interface ResourceEntry {
@@ -135,6 +139,18 @@ export interface WeeksResponse {
 }
 export interface MembersResponse {
   members: Member[];
+}
+export interface MemberHistoryEvent {
+  at: string;
+  kind: "joined" | "left" | "returned" | "role" | "strike" | "strike-removed" | "holiday" | "holiday-ended" | "war" | "vials" | "snipe" | "saved";
+  text: string;
+  by?: string | null;
+  strikeId?: string;
+}
+export interface MemberHistoryResponse {
+  member: Member;
+  strikes: { id: string; reason: string; createdAt: string; createdBy: string }[];
+  events: MemberHistoryEvent[];
 }
 export interface EntryResponse {
   entry: ResourceEntry;

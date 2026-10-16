@@ -580,6 +580,7 @@
  "{count} players": "{count}人のプレイヤー",
  "{count} said Yes": "{count}人が「はい」",
  "{count} snipes": "{count}回のスナイプ",
+ "{count} strikes": "警告{count}回",
  "{count} summon cost(s) missing, so some resources are left out. Add them in My Resources.": "召喚コストが{count}件ないため、一部の資源が数えられていません。「自分の資源」で追加してください。",
  "{count}d ago": "{count}日前",
  "{count}h ago": "{count}時間前",

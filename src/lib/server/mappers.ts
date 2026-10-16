@@ -8,6 +8,9 @@ export function iso(value: unknown): string | null {
     ? value.toISOString()
     : new Date(String(value)).toISOString();
 }
+function dateText(value: unknown): string {
+  return value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
+}
 export function memberFromRow(row: Record<string, unknown>): Member {
   return {
     id: String(row.id),
@@ -27,6 +30,8 @@ export function memberFromRow(row: Record<string, unknown>): Member {
     },
     // Added from the Discord member list but has never signed in to the Clan Hub.
     ...(row.never_signed_in === true ? { neverSignedIn: true } : {}),
+    // Only while the holiday is still running (it ends after the given day, UTC).
+    ...(row.holiday_until && dateText(row.holiday_until) >= new Date().toISOString().slice(0, 10) ? { holidayUntil: dateText(row.holiday_until) } : {}),
   };
 }
 export function entryFromRow(row: Record<string, unknown>): ResourceEntry {

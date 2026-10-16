@@ -580,6 +580,7 @@
  "{count} players": "{count} Spieler",
  "{count} said Yes": "{count} haben Ja gesagt",
  "{count} snipes": "{count} Snipes",
+ "{count} strikes": "{count} Verwarnungen",
  "{count} summon cost(s) missing, so some resources are left out. Add them in My Resources.": "{count} Beschwörungskosten fehlen, daher fehlen einige Ressourcen. Trag sie in Meine Ressourcen ein.",
  "{count}d ago": "vor {count} T.",
  "{count}h ago": "vor {count} Std.",

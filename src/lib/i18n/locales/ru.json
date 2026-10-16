@@ -580,6 +580,7 @@
  "{count} players": "Игроков: {count}",
  "{count} said Yes": "Ответили «Да»: {count}",
  "{count} snipes": "Снайпов: {count}",
+ "{count} strikes": "Предупреждений: {count}",
  "{count} summon cost(s) missing, so some resources are left out. Add them in My Resources.": "Нет цен призыва: {count}, поэтому часть ресурсов не учтена. Добавь их в «Моих ресурсах».",
  "{count}d ago": "{count} дн. назад",
  "{count}h ago": "{count} ч назад",

@@ -580,6 +580,7 @@
  "{count} players": "ผู้เล่น {count} คน",
  "{count} said Yes": "ตอบใช่ {count} คน",
  "{count} snipes": "สไนป์ {count} ครั้ง",
+ "{count} strikes": "เตือน {count} ครั้ง",
  "{count} summon cost(s) missing, so some resources are left out. Add them in My Resources.": "ขาดค่าอัญเชิญ {count} รายการ จึงไม่ได้นับทรัพยากรบางส่วน เพิ่มได้ในทรัพยากรของฉัน",
  "{count}d ago": "{count} วันที่แล้ว",
  "{count}h ago": "{count} ชม. ที่แล้ว",
