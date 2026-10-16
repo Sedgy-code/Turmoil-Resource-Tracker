@@ -685,3 +685,14 @@
 .snipe-badge-bronze { border-color: #d0905a; background: #2e1d10; color: #f2b483; }
 .resource-table td.snipe-cell { color: #9fd3a9; font-weight: 700; }
 .resource-table td.war-cell { color: #f0d58a; font-variant-numeric: tabular-nums; }
+.sidebar-profile span.member-name-text {
+  display: inline;
+  margin: 0;
+  font-size: inherit;
+  color: inherit;
+}
+.sidebar-profile span.snipe-badge {
+  display: inline-flex;
+  margin-top: 0;
+  font-size: 9.5px;
+}
