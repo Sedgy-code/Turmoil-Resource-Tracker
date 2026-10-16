@@ -42,3 +42,32 @@ test("the reminder text includes all four languages", () => {
   const text = reminderMessage(["<@1>"], "https://x");
   for (const phrase of ["Please save", "請在本週", "请在本周", "이번 주"]) assert.ok(text.includes(phrase));
 });
+
+test("Sunday leadership reminder lists only the missing uploads and skips when both are in", async () => {
+  const { randomUUID } = await import("node:crypto");
+  const { initializeSchema, openDatabase } = await import("../src/lib/server/db");
+  const { sendLeadershipReminder } = await import("../src/lib/server/reminders");
+  const { currentWeek } = await import("../src/lib/resources");
+  const db = await openDatabase({ localPath: "memory://" });
+  const previous = process.env.DISCORD_BOT_TOKEN;
+  try {
+    await initializeSchema(db);
+    process.env.DISCORD_BOT_TOKEN = "bot";
+    const posts: { url: string; body: string }[] = [];
+    const fetcher = (async (url: string, init?: RequestInit) => { posts.push({ url, body: String(init?.body) }); return new Response("{}"); }) as typeof fetch;
+    const admin = (await db.query("INSERT INTO app_members (id,discord_id,username,role) VALUES ($1,'1','leader','ADMIN') RETURNING id"))[0].id;
+    assert.deepEqual((await sendLeadershipReminder({ db, fetcher })).missing, ["war", "vials"]);
+    assert.match(posts[0].url, /channels\/1504758222974746645\/messages/);
+    assert.match(posts[0].body, /Clan war results/);
+    await db.query("INSERT INTO war_results (id, week_start, label, created_by, kind) VALUES ($1, $2, '', $3, 'war')", [randomUUID(), currentWeek(), admin]);
+    const second = await sendLeadershipReminder({ db, fetcher });
+    assert.deepEqual(second.missing, ["vials"]);
+    assert.doesNotMatch(posts[1].body, /Clan war results/);
+    await db.query("INSERT INTO war_results (id, week_start, label, created_by, kind) VALUES ($1, $2, '', $3, 'vials')", [randomUUID(), currentWeek(), admin]);
+    assert.equal((await sendLeadershipReminder({ db, fetcher })).posted, false);
+    assert.equal(posts.length, 2);
+  } finally {
+    if (previous === undefined) delete process.env.DISCORD_BOT_TOKEN; else process.env.DISCORD_BOT_TOKEN = previous;
+    await db.close();
+  }
+});

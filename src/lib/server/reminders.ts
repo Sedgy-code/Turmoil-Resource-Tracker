@@ -117,3 +117,41 @@ export async function sendSnipeShoutout(
   if (!response.ok) throw new ApiError(502, "Discord did not accept the snipe thank-you.", "SHOUTOUT_FAILED");
   return { posted: true, members: champions.length };
 }
+
+/** #the-dictators-den, where leadership gets the Sunday upload reminder. */
+const LEADERSHIP_CHANNEL_ID = "1504758222974746645";
+
+/** Which uploads are still missing for this clan week. */
+export async function missingUploads(db: Database, week = currentWeek()): Promise<("war" | "vials")[]> {
+  const rows = await db.query("SELECT DISTINCT kind FROM war_results WHERE week_start = $1", [week]);
+  const done = new Set(rows.map((row) => String(row.kind)));
+  return (["war", "vials"] as const).filter((kind) => !done.has(kind));
+}
+
+export function leadershipReminderMessage(missing: ("war" | "vials")[], base: string): string {
+  return [
+    "📸 **Weekly upload reminder**",
+    "Please grab the screenshots before they reset and add them to the Clan Hub:",
+    ...missing.map((kind) => kind === "war"
+      ? `• 🏆 **Clan war results** (clan total + member list) → ${base}/war-results`
+      : `• 🧪 **Clan tech vial donations** (member list) → ${base}/vial-donations`),
+    "Press **Add**, add the screenshots, then **Read screenshots** → check → **Save**.",
+  ].join("\n");
+}
+
+/** Sunday evening: posts in the leadership channel with the site's bot, only if something is missing. */
+export async function sendLeadershipReminder(dependencies: { db?: Database; fetcher?: typeof fetch } = {}): Promise<{ posted: boolean; missing: string[] }> {
+  const token = process.env.DISCORD_BOT_TOKEN;
+  if (!token) throw new ApiError(503, "Set DISCORD_BOT_TOKEN so the bot can post reminders.", "REMINDER_NOT_CONFIGURED");
+  const db = dependencies.db ?? await database();
+  const missing = await missingUploads(db);
+  if (!missing.length) return { posted: false, missing };
+  const channel = process.env.DISCORD_LEADERSHIP_CHANNEL_ID || LEADERSHIP_CHANNEL_ID;
+  const response = await (dependencies.fetcher ?? fetch)(`https://discord.com/api/v10/channels/${channel}/messages`, {
+    method: "POST",
+    headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ content: leadershipReminderMessage(missing, appUrl()), allowed_mentions: { parse: [] } }),
+  });
+  if (!response.ok) throw new ApiError(502, "Discord did not accept the leadership reminder.", "REMINDER_FAILED");
+  return { posted: true, missing };
+}
