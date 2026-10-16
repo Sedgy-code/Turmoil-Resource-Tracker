@@ -460,8 +460,9 @@
 }
 
 /* Dashboard cards: headline numbers first, the rest behind "Details" */
-.arsenal-grid .arsenal-summary {
+.arsenal-grid .arsenal-card.arsenal-summary {
   order: -1;
+  text-align: start;
   grid-column: 1 / -1;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto;
@@ -520,10 +521,19 @@
   margin: 8px 0 0;
 }
 @media (max-width: 900px) {
-  .arsenal-grid .arsenal-summary {
+  .arsenal-grid .arsenal-card.arsenal-summary {
     grid-template-columns: minmax(0, 1fr);
   }
   .arsenal-grid .arsenal-summary .arsenal-summary-footer {
     align-items: flex-start;
   }
+}
+.entry-row-box input::-webkit-outer-spin-button,
+.entry-row-box input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.entry-row-box input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
