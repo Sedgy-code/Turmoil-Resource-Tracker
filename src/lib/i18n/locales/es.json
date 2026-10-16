@@ -580,6 +580,7 @@
  "{count} players": "{count} jugadores",
  "{count} said Yes": "{count} dijeron Sí",
  "{count} snipes": "{count} snipes",
+ "{count} strikes": "{count} faltas",
  "{count} summon cost(s) missing, so some resources are left out. Add them in My Resources.": "Falta(n) {count} costo(s) de invocación, así que algunos recursos no se cuentan. Agrégalos en Mis recursos.",
  "{count}d ago": "hace {count} d",
  "{count}h ago": "hace {count} h",

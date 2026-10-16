@@ -12,6 +12,8 @@ import { WarResults, WarTotalsHistory } from "./war-results";
 import { SnipeChampions } from "./snipe-champions";
 import { ContributionRanking } from "./contribution-ranking";
 import { WarWeek } from "./war-week";
+import { MemberHistoryPanel } from "./member-history";
+import { downloadRows } from "@/lib/csv";
 import { CountdownStrip } from "./countdown-strip";
 import { useSortable } from "./sortable";
 import { ClanPointsBalance } from "./clan-points-balance";
@@ -56,6 +58,7 @@ import {
   Clipboard,
   Egg,
   Flame,
+  History,
   Hammer,
   KeyRound,
   LayoutDashboard,
@@ -406,15 +409,16 @@ function TrackerApp({ view }: { view: View }) {
   }
   function downloadCsv() {
     if (!data) return;
-    const csv = `Resource,Total\r\n${RESOURCE_FIELDS.map(({ key, label }) => `${label},${data.totals[key as ResourceKey]}`).join("\r\n")}\r\n`;
-    const url = URL.createObjectURL(
-      new Blob([csv], { type: "text/csv;charset=utf-8;" }),
-    );
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `turmoil-resources-${week}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    // Clan totals first, then one row per member, so it opens straight in a spreadsheet.
+    const names = new Map(data.members.map((member) => [member.id, member.username]));
+    downloadRows(`turmoil-resources-${week}.csv`, [
+      ["Member", ...RESOURCE_FIELDS.map(({ label }) => label), "Last updated"],
+      ["CLAN TOTAL", ...RESOURCE_FIELDS.map(({ key }) => data.totals[key as ResourceKey] ?? 0), ""],
+      ...data.entries
+        .slice()
+        .sort((a, b) => (names.get(a.memberId) ?? "").localeCompare(names.get(b.memberId) ?? ""))
+        .map((entry) => [names.get(entry.memberId) ?? entry.updatedBy.username, ...RESOURCE_FIELDS.map(({ key }) => entry.resources[key as ResourceKey] ?? 0), entry.updatedAt]),
+    ]);
     notify(t("Weekly totals exported as CSV."));
   }
   async function copyTotals() {
@@ -1719,7 +1723,8 @@ function MembersManager({
   const [filter, setFilter] = useState("active");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
-  type RosterSort = "member" | "role" | "status" | "updated" | "joined";
+  type RosterSort = "member" | "role" | "status" | "strikes" | "updated" | "joined";
+  const [historyFor, setHistoryFor] = useState<Member | null>(null);
   const [capacity, setCapacity] = useState(50);
   const [capacityDraft, setCapacityDraft] = useState("50");
   const [capacitySaving, setCapacitySaving] = useState(false);
@@ -1804,7 +1809,8 @@ function MembersManager({
   const { sorted: filtered, sort: rosterSort, setSort: setRosterSort, header: rosterHeader } = useSortable<Member, RosterSort>(shown, {
     member: (member) => member.username,
     role: (member) => member.role === "ADMIN" ? "Admin" : "Member",
-    status: (member) => member.active ? "Active" : "Inactive",
+    status: (member) => member.active ? (member.holidayUntil ? "Holiday" : "Active") : "Inactive",
+    strikes: (member) => member.strikes ?? 0,
     // Never-updated members count as the oldest.
     updated: (member) => new Date(member.lastUpdatedAt ?? 0).getTime(),
     joined: (member) => new Date(member.joinedAt).getTime(),
@@ -1892,6 +1898,7 @@ function MembersManager({
                 {rosterHeader("member", "Member")}
                 {rosterHeader("role", "Role")}
                 {rosterHeader("status", "Status")}
+                {rosterHeader("strikes", "Strikes")}
                 {rosterHeader("updated", "Last resource update")}
                 {rosterHeader("joined", "Joined")}
                 <th>Actions</th>
@@ -1928,8 +1935,11 @@ function MembersManager({
                       className={`status-badge ${member.active ? "active-status" : "inactive-status"}`}
                     >
                       <i />
-                      {member.active ? "Active" : "Inactive"}
+                      {member.active ? (member.holidayUntil ? `Holiday until ${member.holidayUntil}` : "Active") : "Inactive"}
                     </span>
+                  </td>
+                  <td>
+                    <span className={`roster-strikes ${(member.strikes ?? 0) > 0 ? "has" : ""}`}>{member.strikes ?? 0}</span>
                   </td>
                   <td
                     title={
@@ -1949,6 +1959,10 @@ function MembersManager({
                   </td>
                   <td>
                     <div className="member-actions">
+                      <button className="button secondary small-button" onClick={() => setHistoryFor(member)}>
+                        <History size={13} />
+                        Strikes & history
+                      </button>
                       <button
                         className="button secondary small-button"
                         disabled={busy !== null || !member.active}
@@ -1995,9 +2009,14 @@ function MembersManager({
         </div>
         <div className="table-footer">
           <span>{filtered.length} members</span>
+          <button className="button subtle small-button" onClick={() => downloadRows(`turmoil-members-${new Date().toISOString().slice(0, 10)}.csv`, [
+            ["Member", "Discord ID", "Role", "Status", "Holiday until", "Strikes", "Last resource update", "Joined", "Never signed in"],
+            ...filtered.map((member) => [member.username, member.discordId, member.role, member.active ? "Active" : "Inactive", member.holidayUntil ?? "", String(member.strikes ?? 0), member.lastUpdatedAt ?? "", member.joinedAt, member.neverSignedIn ? "Yes" : ""]),
+          ])}><ArrowDownToLine size={13} />Export CSV</button>
           <span>At least one active admin is always required</span>
         </div>
       </section>
+      {historyFor && <MemberHistoryPanel member={historyFor} notify={notify} onClose={() => setHistoryFor(null)} onChanged={() => { void load(); void refresh(); }} />}
     </>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { LoaderCircle, RefreshCw } from "lucide-react";
+import { ArrowDownToLine, LoaderCircle, RefreshCw } from "lucide-react";
+import { downloadRows } from "@/lib/csv";
 import { numberFormat } from "@/lib/resources";
 import { useT } from "@/lib/i18n";
 import type { ContributionRankingResponse, ContributionRow, RankingMetric } from "@/lib/types";
@@ -71,6 +72,10 @@ export function ContributionRanking() {
       </div>
       <div className="rank-controls">
         <label className="rank-toggle"><input type="checkbox" checked={hideNew} onChange={(event) => setHideNew(event.target.checked)} />{t("Hide new members (under 2 weeks)")}</label>
+        <button className="button subtle" onClick={() => downloadRows(`turmoil-ranking-${new Date().toISOString().slice(0, 10)}.csv`, [
+          ["Rank", "Member", "Score", "Penalty", "War points (avg)", "Wars played", "Vials donated", "Snipes (8 wk)", "No-shows", "Weekly updates", "Spent in wars", "Hoarding", "Strikes", "Holiday until", "Days in clan", "Last saved", "Never signed in"],
+          ...sorted.map((row) => [row.rank, row.member.username, row.score, row.penalty, row.warPoints === null ? "" : Math.round(row.warPoints), row.warsPlayed, row.vials ?? "", row.snipes, row.noShows, row.updates, row.warSpending === null ? "" : Math.round(row.warSpending), row.hoarding, row.member.strikes ?? 0, row.member.holidayUntil ?? "", row.daysInClan, row.lastSavedAt ?? "", row.member.neverSignedIn ? "Yes" : ""]),
+        ])}><ArrowDownToLine size={15} />{t("Export CSV")}</button>
         <button className="button subtle" onClick={() => void load()} disabled={loading}><RefreshCw size={15} className={loading ? "spin" : undefined} />{t("Refresh")}</button>
       </div>
     </section>
@@ -84,7 +89,7 @@ export function ContributionRanking() {
         </tr></thead>
         <tbody>{sorted.map((row) => <tr key={row.member.id}>
           <td>{row.rank}</td>
-          <td><div className="table-member"><MemberAvatar member={row.member} small /><div><strong><MemberName member={row.member} /></strong>{row.isNew && <span className="rank-new">{t("New")}</span>}{row.member.neverSignedIn && <span className="rank-never">{t("Never signed in")}</span>}</div></div></td>
+          <td><div className="table-member"><MemberAvatar member={row.member} small /><div><strong><MemberName member={row.member} /></strong>{row.isNew && <span className="rank-new">{t("New")}</span>}{row.member.neverSignedIn && <span className="rank-never">{t("Never signed in")}</span>}{!!row.member.strikes && <span className="rank-never">⚠️ {t("{count} strikes", { count: row.member.strikes })}</span>}</div></div></td>
           <td><span className={`rank-score ${scoreClass(row.score)}`}>{row.score}</span>{row.penalty > 0 && <small className="rank-penalty">−{row.penalty}</small>}</td>
           <td>{amount(row.warPoints)}{row.warPoints !== null && <small className="rank-sub">{t("{count} of {total} wars", { count: row.warsPlayed, total: data.records.wars })}</small>}</td>
           <td>{amount(row.vials)}</td>

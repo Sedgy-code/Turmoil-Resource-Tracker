@@ -580,6 +580,7 @@
  "{count} players": "{count} لاعبين",
  "{count} said Yes": "{count} قالوا نعم",
  "{count} snipes": "{count} هجمات قنص",
+ "{count} strikes": "{count} إنذارات",
  "{count} summon cost(s) missing, so some resources are left out. Add them in My Resources.": "{count} من تكاليف الاستدعاء ناقصة، لذا لم تُحتسب بعض الموارد. أضفها في «مواردي».",
  "{count}d ago": "قبل {count} يوم",
  "{count}h ago": "قبل {count} ساعة",

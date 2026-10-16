@@ -580,6 +580,7 @@
  "{count} players": "플레이어 {count}명",
  "{count} said Yes": "{count}명이 '예'",
  "{count} snipes": "스나이프 {count}회",
+ "{count} strikes": "경고 {count}회",
  "{count} summon cost(s) missing, so some resources are left out. Add them in My Resources.": "소환 비용 {count}개가 없어서 일부 자원이 빠졌어요. 내 자원에서 입력하세요.",
  "{count}d ago": "{count}일 전",
  "{count}h ago": "{count}시간 전",

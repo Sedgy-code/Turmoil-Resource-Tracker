@@ -1,3 +1,4 @@
+import { strikeCounts } from "./leadership";
 import { randomUUID } from "node:crypto";
 import { EMPTY_RESOURCES, shiftWeek, type ResourceValues, type SummoningCosts } from "../resources";
 import type { DashboardResponse, Member, ResourceEntry } from "../types";
@@ -276,9 +277,13 @@ export async function listMembers(
       "Only administrators can manage members.",
       "ADMIN_REQUIRED",
     );
+  const strikes = await strikeCounts(connection);
   return (
     await connection.query(
       "SELECT * FROM app_members ORDER BY active DESC, role, LOWER(COALESCE(NULLIF(display_name, ''), username))",
     )
-  ).map(memberFromRow);
+  ).map((row) => {
+    const member = memberFromRow(row);
+    return { ...member, strikes: strikes.get(member.id) ?? 0 };
+  });
 }

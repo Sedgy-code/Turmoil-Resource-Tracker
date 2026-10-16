@@ -5,6 +5,7 @@ import { ApiError } from "./errors";
 import { hoardingReport, warSpending } from "./hoarding";
 import { memberFromRow } from "./mappers";
 import { snipeRecognition } from "./war-results";
+import { strikeCounts } from "./leadership";
 
 const DAY = 86_400_000;
 const RECENT_WEEKS = 8;
@@ -33,7 +34,11 @@ export async function contributionRanking(actor: Member, db?: Database, now = ne
   const connection = db ?? await database();
   const actorRows = await connection.query("SELECT * FROM app_members WHERE id = $1 AND active = TRUE", [actor.id]);
   if (!actorRows.length || memberFromRow(actorRows[0]).role !== "ADMIN") throw new ApiError(403, "Only administrators can see the contribution ranking.", "ADMIN_REQUIRED");
-  const members = (await connection.query("SELECT * FROM app_members WHERE active = TRUE")).map(memberFromRow);
+  const strikes = await strikeCounts(connection);
+  const members = (await connection.query("SELECT * FROM app_members WHERE active = TRUE")).map((row) => {
+    const member = memberFromRow(row);
+    return { ...member, strikes: strikes.get(member.id) ?? 0 };
+  });
   const sinceWeek = shiftWeek(currentWeek(now), -RECENT_WEEKS);
 
   // Last few war and vial records; missing from a record counts as 0.

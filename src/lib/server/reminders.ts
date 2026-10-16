@@ -15,7 +15,7 @@ export async function membersWithoutWeeklyUpdate(db: Database, week = currentWee
   const rows = await db.query(
     `SELECT m.discord_id, COALESCE(NULLIF(m.display_name, ''), m.username) AS name
      FROM app_members m
-     WHERE m.active = TRUE AND NOT EXISTS (
+     WHERE m.active = TRUE AND (m.holiday_until IS NULL OR m.holiday_until < $1::date) AND NOT EXISTS (
        SELECT 1 FROM dew_weekly_earnings e
        WHERE e.member_id = m.id AND e.week_start = $1::date AND e.reason = 'resources'
      )
