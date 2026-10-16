@@ -8,6 +8,7 @@ import { useT } from "@/lib/i18n";
 import type { Member, WarReading, WarResult, WarResultsResponse } from "@/lib/types";
 import { MemberName } from "./member-identity";
 import { useRecognition } from "./recognition";
+import { VialDaily } from "./vial-daily";
 import { useSortable } from "./sortable";
 import "./war-results.css";
 
@@ -272,6 +273,7 @@ export function WarResults({ kind = "war", members, admin, notify }: { kind?: Re
         <span className="war-bar-label">{formatWeek(result.week)}</span>
       </div>)}</div>
     </section>}
+    {kind === "vials" && results && <VialDaily results={results} byId={byId} />}
     {error && <div className="error-banner" role="alert">{t(error)}<button onClick={() => void load()}>{t("Retry")}</button></div>}
     {!results ? <section className="panel war-empty"><LoaderCircle size={22} className="spin" /></section>
       : !results.length ? <section className="panel war-empty"><Trophy size={30} /><p>{t(words.empty)}</p></section>
