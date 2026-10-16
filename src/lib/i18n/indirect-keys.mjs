@@ -13,6 +13,10 @@ export const INDIRECT_KEYS = [
   "Dashboard", "My Resources", "Manage Members", "Weekly History", "Estimated War Points", "Snipe Plans", "Reward Shop", "Hoarding Watch",
   "Spot members who hold a lot but don’t spend it. Only admins can see this page.",
   "War Results", "Final clan war scores, read from the end-of-war screenshots.",
+  "Vial Donations", "Contribution Ranking", "Snipes joined", "War points", "Vials donated", "Weekly updates", "Spent in wars", "Clan tech vial donations, read from the donation screenshots.",
+  "Everyone ranked by how much they contribute. The bottom of the list is who to talk to first when space is needed.",
+  // War and vial record wording (src/components/war-results.tsx TEXT)
+  "Add war results", "Add the end-of-war screenshots (clan total and the member list).", "Clan total", "Points", "War results saved.", "War result deleted.", "Delete this war result? This can’t be undone.", "Save war results", "No war results yet. An admin can add them from the end-of-war screenshots.", "Clan total over time", "Clan war totals", "Final clan scores from each war.", "War Results", "Top scorer", "e.g. Season 30 · War 4", "War date", "War", "Add vial donations", "Add the clan tech donation screenshots (the member list with vials).", "Total vials", "Vials", "Vial donations saved.", "Vial record deleted.", "Delete this vial record? This can’t be undone.", "Save vial donations", "No vial donations yet. An admin can add them from the clan tech screenshots.", "Vials donated over time", "Tech vial donations", "Vials donated to clan tech, from each upload.", "Vial Donations", "Top donor", "e.g. Week 4 donations", "Date", "Record",
   "Screenshot reading isn’t set up yet. Add ANTHROPIC_API_KEY in Vercel, or type the numbers in.",
   "The screenshots could not be read. Try clearer screenshots.",
   "The screenshot reader is unavailable right now. Try again, or type the numbers in.",

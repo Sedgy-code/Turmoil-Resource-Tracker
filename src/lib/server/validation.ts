@@ -160,8 +160,10 @@ const screenshotSchema = z.object({
   // Base64 only, at most about 1.5 MB per screenshot after the browser shrinks it.
   data: z.string().min(16).max(2_000_000).regex(/^[A-Za-z0-9+/=]+$/),
 }).strict();
-export const readWarSchema = z.object({ images: z.array(screenshotSchema).min(1).max(6) }).strict();
+export const recordKindSchema = z.enum(["war", "vials"]);
+export const readWarSchema = z.object({ images: z.array(screenshotSchema).min(1).max(6), kind: recordKindSchema.optional() }).strict();
 export const saveWarSchema = z.object({
+  kind: recordKindSchema.optional(),
   week: weekSchema,
   label: z.string().max(120),
   clanTotal: z.number().int().min(0).max(1e15).nullable(),

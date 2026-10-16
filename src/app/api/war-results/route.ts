@@ -1,14 +1,17 @@
 import { requireMember } from "@/lib/server/auth";
 import { assertSameOrigin } from "@/lib/server/config";
 import { errorResponse, privateResponse } from "@/lib/server/errors";
-import { saveWarSchema } from "@/lib/server/validation";
+import { recordKindSchema, saveWarSchema } from "@/lib/server/validation";
 import { listWarResults, saveWarResult } from "@/lib/server/war-results";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  try { return privateResponse(await listWarResults(await requireMember())); }
+export async function GET(request: Request) {
+  try {
+    const kind = recordKindSchema.parse(new URL(request.url).searchParams.get("kind") ?? "war");
+    return privateResponse(await listWarResults(await requireMember(), undefined, kind));
+  }
   catch (error) { return errorResponse(error); }
 }
 

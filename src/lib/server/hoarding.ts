@@ -171,9 +171,9 @@ export async function warSpending(actor: Member, week: string, db?: Database, no
   for (const row of versionRows) versions.set(String(row.member_id), [...(versions.get(String(row.member_id)) ?? []), versionEntry(row)]);
   const warRows = await connection.query(`SELECT points.member_id, SUM(points.points) AS points FROM war_result_points points
     JOIN war_results result ON result.id = points.result_id
-    WHERE result.week_start = $1 AND points.member_id IS NOT NULL GROUP BY points.member_id`, [start.toISOString().slice(0, 10)]);
+    WHERE result.week_start = $1 AND result.kind = 'war' AND points.member_id IS NOT NULL GROUP BY points.member_id`, [start.toISOString().slice(0, 10)]);
   const warPoints = new Map(warRows.map((row) => [String(row.member_id), Number(row.points)]));
-  const weekRows = await connection.query("SELECT DISTINCT week_start::text AS week FROM war_results ORDER BY week DESC");
+  const weekRows = await connection.query("SELECT DISTINCT week_start::text AS week FROM war_results WHERE kind = 'war' ORDER BY week DESC");
   const rows: WarSpendingRow[] = members.map((member) => {
     const history = versions.get(member.id) ?? [];
     const before = [...history].reverse().find((entry) => new Date(entry.updatedAt) < start);

@@ -182,6 +182,8 @@ export async function updateMember(
       "UPDATE app_members SET role = $2, active = $3 WHERE id = $1 RETURNING *",
       [memberId, role, active],
     );
+    // An admin's choice wins over the daily Discord check.
+    if (member.active !== active) await tx.query("DELETE FROM member_auto_removals WHERE member_id = $1", [memberId]);
     if (member.role !== role || member.active !== active) {
       await tx.query(
         `INSERT INTO member_status_events

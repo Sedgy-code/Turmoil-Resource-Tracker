@@ -6,6 +6,8 @@ import { ApiError } from "./errors";
 import { iso, memberFromRow } from "./mappers";
 
 export type ScreenshotImage = { mime: "image/jpeg" | "image/png" | "image/webp"; data: string };
+/** "war" = end-of-war scores; "vials" = clan tech vial donations. */
+export type RecordKind = "war" | "vials";
 
 const SNIPE_RECENT_WEEKS = 8;
 
@@ -47,6 +49,15 @@ export async function matchGameNames(connection: SqlConnection, names: string[])
   }
   return result;
 }
+
+const VIALS_PROMPT = `These are screenshots of the clan tech donations screen from the mobile game Forge Masters,
+showing how many vials each clan member has donated.
+Read them and reply with ONLY a JSON object, no other text, in exactly this shape:
+{"clanTotal": <total vials donated by the clan if shown as a whole number, otherwise null>,
+ "members": [{"name": "<player name exactly as shown>", "points": <that player's vials donated as a whole number>}]}
+Rules: list every player you can see once (screenshots may overlap; skip duplicates). Write numbers in full
+(e.g. "1.2K" becomes 1200, "1,234" becomes 1234). Keep names exactly as written, including symbols.
+Do not guess numbers you cannot read; leave such a player out.`;
 
 const READER_PROMPT = `These are screenshots of the end-of-war results from the mobile game Forge Masters.
 Read them and reply with ONLY a JSON object, no other text, in exactly this shape:
@@ -92,7 +103,7 @@ export function parseReading(text: string): { clanTotal: number | null; members:
 export async function readWarScreenshots(
   actor: Member,
   images: ScreenshotImage[],
-  dependencies: { db?: Database; fetcher?: typeof fetch } = {},
+  dependencies: { db?: Database; fetcher?: typeof fetch; kind?: RecordKind } = {},
 ): Promise<WarReading> {
   const connection = dependencies.db ?? await database();
   await requireAdmin(connection, actor.id);
@@ -109,7 +120,7 @@ export async function readWarScreenshots(
         role: "user",
         content: [
           ...images.map((image) => ({ type: "image", source: { type: "base64", media_type: image.mime, data: image.data } })),
-          { type: "text", text: READER_PROMPT },
+          { type: "text", text: dependencies.kind === "vials" ? VIALS_PROMPT : READER_PROMPT },
         ],
       }],
     }),
@@ -126,6 +137,7 @@ export async function readWarScreenshots(
 }
 
 export interface WarResultInput {
+  kind?: RecordKind;
   week: string;
   label: string;
   clanTotal: number | null;
@@ -146,8 +158,8 @@ export async function saveWarResult(actor: Member, input: WarResultInput, db?: D
       }
     }
     const id = randomUUID();
-    await tx.query("INSERT INTO war_results (id, week_start, label, clan_total, created_by) VALUES ($1, $2, $3, $4, $5)",
-      [id, week, input.label.trim().slice(0, 120), input.clanTotal, admin.id]);
+    await tx.query("INSERT INTO war_results (id, week_start, label, clan_total, created_by, kind) VALUES ($1, $2, $3, $4, $5, $6)",
+      [id, week, input.label.trim().slice(0, 120), input.clanTotal, admin.id, input.kind ?? "war"]);
     for (const [position, row] of input.rows.entries()) {
       await tx.query("INSERT INTO war_result_points (result_id, position, game_name, member_id, points) VALUES ($1, $2, $3, $4, $5)",
         [id, position, row.gameName.trim().slice(0, 80), row.memberId, Math.round(row.points)]);
@@ -165,8 +177,8 @@ export async function saveWarResult(actor: Member, input: WarResultInput, db?: D
   });
 }
 
-async function loadResults(connection: SqlConnection, onlyId?: string): Promise<WarResult[]> {
-  const results = await connection.query(`SELECT *, week_start::text AS week_text FROM war_results ${onlyId ? "WHERE id = $1" : ""} ORDER BY week_start DESC, created_at DESC`, onlyId ? [onlyId] : []);
+async function loadResults(connection: SqlConnection, onlyId?: string, kind: RecordKind = "war"): Promise<WarResult[]> {
+  const results = await connection.query(`SELECT *, week_start::text AS week_text FROM war_results WHERE ${onlyId ? "id = $1" : "kind = $1"} ORDER BY week_start DESC, created_at DESC`, [onlyId ?? kind]);
   const points = await connection.query(`SELECT result_id, position, game_name, member_id, points FROM war_result_points
     ${onlyId ? "WHERE result_id = $1" : ""} ORDER BY result_id, position`, onlyId ? [onlyId] : []);
   const images = await connection.query(`SELECT id, result_id FROM war_result_images ${onlyId ? "WHERE result_id = $1" : ""} ORDER BY result_id, position`, onlyId ? [onlyId] : []);
@@ -185,10 +197,10 @@ async function loadResults(connection: SqlConnection, onlyId?: string): Promise<
   }));
 }
 
-export async function listWarResults(actor: Member, db?: Database): Promise<WarResultsResponse> {
+export async function listWarResults(actor: Member, db?: Database, kind: RecordKind = "war"): Promise<WarResultsResponse> {
   const connection = db ?? await database();
   await activeMember(connection, actor.id);
-  return { results: await loadResults(connection) };
+  return { results: await loadResults(connection, undefined, kind) };
 }
 
 export async function deleteWarResult(actor: Member, id: string, db?: Database): Promise<void> {
@@ -196,7 +208,7 @@ export async function deleteWarResult(actor: Member, id: string, db?: Database):
   await connection.transaction(async (tx) => {
     await requireAdmin(tx, actor.id);
     const removed = await tx.query("DELETE FROM war_results WHERE id = $1 RETURNING id", [id]);
-    if (!removed.length) throw new ApiError(404, "This war result could not be found.", "WAR_RESULT_NOT_FOUND");
+    if (!removed.length) throw new ApiError(404, "This record could not be found.", "WAR_RESULT_NOT_FOUND");
   });
 }
 
@@ -232,7 +244,7 @@ export async function snipeRecognition(connection: SqlConnection, now = new Date
 export async function recognition(actor: Member, db?: Database): Promise<RecognitionResponse> {
   const connection = db ?? await database();
   await activeMember(connection, actor.id);
-  const latest = await connection.query("SELECT id FROM war_results ORDER BY week_start DESC, created_at DESC LIMIT 1");
+  const latest = await connection.query("SELECT id FROM war_results WHERE kind = 'war' ORDER BY week_start DESC, created_at DESC LIMIT 1");
   const war = latest.length ? (await loadResults(connection, String(latest[0].id)))[0] : null;
   const points: Record<string, number> = {};
   for (const row of war?.points ?? []) if (row.memberId) points[row.memberId] = (points[row.memberId] ?? 0) + row.points;

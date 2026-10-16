@@ -208,3 +208,35 @@ export interface WarSpendingRow {
   savedAfterAt: string | null;
 }
 export interface WarSpendingResponse { week: string; warWeeks: string[]; rows: WarSpendingRow[] }
+
+export type RankingMetric = "warPoints" | "vials" | "snipes" | "updates" | "warSpending";
+export interface ContributionRow {
+  member: Member;
+  rank: number;
+  /** 0–100; lower means contributing less. */
+  score: number;
+  /** Average war points over the last few wars (0 when missing from a war). */
+  warPoints: number | null;
+  warsPlayed: number;
+  /** Vials donated across the last few vial records. */
+  vials: number | null;
+  snipes: number;
+  /** Said Yes to a snipe but wasn't ticked as attending. */
+  noShows: number;
+  /** Weeks with a complete resource save, out of the last 8. */
+  updates: number;
+  /** Holdings used during recent war weeks (estimated war points). */
+  warSpending: number | null;
+  hoarding: HoardingLevel;
+  penalty: number;
+  parts: Partial<Record<RankingMetric, number>>;
+  daysInClan: number;
+  isNew: boolean;
+  lastSavedAt: string | null;
+}
+export interface ContributionRankingResponse {
+  rows: ContributionRow[];
+  weights: Partial<Record<RankingMetric, number>>;
+  records: { wars: number; vials: number };
+  generatedAt: string;
+}

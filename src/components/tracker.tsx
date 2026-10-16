@@ -10,6 +10,7 @@ import { HoardingWatch } from "./hoarding-watch";
 import { RecognitionProvider, useRecognition } from "./recognition";
 import { WarResults, WarTotalsHistory } from "./war-results";
 import { SnipeChampions } from "./snipe-champions";
+import { ContributionRanking } from "./contribution-ranking";
 import { useSortable } from "./sortable";
 import { ClanPointsBalance } from "./clan-points-balance";
 import { announceClanPointsUpdate } from "@/lib/clan-points";
@@ -65,6 +66,8 @@ import {
   Sparkles,
   ScanEye,
   Trophy,
+  FlaskConical,
+  ListOrdered,
   Crosshair,
   Swords,
   Ticket,
@@ -103,8 +106,8 @@ import type {
   WarRates,
 } from "@/lib/types";
 
-type View = "dashboard" | "resources" | "members" | "weeks" | "war" | "snipes" | "store" | "hoarding" | "warResults";
-const ADMIN_VIEWS: View[] = ["members", "hoarding"];
+type View = "dashboard" | "resources" | "members" | "weeks" | "war" | "snipes" | "store" | "hoarding" | "warResults" | "vials" | "ranking";
+const ADMIN_VIEWS: View[] = ["members", "hoarding", "ranking"];
 type Icon = ComponentType<{
   size?: number;
   className?: string;
@@ -120,6 +123,8 @@ const viewNames = {
   store: "Reward Shop",
   hoarding: "Hoarding Watch",
   warResults: "War Results",
+  vials: "Vial Donations",
+  ranking: "Contribution Ranking",
 };
 const navigation: { view: View; href: string; icon: Icon }[] = [
   { view: "dashboard", href: "/", icon: LayoutDashboard },
@@ -127,9 +132,11 @@ const navigation: { view: View; href: string; icon: Icon }[] = [
   { view: "war", href: "/war-points", icon: Swords },
   { view: "snipes", href: "/snipes", icon: Target },
   { view: "warResults", href: "/war-results", icon: Trophy },
+  { view: "vials", href: "/vial-donations", icon: FlaskConical },
   { view: "store", href: "/reward-shop", icon: Droplets },
   { view: "members", href: "/members", icon: Users },
   { view: "hoarding", href: "/hoarding-watch", icon: ScanEye },
+  { view: "ranking", href: "/contribution-ranking", icon: ListOrdered },
   { view: "weeks", href: "/weeks", icon: CalendarDays },
 ];
 const essentials: {
@@ -598,6 +605,8 @@ function TrackerApp({ view }: { view: View }) {
                       ? "Manage who can use the tracker."
                       : view === "hoarding" ? "Spot members who hold a lot but don’t spend it. Only admins can see this page."
                       : view === "warResults" ? "Final clan war scores, read from the end-of-war screenshots."
+                      : view === "vials" ? "Clan tech vial donations, read from the donation screenshots."
+                      : view === "ranking" ? "Everyone ranked by how much they contribute. The bottom of the list is who to talk to first when space is needed."
                       : view === "war" ? "Pick activities to estimate the clan’s war points."
                         : view === "snipes" ? "Plan events and say when you can join."
                           : view === "store" ? "Earn Clan Points by saving your resources each week and joining snipes."
@@ -725,6 +734,10 @@ function TrackerApp({ view }: { view: View }) {
               notify={notify}
               refresh={refresh}
             />
+          ) : data && view === "vials" ? (
+            <WarResults kind="vials" members={data.members} admin={user.role === "ADMIN"} notify={notify} />
+          ) : data && view === "ranking" ? (
+            <ContributionRanking />
           ) : data && view === "warResults" ? (
             <WarResults members={data.members} admin={user.role === "ADMIN"} notify={notify} />
           ) : data && view === "hoarding" ? (
@@ -1983,6 +1996,7 @@ function Weeks({
         <span className="count-badge">{data.weeks.length} saved weeks</span>
       </section>
       <WarTotalsHistory />
+      <WarTotalsHistory kind="vials" />
       <BankHistory admin={data.currentUser.role === "ADMIN"} notify={notify} refresh={refresh} />
       <div className="weeks-grid">
         {weeks.map((item) => (

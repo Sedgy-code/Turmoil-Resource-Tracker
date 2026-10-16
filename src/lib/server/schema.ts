@@ -195,4 +195,9 @@ CREATE TABLE IF NOT EXISTS member_game_names (
   member_id TEXT NOT NULL REFERENCES app_members(id),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+CREATE TABLE IF NOT EXISTS member_auto_removals (
+  member_id TEXT PRIMARY KEY REFERENCES app_members(id),
+  removed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE war_results ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'war';
 `;
