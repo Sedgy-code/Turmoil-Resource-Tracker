@@ -4,7 +4,7 @@ import { test } from "node:test";
 import type { Member } from "../src/lib/types";
 import { initializeSchema, openDatabase, type Database } from "../src/lib/server/db";
 import { ApiError } from "../src/lib/server/errors";
-import { hoardingLevel, hoardingReport, saveHoardingNote, warSpending } from "../src/lib/server/hoarding";
+import { hoardingLevel, hoardingReport, saveHoardingNote, saveHoardingRules, warSpending } from "../src/lib/server/hoarding";
 import { memberFromRow } from "../src/lib/server/mappers";
 
 const DAY = 86_400_000;
@@ -31,12 +31,14 @@ async function saveHammers(db: Database, member: Member, hammers: number, daysAg
     ON CONFLICT (member_id) DO UPDATE SET resources=EXCLUDED.resources, updated_at=EXCLUDED.updated_at`, [member.id, resources, at]);
 }
 
-test("levels combine a large stockpile with growth or skipped snipes", () => {
-  assert.equal(hoardingLevel(["large", "growing"]), "high");
-  assert.equal(hoardingLevel(["large", "skipsSnipes"]), "high");
-  assert.equal(hoardingLevel(["large"]), "watch");
-  assert.equal(hoardingLevel(["growing"]), "watch");
-  assert.equal(hoardingLevel(["stale"]), "ok");
+test("saving is fine; hoarding is a big growing pile that isn't used in wars", () => {
+  assert.equal(hoardingLevel(["large", "growing", "noWarSpending"]), "high");
+  assert.equal(hoardingLevel(["large", "growing", "spendsInWars"]), "saver");
+  assert.equal(hoardingLevel(["large", "spendsInWars"]), "saver");
+  assert.equal(hoardingLevel(["large", "growing"]), "watch");
+  assert.equal(hoardingLevel(["large", "skipsSnipes"]), "watch");
+  assert.equal(hoardingLevel(["large"]), "ok");
+  assert.equal(hoardingLevel(["growing", "noWarSpending"]), "ok");
   assert.equal(hoardingLevel([]), "ok");
 });
 
@@ -53,7 +55,8 @@ test("a member who keeps growing a large stockpile without spending is flagged h
     const report = await hoardingReport(admin, db);
     const row = (name: string) => report.rows.find(({ member }) => member.username === name)!;
     assert.equal(report.rows[0].member.username, "Hoarder");
-    assert.equal(row("Hoarder").level, "high");
+    // No war results yet, so it can't tell saving from hoarding: keep an eye on them.
+    assert.equal(row("Hoarder").level, "watch");
     assert.deepEqual(row("Hoarder").reasons, ["large", "growing"]);
     assert.equal(row("Hoarder").change, 12000 * 2 - 5000 * 2);
     assert.equal(row("Hoarder").spendsRecently, 0);
@@ -127,5 +130,35 @@ test("during a war: who saved and who spent, compared with their saves before an
     assert.equal(row("Quiet").after, null);
     assert.equal(row("Quiet").spent, null);
     await assert.rejects(warSpending(saver, week, db), apiFailure("ADMIN_REQUIRED"));
+  });
+});
+
+test("with war results: a saver who spends in wars vs a hoarder who doesn't, using admin-set rules", async () => {
+  await withDatabase(async (db) => {
+    const admin = await addMember(db, "Leader", "ADMIN");
+    const hoarder = await addMember(db, "Hoarder");
+    const saver = await addMember(db, "Saver");
+    const others = [await addMember(db, "A"), await addMember(db, "B"), await addMember(db, "C")];
+    const { currentWeek } = await import("../src/lib/resources");
+    const warWeek = currentWeek(new Date(Date.now() - 20 * DAY));
+    const start = new Date(`${warWeek}T00:00:00Z`).getTime();
+    const ago = (time: number) => (Date.now() - time) / DAY;
+    for (const member of [admin, ...others]) await saveHammers(db, member, 1000, 1);
+    // Hoarder: big and growing, nothing used in the war week.
+    for (const [hammers, at] of [[8000, start - 30 * DAY], [9000, start - DAY], [9500, start + 2 * DAY], [12000, Date.now() - DAY]] as const) await saveHammers(db, hoarder, hammers, ago(at));
+    // Saver: big pile that drops during the war, then grows again.
+    for (const [hammers, at] of [[8000, start - 30 * DAY], [10000, start - DAY], [6000, start + 2 * DAY], [12000, Date.now() - DAY]] as const) await saveHammers(db, saver, hammers, ago(at));
+    await db.query("INSERT INTO war_results (id, week_start, label, clan_total, created_by, kind) VALUES ($1, $2, '', 1, $3, 'war')", [randomUUID(), warWeek, admin.id]);
+    const report = await hoardingReport(admin, db);
+    const row = (name: string) => report.rows.find(({ member }) => member.username === name)!;
+    assert.equal(report.measuredWars, 1);
+    assert.equal(row("Hoarder").level, "high");
+    assert.ok(row("Hoarder").reasons.includes("noWarSpending"));
+    assert.equal(row("Saver").level, "saver");
+    assert.equal(row("Saver").warUsePercent, 40);
+    // Stricter rule: must use at least half the pile in wars to count as a saver.
+    await saveHoardingRules(admin, { largeMultiple: 2, spendPercent: 50, wars: 2 }, db);
+    assert.notEqual((await hoardingReport(admin, db)).rows.find(({ member }) => member.id === saver.id)!.level, "saver");
+    await assert.rejects(saveHoardingRules(saver, { largeMultiple: 3, spendPercent: 10, wars: 2 }, db), apiFailure("ADMIN_REQUIRED"));
   });
 });

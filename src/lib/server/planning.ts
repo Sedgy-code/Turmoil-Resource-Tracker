@@ -248,7 +248,7 @@ export async function getDew(actor: Member, db?: Database): Promise<DewResponse>
   });
 }
 
-async function awardWeeklyDew(tx: SqlConnection, memberId: string, reason: "resources" | "snipe", week: string): Promise<void> {
+export async function awardWeeklyDew(tx: SqlConnection, memberId: string, reason: "resources" | "snipe", week: string): Promise<void> {
   const amount = reason === "resources" ? 20 : 10;
   const awarded = await tx.query(`INSERT INTO dew_weekly_earnings (member_id, week_start, reason, amount)
     SELECT id, $2::date, $3, $4 FROM app_members WHERE id = $1 AND active = TRUE

@@ -52,7 +52,7 @@ export function ContributionRanking() {
     noShows: (row) => row.noShows,
     updates: (row) => row.updates,
     warSpending: (row) => row.warSpending,
-    hoarding: (row) => row.hoarding === "high" ? 2 : row.hoarding === "watch" ? 1 : 0,
+    hoarding: (row) => row.hoarding === "high" ? 2 : row.hoarding === "watch" ? 1 : row.hoarding === "saver" ? -1 : 0,
     days: (row) => row.daysInClan,
     saved: (row) => row.lastSavedAt ? new Date(row.lastSavedAt).getTime() : null,
   }, { key: "rank", direction: "desc" });
@@ -66,7 +66,7 @@ export function ContributionRanking() {
         <h2>{t("How the score works")}</h2>
         <p>{t("Each member gets a score out of 100 from how they compare with everyone else. Lowest scores are at the top — talk to them first when you need space.")}</p>
         <ul className="rank-weights">{weights.map(([metric, weight]) => <li key={metric}><strong>{weight}%</strong> {t(METRIC_LABELS[metric])}</li>)}</ul>
-        <p>{t("Minus points for hoarding (5 or 15) and for saying Yes to a snipe but not turning up (5 each, up to 15).")}</p>
+        <p>{t("Minus points for hoarding (5 or 15) and for saying Yes to a snipe but not turning up (5 each, up to 15). Good savers get +3.")}</p>
         {missing.length > 0 && <p className="hoard-typical">{t("Not counted yet (no records): {parts}", { parts: missing.map((metric) => t(METRIC_LABELS[metric])).join(", ") })}</p>}
       </div>
       <div className="rank-controls">
@@ -92,7 +92,7 @@ export function ContributionRanking() {
           <td className={row.noShows ? "hoard-up" : undefined}>{row.noShows || "—"}</td>
           <td>{row.updates} / 8</td>
           <td className={row.warSpending === null ? "" : row.warSpending > 0 ? "hoard-down" : row.warSpending < 0 ? "hoard-up" : ""}>{row.warSpending === null ? "—" : `${row.warSpending > 0 ? "−" : row.warSpending < 0 ? "+" : ""}${numberFormat(Math.abs(Math.round(row.warSpending)))}`}</td>
-          <td>{row.hoarding === "ok" ? "—" : <span className={`hoard-level hoard-level-${row.hoarding}`}>{t(row.hoarding === "high" ? "Hoarding" : "Keep an eye on")}</span>}</td>
+          <td>{row.hoarding === "ok" ? "—" : <span className={`hoard-level hoard-level-${row.hoarding}`}>{t(row.hoarding === "high" ? "Hoarding" : row.hoarding === "saver" ? "💰 Good saver" : "Keep an eye on")}</span>}</td>
           <td>{row.daysInClan}</td>
           <td>{row.lastSavedAt ? t("{days} days ago", { days: Math.floor((Date.now() - new Date(row.lastSavedAt).getTime()) / 86_400_000) }) : t("Never")}</td>
         </tr>)}</tbody>

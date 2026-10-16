@@ -22,8 +22,9 @@ export const INDIRECT_KEYS = [
   "The screenshot reader is unavailable right now. Try again, or type the numbers in.",
   "Only administrators can add war results.",
   // Hoarding watch labels
-  "Hoarding", "Keep an eye on", "OK",
-  "Holds at least twice as much as a typical member", "Pile keeps growing with no spending in 4 weeks",
+  "Hoarding", "Keep an eye on", "OK", "💰 Good saver",
+  "Holds at least {times}× as much as a typical member", "Pile keeps growing with no spending in 4 weeks",
+  "Used less than {percent}% of their pile in the last {wars} war(s)", "Saves up, but uses it in wars ({used}% in the last {wars} war(s))",
   "Missed every snipe with ticked attendance (last 8 weeks)", "Hasn’t saved resources in over 2 weeks",
   // Resource fields
   "Skill Tickets", "Mount Keys", "Mounts to Merge", "Hammers", "Total eggs/pets", "Eggshells total",
