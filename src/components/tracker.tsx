@@ -12,7 +12,7 @@ import { announceClanPointsUpdate } from "@/lib/clan-points";
 import { MemberAvatar as Avatar, MemberName, MemberTitle } from "./member-identity";
 import { DEFAULT_WAR_RATES, WAR_ACTIVITIES, estimateWar } from "@/lib/war";
 import { assessBankCompleteness } from "@/lib/completeness";
-import { filterPlanningIssues, memberPlanningIssues } from "@/lib/planning-completeness";
+import { filterPlanningIssues, memberPlanningIssues, type PlanningIssueKey } from "@/lib/planning-completeness";
 import { MissingDataIndicator } from "./missing-data-indicator";
 import { LanguagePicker } from "./language-picker";
 import { FieldGuide, type GuidedField } from "./field-guide";
@@ -910,7 +910,22 @@ function ClanArsenal({ data, estimate, rates, estimateError, snapshotId }: { dat
   const incompleteMembers = memberPlanningIssues(data);
   const membersMissingCosts = filterPlanningIssues(incompleteMembers, ["fiveSkills", "mount"]);
   return (
-    <div className="stat-grid arsenal-grid">
+    <>
+      <article className="stat-card arsenal-summary arsenal-total">
+        <div className="arsenal-summary-head">
+          <div className="stat-label"><span className="resource-icon gold"><Sparkles size={19} /></span><span>{t("Total Potential War Points")}</span></div>
+          <p className="arsenal-summary-copy">{t("The clan’s combined war estimate")}</p>
+        </div>
+        <WarPointRange minimum={estimateError ? null : estimate?.minimum ?? 0} maximum={estimateError ? null : estimate?.maximum ?? 0} />
+        <div className="arsenal-summary-footer">
+          <MissingDataIndicator members={incompleteMembers} label={t(membersMissingCosts.length > 0
+            ? "Some summon costs are missing. This total is incomplete."
+            : "Add missing extra chances to include all bonus points.")} />
+          <Link className="arsenal-planner-link" href={`/war-points${data.live === false ? `?week=${data.week}${snapshotId ? `&snapshot=${encodeURIComponent(snapshotId)}` : ""}` : ""}`}>{t("View war calculator")} <ArrowRight size={14} /></Link>
+        </div>
+      </article>
+    <p className="arsenal-swipe-hint">{t("Swipe to see all five")} <ArrowRight size={13} /></p>
+    <div className="stat-grid arsenal-grid arsenal-row">
       {dashboardResources.map(({ key, label, icon: StatIcon, color }) => {
         const cardPoints = key === "skillTickets" ? points("skillSummons")
           : key === "mountKeys" ? points("mountSummons", "newMountMerges")
@@ -956,22 +971,17 @@ function ClanArsenal({ data, estimate, rates, estimateError, snapshotId }: { dat
           </article>
         );
       })}
-      <article className="stat-card arsenal-card arsenal-summary">
-        <div className="arsenal-summary-head">
-          <div className="stat-label"><span className="resource-icon gold"><Sparkles size={19} /></span><span>{t("Total Potential War Points")}</span></div>
-          <p className="arsenal-summary-copy">{t("The clan’s combined war estimate")}</p>
-        </div>
-        <WarPointRange minimum={estimateError ? null : estimate?.minimum ?? 0} maximum={estimateError ? null : estimate?.maximum ?? 0} />
-        <div className="arsenal-summary-footer">
-          <MissingDataIndicator members={incompleteMembers} label={t(membersMissingCosts.length > 0
-            ? "Some summon costs are missing. This total is incomplete."
-            : "Add missing extra chances to include all bonus points.")} />
-          <Link className="arsenal-planner-link" href={`/war-points${data.live === false ? `?week=${data.week}${snapshotId ? `&snapshot=${encodeURIComponent(snapshotId)}` : ""}` : ""}`}>{t("View war calculator")} <ArrowRight size={14} /></Link>
-        </div>
-      </article>
     </div>
+    </>
   );
 }
+
+/** Which table column each missing detail belongs to, so only that box is marked. */
+const CELL_ISSUES: Partial<Record<ResourceKey, PlanningIssueKey[]>> = {
+  skillTickets: ["fiveSkills"],
+  mountKeys: ["mount", "extraMountChancePercent"],
+  eggshellsTotal: ["extraPetSummonPercent"],
+};
 
 function MemberResources({
   data,
@@ -1057,7 +1067,7 @@ function MemberResources({
           <ArrowRight size={13} />
         </span>
       </div>
-      {incompleteMembers.length > 0 && <p className={missingDataStyles.legend}><CircleAlert size={13} aria-hidden="true" />{t("Highlighted members are missing some numbers. Tap “Missing data” to see which.")}</p>}
+      {incompleteMembers.length > 0 && <p className={missingDataStyles.legend}><CircleAlert size={13} aria-hidden="true" />{t("Amber boxes show numbers a member still needs to add.")}</p>}
       <div className="table-scroll">
         <table className="resource-table">
           <thead>
@@ -1090,7 +1100,7 @@ function MemberResources({
               const resources = entry?.resources ?? EMPTY_RESOURCES;
               const missingInformation = incompleteByMember.get(member.id);
               return (
-                <tr key={member.id} className={missingInformation ? missingDataStyles.incompleteRow : undefined} data-planning-incomplete={missingInformation ? "true" : undefined}>
+                <tr key={member.id} data-planning-incomplete={missingInformation ? "true" : undefined}>
                   <td className="sticky-member">
                     <div className="table-member">
                       <Avatar member={member} small />
@@ -1108,20 +1118,24 @@ function MemberResources({
                           />
                           {t(entry ? "Resources saved" : "Not saved yet")}
                         </span>
-                        {missingInformation && <MissingDataIndicator members={[missingInformation]} label={t("Missing data")} accessibleLabel={t("Missing data for {name}", { name: member.username })} compact />}
+                        {missingInformation && <small className="row-missing"><CircleAlert size={12} aria-hidden="true" />{t("Missing:")} {missingInformation.issues.map((issue) => t(issue.label)).join(", ")}</small>}
                       </div>
                     </div>
                   </td>
-                  {RESOURCE_FIELDS.map(({ key }) => (
-                    <td
-                      key={key}
-                      className={
-                        key === "eggsPetsTotal" ? "accent-number" : undefined
-                      }
-                    >
-                      {numberFormat(resources[key as ResourceKey])}
-                    </td>
-                  ))}
+                  {RESOURCE_FIELDS.map(({ key }) => {
+                    const cellIssues = missingInformation?.issues.filter((issue) => CELL_ISSUES[key as ResourceKey]?.includes(issue.key)) ?? [];
+                    const missingText = cellIssues.map((issue) => t(issue.label)).join(", ");
+                    return (
+                      <td
+                        key={key}
+                        className={[key === "eggsPetsTotal" ? "accent-number" : "", cellIssues.length ? "cell-missing" : ""].filter(Boolean).join(" ") || undefined}
+                        title={cellIssues.length ? t("Missing: {fields}", { fields: missingText }) : undefined}
+                      >
+                        {cellIssues.length > 0 && <CircleAlert size={12} className="cell-missing-icon" aria-label={t("Missing: {fields}", { fields: missingText })} />}
+                        {numberFormat(resources[key as ResourceKey])}
+                      </td>
+                    );
+                  })}
                   <td
                     className="updated-cell"
                     title={
@@ -1183,47 +1197,62 @@ function MemberResources({
   );
 }
 
-/** One line of the resource form: what to enter on the left, a small box on the right. */
-function EntryRow({ id, label, icon, help, guide, sub = false, input }: {
+interface EntryBox {
+  /** Accessible name of the box (also used by the picture guide). */
+  label: string;
+  /** Small caption shown above the box when a line has two boxes. */
+  caption?: string;
+  decimal?: boolean;
+  placeholder?: string;
+  value: string;
+  onChange: (value: string) => void;
+  suffix?: string;
+}
+
+/** Keeps only digits (and one decimal point where allowed), so letters and commas can't be typed. */
+function digitsOnly(value: string, decimal: boolean): string {
+  const cleaned = value.replace(decimal ? /[^0-9.]/g : /[^0-9]/g, "");
+  if (!decimal) return cleaned;
+  const [whole, ...rest] = cleaned.split(".");
+  return rest.length ? `${whole}.${rest.join("")}` : whole;
+}
+
+/** One line of the resource form: what to enter on the left, small boxes on the right. */
+function EntryRow({ id, label, icon, help, guide, boxes }: {
   id: string;
   label: string;
   icon?: ReactNode;
   help: string;
   guide?: ReactNode;
-  sub?: boolean;
-  input: {
-    inputMode: "numeric" | "decimal";
-    min: number;
-    max: number;
-    step: string;
-    placeholder?: string;
-    value: string;
-    onChange: (value: string) => void;
-    suffix?: string;
-  };
+  boxes: EntryBox[];
 }) {
   return (
-    <div className={`entry-row${sub ? " entry-row-sub" : ""}`}>
+    <div className={`entry-row${boxes.length > 1 ? " entry-row-pair" : ""}`}>
       <div className="entry-row-text">
-        <label htmlFor={`field-${id}`}>{icon}{label}</label>
+        <label htmlFor={`field-${id}-0`}>{icon}{label}</label>
         <small className="field-help" id={`help-${id}`}>{help}</small>
       </div>
-      <div className="entry-row-box">
-        <input
-          id={`field-${id}`}
-          aria-label={label}
-          aria-describedby={`help-${id}`}
-          type="number"
-          inputMode={input.inputMode}
-          min={input.min}
-          max={input.max}
-          step={input.step}
-          required
-          placeholder={input.placeholder}
-          value={input.value}
-          onChange={(event) => input.onChange(event.target.value)}
-        />
-        {input.suffix && <span className="entry-row-suffix" aria-hidden="true">{input.suffix}</span>}
+      <div className="entry-row-boxes">
+        {boxes.map((box, index) => (
+          <div className="entry-row-box" key={box.label}>
+            {box.caption && <span className="entry-row-caption" aria-hidden="true">{box.caption}</span>}
+            <div className="entry-row-field">
+              <input
+                id={`field-${id}-${index}`}
+                aria-label={box.label}
+                aria-describedby={`help-${id}`}
+                type="text"
+                inputMode={box.decimal ? "decimal" : "numeric"}
+                autoComplete="off"
+                required
+                placeholder={box.placeholder}
+                value={box.value}
+                onChange={(event) => box.onChange(digitsOnly(event.target.value, !!box.decimal))}
+              />
+              {box.suffix && <span className="entry-row-suffix" aria-hidden="true">{box.suffix}</span>}
+            </div>
+          </div>
+        ))}
       </div>
       {guide ? <div className="entry-row-guide">{guide}</div> : null}
     </div>
@@ -1489,36 +1518,29 @@ function ResourceForm({
           {t("Main resources")}
         </h3>
         <div className="entry-list">
-          {essentials.flatMap(({ key, label, icon: InputIcon }) => {
+          {essentials.map(({ key, label, icon: InputIcon }) => {
             const guide = RESOURCE_GUIDE[key];
-            const rows = [
+            const cost = key === "skillTickets"
+              ? { key: "fiveSkills" as const, label: "Skill summon cost (×5)", caption: "Cost ×5", help: "On the blue Summon ×5 button. Between 150 and 200.", where: "Skills screen → the number on the blue “Summon x5” button." }
+              : key === "mountKeys"
+                ? { key: "mount" as const, label: "Mount summon cost (×1)", caption: "Cost ×1", help: "On the blue Summon ×1 button. Between 37.5 and 50.", where: "Mounts screen → the number on the blue “Summon x1” button." }
+                : null;
+            const boxes: EntryBox[] = [{ label: t(label), caption: cost ? t("Amount") : undefined, placeholder: "0", value: values[key], onChange: (value) => update(key, value) }];
+            if (cost) boxes.push({ label: t(cost.label), caption: t(cost.caption), decimal: true, value: costValues[cost.key], onChange: (value) => setCostValues((existing) => ({ ...existing, [cost.key]: value })) });
+            return (
               <EntryRow
                 key={key}
                 id={`resource-${key}`}
                 label={t(label)}
                 icon={<InputIcon size={15} />}
-                help={t(guide.help)}
-                guide={!readOnly && <FieldGuide field={key} hint={t(guide.where)} />}
-                input={{ inputMode: "numeric", min: 0, max: resourceMaximum(key), step: "1", placeholder: "0", value: values[key], onChange: (value) => update(key, value) }}
-              />,
-            ];
-            const cost = key === "skillTickets"
-              ? { key: "fiveSkills" as const, label: "Skill summon cost (×5)", min: SKILL_SUMMON_COST_MIN, max: SKILL_SUMMON_COST_MAX, step: "0.1", help: "On the blue Summon ×5 button. Between 150 and 200.", where: "Skills screen → the number on the blue “Summon x5” button." }
-              : key === "mountKeys"
-                ? { key: "mount" as const, label: "Mount summon cost (×1)", min: MOUNT_SUMMON_COST_MIN, max: MOUNT_SUMMON_COST_MAX, step: "any", help: "On the blue Summon ×1 button. Between 37.5 and 50.", where: "Mounts screen → the number on the blue “Summon x1” button." }
-                : null;
-            if (cost) rows.push(
-              <EntryRow
-                key={cost.key}
-                id={`cost-${cost.key}`}
-                label={t(cost.label)}
-                help={t(cost.help)}
-                sub
-                guide={!readOnly && <FieldGuide field={cost.key} hint={t(cost.where)} />}
-                input={{ inputMode: "decimal", min: cost.min, max: cost.max, step: cost.step, value: costValues[cost.key], onChange: (value) => setCostValues((existing) => ({ ...existing, [cost.key]: value })) }}
-              />,
+                help={cost ? `${t(guide.help)} ${t(cost.help)}` : t(guide.help)}
+                guide={!readOnly && <>
+                  <FieldGuide field={key} hint={t(guide.where)} />
+                  {cost && <FieldGuide field={cost.key} hint={t(cost.where)} />}
+                </>}
+                boxes={boxes}
+              />
             );
-            return rows;
           })}
         </div>
       </section>
@@ -1534,7 +1556,7 @@ function ResourceForm({
               label={t(key === "eggsPetsTotal" ? "Total eggs/pets" : "Eggshells total")}
               help={t(RESOURCE_GUIDE[key].help)}
               guide={!readOnly && <FieldGuide field={key} hint={t(RESOURCE_GUIDE[key].where)} />}
-              input={{ inputMode: "numeric", min: 0, max: resourceMaximum(key), step: "1", placeholder: "0", value: values[key], onChange: (value) => update(key, value) }}
+              boxes={[{ label: t(key === "eggsPetsTotal" ? "Total eggs/pets" : "Eggshells total"), placeholder: "0", value: values[key], onChange: (value) => update(key, value) }]}
             />
           ))}
         </div>
@@ -1550,7 +1572,7 @@ function ResourceForm({
               label={t(label)}
               help={t(help)}
               guide={!readOnly && picture && where && <FieldGuide field={picture} hint={t(where)} />}
-              input={{ inputMode: isChance(key) ? "decimal" : "numeric", min: 0, max: planningMaximum(key), step: isChance(key) ? "0.01" : "1", placeholder: isChance(key) ? t("Enter 0 if none") : t("e.g. 100"), value: planningValues[key], onChange: (value) => setPlanningValues((old) => ({ ...old, [key]: value })), suffix: isChance(key) ? "%" : undefined }}
+              boxes={[{ label: t(label), decimal: isChance(key), placeholder: isChance(key) ? t("Enter 0 if none") : t("e.g. 100"), value: planningValues[key], onChange: (value) => setPlanningValues((old) => ({ ...old, [key]: value })), suffix: isChance(key) ? "%" : undefined }]}
             />
           ))}
         </div>

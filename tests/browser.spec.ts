@@ -182,15 +182,12 @@ test("desktop resources persist, update live totals, preserve history, and expor
     expect(Math.abs(topRowBounds[0]!.y - topRowBounds[2]!.y)).toBeLessThanOrEqual(1);
     expect(topRowBounds[0]!.x).toBeLessThan(topRowBounds[1]!.x);
     expect(topRowBounds[1]!.x).toBeLessThan(topRowBounds[2]!.x);
-    const cards = page.locator(".arsenal-grid .stat-card");
-    await expect(cards).toHaveCount(6);
-    const bounds = await Promise.all(Array.from({ length: 6 }, (_, index) => cards.nth(index).boundingBox()));
+    const cards = page.locator(".arsenal-row .stat-card");
+    await expect(cards).toHaveCount(5);
+    const bounds = await Promise.all(Array.from({ length: 5 }, (_, index) => cards.nth(index).boundingBox()));
     expect(bounds.every(Boolean)).toBeTruthy();
-    for (const row of [bounds.slice(0, 3), bounds.slice(3)]) {
-      expect(Math.max(...row.map((box) => box!.y)) - Math.min(...row.map((box) => box!.y))).toBeLessThanOrEqual(1);
-      expect(Math.max(...row.map((box) => box!.height)) - Math.min(...row.map((box) => box!.height))).toBeLessThanOrEqual(1);
-    }
-    expect(bounds[3]!.y).toBeGreaterThanOrEqual(bounds[0]!.y + bounds[0]!.height);
+    expect(Math.max(...bounds.map((box) => box!.y)) - Math.min(...bounds.map((box) => box!.y))).toBeLessThanOrEqual(1);
+    await expect(page.locator(".arsenal-total")).toBeVisible();
     await noPageOverflow(page);
     await page.screenshot({
       path: testInfo.outputPath("desktop-dashboard.png"),

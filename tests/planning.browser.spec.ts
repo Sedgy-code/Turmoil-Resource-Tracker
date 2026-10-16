@@ -667,13 +667,11 @@ test("incomplete war estimates identify missing members and fields without flagg
   await expect(memberRow(zero.memberId).getByRole("button", { name: /^Missing war-planning data/ })).toHaveCount(0);
   await expect(memberRow(absent.memberId)).toContainText("Not saved yet");
 
-  const memberWarning = bonusRow.getByRole("button", { name: `Missing war-planning data for ${username(bonus.memberId)}`, exact: true });
-  await memberWarning.click();
-  const memberTip = page.getByRole("tooltip").filter({ hasText: "Mount summon cost" });
-  await expect(memberTip).toBeVisible();
-  await expect(memberTip).toContainText("Extra mount chance %");
-  await expect(memberTip).toContainText("Extra pet summon %");
-  await memberWarning.press("Escape");
+  const memberNote = bonusRow.locator(".row-missing");
+  await expect(memberNote).toContainText("Mount summon cost");
+  await expect(memberNote).toContainText("Extra mount chance %");
+  await expect(memberNote).toContainText("Extra pet summon %");
+  await expect(bonusRow.locator("td.cell-missing")).toHaveCount(2);
 
   await page.setViewportSize({ width: 320, height: 844 });
   await summaryWarning.click();
