@@ -16,6 +16,12 @@ export const INDIRECT_KEYS = [
   "Dungeon keys", "Skill summons", "Forge upgrades", "Tech upgrades", "Mount summons", "Egg hatching", "Pet merges", "Battle", "Claim rewards",
   "Use hammers and skill tickets today.", "Summon and merge mounts today.", "Hammers, skills, eggs and pets all count today.", "Second mount day.",
   "Last day for hammers, eggs and pets.", "Fight the other clans. Spending doesn't score today.", "Claim your war rewards. You only have today.",
+  // Leadership tabs and Apply page (src/components/apply.tsx FIELDS, server messages)
+  "Applications", "Settings", "People who want to join Turmoil. Only admins can see this page.", "Clan Hub settings for leadership.",
+  "In-game name", "Exactly as it shows in Forge Master", "Discord username", "So leadership can message you", "Power", "e.g. 797t",
+  "Highest stage", "e.g. Hard 11-2", "Server", "e.g. Server 27", "Time zone", "e.g. UTC+10", "War days you can play each week", "e.g. 6 of 7",
+  "Languages you speak", "e.g. English, Spanish",
+  "You’ve sent a few applications already. Please wait an hour and try again.", "Something went wrong. Please try again.",
   // Navigation
   "Dashboard", "My Resources", "Manage Members", "Weekly History", "Estimated War Points", "Snipe Plans", "Reward Shop", "Hoarding Watch",
   "Spot members who hold a lot but don’t spend it. Only admins can see this page.",

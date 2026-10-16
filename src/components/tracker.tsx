@@ -13,6 +13,7 @@ import { SnipeChampions } from "./snipe-champions";
 import { ContributionRanking } from "./contribution-ranking";
 import { WarWeek } from "./war-week";
 import { MemberHistoryPanel } from "./member-history";
+import { ApplicationsManager, LeadershipSettings } from "./leadership-applications";
 import { downloadRows } from "@/lib/csv";
 import { CountdownStrip } from "./countdown-strip";
 import { useSortable } from "./sortable";
@@ -107,8 +108,8 @@ import type {
   WarRates,
 } from "@/lib/types";
 
-type View = "dashboard" | "resources" | "members" | "weeks" | "war" | "warWeek" | "snipes" | "store" | "hoarding" | "warResults" | "vials" | "ranking";
-const ADMIN_VIEWS: View[] = ["members", "hoarding", "ranking"];
+type View = "dashboard" | "resources" | "members" | "weeks" | "war" | "warWeek" | "snipes" | "store" | "hoarding" | "warResults" | "vials" | "ranking" | "applications" | "settings";
+const ADMIN_VIEWS: View[] = ["members", "hoarding", "ranking", "applications", "settings"];
 type Icon = ComponentType<{
   size?: number;
   className?: string;
@@ -127,6 +128,8 @@ const viewNames = {
   warResults: "War Results",
   vials: "Vial Donations",
   ranking: "Contribution Ranking",
+  applications: "Applications",
+  settings: "Settings",
 };
 const VIEW_HREF: Record<View, string> = {
   dashboard: "/",
@@ -141,6 +144,8 @@ const VIEW_HREF: Record<View, string> = {
   members: "/members",
   ranking: "/contribution-ranking",
   hoarding: "/hoarding-watch",
+  applications: "/applications",
+  settings: "/settings",
 };
 type Section = "home" | "resources" | "war" | "records" | "store" | "leadership";
 /** The menu: each section opens its first tab; sections with more than one page show tabs. */
@@ -150,7 +155,7 @@ const SECTIONS: { section: Section; label: string; short: string; icon: Icon; ta
   { section: "war", label: "War", short: "War", icon: Swords, tabs: [{ view: "warWeek", label: "This Week" }, { view: "snipes", label: "Snipes" }, { view: "war", label: "Points Calculator" }] },
   { section: "records", label: "Records", short: "Records", icon: Trophy, tabs: [{ view: "warResults", label: "War Results" }, { view: "vials", label: "Vials" }, { view: "weeks", label: "Weekly History" }] },
   { section: "store", label: "Reward Shop", short: "Shop", icon: Droplets, tabs: [{ view: "store", label: "Reward Shop" }] },
-  { section: "leadership", label: "Leadership", short: "Leadership", icon: ShieldCheck, admin: true, tabs: [{ view: "members", label: "Members" }, { view: "ranking", label: "Ranking" }, { view: "hoarding", label: "Hoarding" }] },
+  { section: "leadership", label: "Leadership", short: "Leadership", icon: ShieldCheck, admin: true, tabs: [{ view: "members", label: "Members" }, { view: "ranking", label: "Ranking" }, { view: "hoarding", label: "Hoarding" }, { view: "applications", label: "Applications" }, { view: "settings", label: "Settings" }] },
 ];
 const sectionOf = (view: View) => SECTIONS.find((entry) => entry.tabs.some((tab) => tab.view === view))!;
 const essentials: {
@@ -631,6 +636,8 @@ function TrackerApp({ view }: { view: View }) {
                     ? "Copy your numbers from the game, then press Save."
                     : view === "members"
                       ? "Manage who can use the tracker."
+                      : view === "applications" ? "People who want to join Turmoil. Only admins can see this page."
+                      : view === "settings" ? "Clan Hub settings for leadership."
                       : view === "hoarding" ? "Spot members who hold a lot but don’t spend it. Only admins can see this page."
                       : view === "warResults" ? "Final clan war scores, read from the end-of-war screenshots."
                       : view === "vials" ? "Clan tech vial donations, read from the donation screenshots."
@@ -770,6 +777,10 @@ function TrackerApp({ view }: { view: View }) {
             <ContributionRanking />
           ) : data && view === "warResults" ? (
             <WarResults members={data.members} admin={user.role === "ADMIN"} notify={notify} />
+          ) : data && view === "applications" ? (
+            <ApplicationsManager notify={notify} />
+          ) : data && view === "settings" ? (
+            <LeadershipSettings notify={notify} />
           ) : data && view === "hoarding" ? (
             <HoardingWatch notify={notify} />
           ) : data && view === "members" ? (
@@ -943,6 +954,7 @@ function Login({ configured, error }: { configured: boolean; error: string }) {
             <ShieldCheck size={15} />
             {t("Only for members of the Turmoil clan")}
           </div>
+          <Link className="login-apply" href="/apply">{t("Not in Turmoil yet? Apply to join")} <ArrowRight size={14} /></Link>
           {!configured && (
             <p className="login-config">
               Discord login is awaiting configuration. Follow the repository setup

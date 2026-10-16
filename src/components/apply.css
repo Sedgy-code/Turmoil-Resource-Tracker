@@ -1,0 +1,27 @@
+/* Public Apply page */
+.apply-page { min-height: 100vh; background: radial-gradient(circle at 50% 0%, #1d2a1f 0%, var(--bg) 60%); padding: 18px 16px 40px; display: flex; flex-direction: column; align-items: center; }
+.apply-top { width: 100%; max-width: 760px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+.apply-brand { display: flex; align-items: center; gap: 10px; color: var(--text); }
+.apply-brand strong { font-family: var(--heading); letter-spacing: 2px; font-size: 18px; }
+.apply-card { width: 100%; max-width: 760px; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 26px 24px; display: flex; flex-direction: column; align-items: center; text-align: center; }
+.apply-crest { margin-bottom: 6px; }
+.apply-card h1 { margin: 6px 0 6px; font-family: var(--heading); font-size: 28px; }
+.apply-intro { margin: 0 0 18px; color: var(--muted); font-size: 14px; }
+.apply-form { width: 100%; text-align: start; display: flex; flex-direction: column; gap: 14px; }
+.apply-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.apply-form label { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; color: var(--muted); }
+.apply-form label b { color: var(--gold); }
+.apply-form input, .apply-form textarea { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font: inherit; font-size: 14px; }
+.apply-form input:focus, .apply-form textarea:focus { outline: none; border-color: var(--gold); }
+.apply-form textarea { resize: vertical; min-height: 96px; }
+.apply-trap { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+.apply-send { align-self: center; min-width: 220px; justify-content: center; }
+.apply-done { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0; }
+.apply-done svg { color: var(--emerald); }
+.apply-done p { color: var(--muted); max-width: 420px; }
+.apply-footer { margin-top: 18px; font-size: 10px; letter-spacing: 2px; color: var(--subtle); }
+.login-apply { display: inline-flex; align-items: center; gap: 6px; margin-top: 14px; color: var(--gold); font-size: 13px; }
+@media (max-width: 600px) {
+  .apply-grid { grid-template-columns: 1fr; }
+  .apply-card { padding: 20px 16px; }
+}
