@@ -55,7 +55,7 @@ test("Sunday leadership reminder lists only the missing uploads and skips when b
     process.env.DISCORD_BOT_TOKEN = "bot";
     const posts: { url: string; body: string }[] = [];
     const fetcher = (async (url: string, init?: RequestInit) => { posts.push({ url, body: String(init?.body) }); return new Response("{}"); }) as typeof fetch;
-    const admin = (await db.query("INSERT INTO app_members (id,discord_id,username,role) VALUES ($1,'1','leader','ADMIN') RETURNING id"))[0].id;
+    const admin = (await db.query("INSERT INTO app_members (id,discord_id,username,role) VALUES ($1,'1','leader','ADMIN') RETURNING id", [randomUUID()]))[0].id;
     assert.deepEqual((await sendLeadershipReminder({ db, fetcher })).missing, ["war", "vials"]);
     assert.match(posts[0].url, /channels\/1504758222974746645\/messages/);
     assert.match(posts[0].body, /Clan war results/);
