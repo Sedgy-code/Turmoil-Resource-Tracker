@@ -4,7 +4,7 @@ import { test } from "node:test";
 import type { Member } from "../src/lib/types";
 import { initializeSchema, openDatabase, type Database } from "../src/lib/server/db";
 import { ApiError } from "../src/lib/server/errors";
-import { hoardingLevel, hoardingReport, saveHoardingNote } from "../src/lib/server/hoarding";
+import { hoardingLevel, hoardingReport, saveHoardingNote, warSpending } from "../src/lib/server/hoarding";
 import { memberFromRow } from "../src/lib/server/mappers";
 
 const DAY = 86_400_000;
@@ -101,5 +101,31 @@ test("only admins see the report and keep private notes", async () => {
     assert.equal(row.reasons.includes("stale"), true);
     await saveHoardingNote(admin, { memberId: member.id, note: "" }, db);
     assert.equal((await hoardingReport(admin, db)).rows.find(({ member: m }) => m.id === member.id)!.note, "");
+  });
+});
+
+test("during a war: who saved and who spent, compared with their saves before and after", async () => {
+  await withDatabase(async (db) => {
+    const admin = await addMember(db, "Leader", "ADMIN");
+    const saver = await addMember(db, "Saver");
+    const spender = await addMember(db, "Spender");
+    const quiet = await addMember(db, "Quiet");
+    const { currentWeek } = await import("../src/lib/resources");
+    const week = currentWeek(new Date(Date.now() - 10 * DAY));
+    const weekStart = new Date(`${week}T00:00:00Z`).getTime();
+    const daysAgo = (time: number) => (Date.now() - time) / DAY;
+    await saveHammers(db, saver, 1000, daysAgo(weekStart - DAY));
+    await saveHammers(db, saver, 3000, daysAgo(weekStart + 3 * DAY));
+    await saveHammers(db, spender, 5000, daysAgo(weekStart - DAY));
+    await saveHammers(db, spender, 500, daysAgo(weekStart + 3 * DAY));
+    await saveHammers(db, quiet, 800, daysAgo(weekStart - DAY));
+    const report = await warSpending(admin, week, db);
+    const row = (name: string) => report.rows.find(({ member }) => member.username === name)!;
+    assert.equal(report.week, week);
+    assert.equal(row("Saver").spent, (1000 - 3000) * 2);
+    assert.equal(row("Spender").spent, (5000 - 500) * 2);
+    assert.equal(row("Quiet").after, null);
+    assert.equal(row("Quiet").spent, null);
+    await assert.rejects(warSpending(saver, week, db), apiFailure("ADMIN_REQUIRED"));
   });
 });

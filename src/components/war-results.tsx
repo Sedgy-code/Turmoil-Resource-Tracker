@@ -8,6 +8,7 @@ import { useT } from "@/lib/i18n";
 import type { Member, WarReading, WarResult, WarResultsResponse } from "@/lib/types";
 import { MemberName } from "./member-identity";
 import { useRecognition } from "./recognition";
+import { useSortable } from "./sortable";
 import "./war-results.css";
 
 type Screenshot = { mime: "image/jpeg"; data: string; preview: string };
@@ -196,6 +197,28 @@ function useWarResults() {
   return { results, error, load };
 }
 
+function WarPlayersTable({ result, byId }: { result: WarResult; byId: Map<string, Member> }) {
+  const t = useT();
+  const ranked = result.points.map((point, rank) => ({ ...point, rank }));
+  const name = (point: (typeof ranked)[number]) => (point.memberId ? byId.get(point.memberId)?.username : undefined) ?? point.gameName;
+  const { sorted, header } = useSortable(ranked, {
+    rank: (point) => -point.rank,
+    member: name,
+    points: (point) => point.points,
+  }, { key: "points", direction: "desc" });
+  return <div className="table-scroll"><table className="resource-table war-table">
+    <thead><tr>{header("rank", "#")}{header("member", t("Member"))}{header("points", t("Points"))}</tr></thead>
+    <tbody>{sorted.map((point) => {
+      const member = point.memberId ? byId.get(point.memberId) : undefined;
+      return <tr key={point.position}>
+        <td>{point.rank < 3 ? ["🥇", "🥈", "🥉"][point.rank] : point.rank + 1}</td>
+        <td>{member ? <MemberName member={member} /> : <span className="war-guest">{point.gameName}</span>}</td>
+        <td className="war-points">{numberFormat(point.points)}</td>
+      </tr>;
+    })}</tbody>
+  </table></div>;
+}
+
 export function WarResults({ members, admin, notify }: { members: Member[]; admin: boolean; notify: (message: string, error?: boolean) => void }) {
   const t = useT();
   const { results, error, load } = useWarResults();
@@ -238,17 +261,7 @@ export function WarResults({ members, admin, notify }: { members: Member[]; admi
             </header>
             {result.points.length > 0 && <details className="war-members" open={index === 0}>
               <summary>{t("{count} players", { count: result.points.length })}</summary>
-              <div className="table-scroll"><table className="resource-table war-table">
-                <thead><tr><th>#</th><th>{t("Member")}</th><th>{t("Points")}</th></tr></thead>
-                <tbody>{result.points.map((point, rank) => {
-                  const member = point.memberId ? byId.get(point.memberId) : undefined;
-                  return <tr key={point.position}>
-                    <td>{rank < 3 ? ["🥇", "🥈", "🥉"][rank] : rank + 1}</td>
-                    <td>{member ? <MemberName member={member} /> : <span className="war-guest">{point.gameName}</span>}</td>
-                    <td className="war-points">{numberFormat(point.points)}</td>
-                  </tr>;
-                })}</tbody>
-              </table></div>
+              <WarPlayersTable result={result} byId={byId} />
             </details>}
             <footer>
               {result.imageIds.length > 0 && <div className="war-thumbs">{result.imageIds.map((id, n) => <a key={id} href={`/api/war-results/images/${id}`} target="_blank" rel="noreferrer">
@@ -266,23 +279,29 @@ export function WarResults({ members, admin, notify }: { members: Member[]; admi
 export function WarTotalsHistory() {
   const t = useT();
   const { results } = useWarResults();
+  const rows = (results ?? []).map((result, index, all) => {
+    const previous = all.slice(index + 1).find((item) => item.clanTotal !== null);
+    const change = result.clanTotal !== null && previous?.clanTotal != null ? result.clanTotal - previous.clanTotal : null;
+    return { result, change, top: result.points[0] };
+  });
+  const { sorted, header } = useSortable(rows, {
+    war: ({ result }) => `${result.week}T${result.createdAt}`,
+    total: ({ result }) => result.clanTotal,
+    change: ({ change }) => change,
+    top: ({ top }) => top?.points,
+  }, { key: "war", direction: "desc" });
   if (!results?.length) return null;
   return <section className="panel war-history">
     <div className="table-section-heading"><div><h2>{t("Clan war totals")}</h2><p>{t("Final clan scores from each war.")}</p></div>
       <Link className="text-link" href="/war-results">{t("War Results")}</Link></div>
     <div className="table-scroll"><table className="resource-table">
-      <thead><tr><th>{t("War")}</th><th>{t("Clan total")}</th><th>{t("Change")}</th><th>{t("Top scorer")}</th></tr></thead>
-      <tbody>{results.map((result, index) => {
-        const previous = results.slice(index + 1).find((item) => item.clanTotal !== null);
-        const change = result.clanTotal !== null && previous?.clanTotal != null ? result.clanTotal - previous.clanTotal : null;
-        const top = result.points[0];
-        return <tr key={result.id}>
-          <td><strong>{result.label || t("Week of {date}", { date: formatWeek(result.week) })}</strong></td>
-          <td>{result.clanTotal === null ? "—" : numberFormat(result.clanTotal)}</td>
-          <td className={change === null || change === 0 ? "" : change > 0 ? "movement-up" : "movement-down"}>{change === null ? "—" : `${change > 0 ? "+" : ""}${numberFormat(change)}`}</td>
-          <td>{top ? `${top.gameName} · ${numberFormat(top.points)}` : "—"}</td>
-        </tr>;
-      })}</tbody>
+      <thead><tr>{header("war", t("War"))}{header("total", t("Clan total"))}{header("change", t("Change"))}{header("top", t("Top scorer"))}</tr></thead>
+      <tbody>{sorted.map(({ result, change, top }) => <tr key={result.id}>
+        <td><strong>{result.label || t("Week of {date}", { date: formatWeek(result.week) })}</strong></td>
+        <td>{result.clanTotal === null ? "—" : numberFormat(result.clanTotal)}</td>
+        <td className={change === null || change === 0 ? "" : change > 0 ? "movement-up" : "movement-down"}>{change === null ? "—" : `${change > 0 ? "+" : ""}${numberFormat(change)}`}</td>
+        <td>{top ? `${top.gameName} · ${numberFormat(top.points)}` : "—"}</td>
+      </tr>)}</tbody>
     </table></div>
   </section>;
 }

@@ -1,5 +1,5 @@
 import { currentWeek } from "../resources";
-import type { HoardingLevel, HoardingReason, HoardingResponse, HoardingRow, Member, ResourceEntry, WarRates } from "../types";
+import type { HoardingLevel, HoardingReason, HoardingResponse, HoardingRow, Member, ResourceEntry, WarRates, WarSpendingResponse, WarSpendingRow } from "../types";
 import { estimateWar, WAR_ACTIVITIES } from "../war";
 import { database, type Database, type SqlConnection } from "./db";
 import { ApiError } from "./errors";
@@ -152,4 +152,42 @@ export async function saveHoardingNote(actor: Member, input: { memberId: string;
       ON CONFLICT (member_id) DO UPDATE SET note = EXCLUDED.note, updated_at = NOW(), updated_by = EXCLUDED.updated_by`, [input.memberId, note, admin.id]);
     return { note };
   });
+}
+
+/**
+ * What each member saved or spent during one war week: holdings (as estimated war points) from
+ * their last save before the week began, compared with their latest save up to the end of the
+ * following week (members often update a day or two after a war ends).
+ */
+export async function warSpending(actor: Member, week: string, db?: Database, now = new Date()): Promise<WarSpendingResponse> {
+  const connection = db ?? await database();
+  await requireAdmin(connection, actor.id);
+  const start = new Date(`${currentWeek(new Date(`${week}T12:00:00Z`))}T00:00:00Z`);
+  const settleBy = new Date(Math.min(now.getTime(), start.getTime() + 14 * DAY));
+  const settings = await getSettings(undefined, connection);
+  const members = (await connection.query("SELECT * FROM app_members WHERE active = TRUE ORDER BY LOWER(COALESCE(NULLIF(display_name, ''), username)), id")).map(memberFromRow);
+  const versionRows = await connection.query("SELECT * FROM bank_versions WHERE updated_at <= $1 ORDER BY member_id, updated_at, id", [settleBy.toISOString()]);
+  const versions = new Map<string, ResourceEntry[]>();
+  for (const row of versionRows) versions.set(String(row.member_id), [...(versions.get(String(row.member_id)) ?? []), versionEntry(row)]);
+  const warRows = await connection.query(`SELECT points.member_id, SUM(points.points) AS points FROM war_result_points points
+    JOIN war_results result ON result.id = points.result_id
+    WHERE result.week_start = $1 AND points.member_id IS NOT NULL GROUP BY points.member_id`, [start.toISOString().slice(0, 10)]);
+  const warPoints = new Map(warRows.map((row) => [String(row.member_id), Number(row.points)]));
+  const weekRows = await connection.query("SELECT DISTINCT week_start::text AS week FROM war_results ORDER BY week DESC");
+  const rows: WarSpendingRow[] = members.map((member) => {
+    const history = versions.get(member.id) ?? [];
+    const before = [...history].reverse().find((entry) => new Date(entry.updatedAt) < start);
+    const after = [...history].reverse().find((entry) => new Date(entry.updatedAt) >= start);
+    const beforeValue = before ? warValue(before, settings.warRates) : null;
+    const afterValue = after ? warValue(after, settings.warRates) : null;
+    return {
+      member,
+      before: beforeValue,
+      after: afterValue,
+      spent: beforeValue !== null && afterValue !== null ? beforeValue - afterValue : null,
+      warPoints: warPoints.get(member.id) ?? null,
+      savedAfterAt: after?.updatedAt ?? null,
+    };
+  });
+  return { week: start.toISOString().slice(0, 10), warWeeks: weekRows.map((row) => String(row.week)), rows };
 }

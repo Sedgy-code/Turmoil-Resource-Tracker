@@ -7,6 +7,7 @@ import { WAR_ACTIVITIES } from "@/lib/war";
 import { announceClanPointsUpdate } from "@/lib/clan-points";
 import { useLanguage } from "@/lib/i18n";
 import type { DashboardResponse, SnipePlan, SnipesResponse, WarActivity } from "@/lib/types";
+import { useSortable } from "./sortable";
 import "./attendance.css";
 
 type Props = {
@@ -74,6 +75,17 @@ function PlanForm({ plan, busy, onCancel, onSave }: { plan?: SnipePlan; busy: bo
     {error && <p className="planning-notice" role="alert">{error}</p>}
     <div className="planning-form-actions"><button type="button" className="planning-button planning-button-subtle" disabled={busy} onClick={onCancel}>Cancel</button><button type="submit" className="planning-button" disabled={busy}>{busy && <LoaderCircle size={15} className="spin" />}{plan ? "Save plan" : "Create snipe"}</button></div>
   </form>;
+}
+
+function ParticipantsTable({ plan, activityLabels }: { plan: SnipePlan; activityLabels: (typeof WAR_ACTIVITIES)[number][] }) {
+  const { t } = useLanguage();
+  const getters: Record<string, (row: SnipePlan["participants"][number]) => string | number> = {
+    member: ({ member }) => member.username,
+    total: ({ estimate }) => estimate.minimum,
+  };
+  for (const activity of activityLabels) getters[activity.key] = ({ estimate }) => estimate.rows.find((row) => row.activity === activity.key)?.minimum ?? 0;
+  const { sorted, header } = useSortable(plan.participants, getters, { key: "total", direction: "desc" });
+  return <div className="planning-table-wrap"><table className="planning-table planning-participants"><caption className="planning-sr-only">{plan.title} participating members and war point estimates</caption><thead><tr>{header("member", t("Member"))}{activityLabels.map((activity) => header(activity.key, t(activity.label)))}{header("total", t("Total points"))}</tr></thead><tbody>{sorted.map(({ member, estimate }) => <tr key={member.id}><th scope="row">{member.username}</th>{activityLabels.map((activity) => { const row = estimate.rows.find((row) => row.activity === activity.key); return <td key={activity.key}>{row ? points(row.minimum, row.maximum) : "0"}</td>; })}<td className="planning-gold">{points(estimate.minimum, estimate.maximum)}</td></tr>)}{plan.participants.length === 0 && <tr><td colSpan={activityLabels.length + 2} className="planning-table-empty">{t("Members who answer Yes will appear here.")}</td></tr>}</tbody></table></div>;
 }
 
 export function SnipePlanner({ data, notify }: Props) {
@@ -266,7 +278,7 @@ export function SnipePlanner({ data, notify }: Props) {
           </div>}
         </section>
         <div className="planning-activity-chips" aria-label={t("Include activities")}>{activityLabels.map((activity) => <span className="planning-chip" key={activity.key}>{t(activity.label)}</span>)}</div>
-        <div className="planning-table-wrap"><table className="planning-table planning-participants"><caption className="planning-sr-only">{plan.title} participating members and war point estimates</caption><thead><tr><th scope="col">{t("Member")}</th>{activityLabels.map((activity) => <th scope="col" key={activity.key}>{t(activity.label)}</th>)}<th scope="col">{t("Total points")}</th></tr></thead><tbody>{plan.participants.map(({ member, estimate }) => <tr key={member.id}><th scope="row">{member.username}</th>{activityLabels.map((activity) => { const row = estimate.rows.find((row) => row.activity === activity.key); return <td key={activity.key}>{row ? points(row.minimum, row.maximum) : "0"}</td>; })}<td className="planning-gold">{points(estimate.minimum, estimate.maximum)}</td></tr>)}{plan.participants.length === 0 && <tr><td colSpan={activityLabels.length + 2} className="planning-table-empty">{t("Members who answer Yes will appear here.")}</td></tr>}</tbody></table></div>
+        <ParticipantsTable plan={plan} activityLabels={activityLabels} />
         <div className="planning-total"><div><span>{t("{count} said Yes", { count: numberFormat(plan.counts.yes) })}</span><small>{t("Estimated snipe points")}</small></div><strong>{points(plan.estimate.minimum, plan.estimate.maximum)}</strong></div>
         {plan.estimate.missingCosts > 0 && <p className="planning-notice">{t("Some members who said Yes are missing summon costs, so part of their resources is left out.")}</p>}
         <p className="planning-footnote">{t(plan.archived ? "Saved as it was when the snipe was archived." : "Only members who said Yes are counted. Uses everyone’s latest saved resources.")}</p>

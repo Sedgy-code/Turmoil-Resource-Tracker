@@ -4,7 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import { LoaderCircle, NotebookPen, RefreshCw } from "lucide-react";
 import { numberFormat } from "@/lib/resources";
 import { useT } from "@/lib/i18n";
-import type { HoardingLevel, HoardingReason, HoardingResponse, HoardingRow } from "@/lib/types";
+import type { HoardingLevel, HoardingReason, HoardingResponse, HoardingRow, WarSpendingResponse, WarSpendingRow } from "@/lib/types";
+import { currentWeek, formatWeek, shiftWeek } from "@/lib/resources";
+import { useSortable } from "./sortable";
 import { MemberAvatar, MemberName } from "./member-identity";
 import "./hoarding-watch.css";
 
@@ -58,6 +60,77 @@ function NoteEditor({ row, onSaved, notify }: { row: HoardingRow; onSaved: (note
   </div>;
 }
 
+/** One war week: who held back (saved) and who spent the most. */
+function WarSpending() {
+  const t = useT();
+  const [week, setWeek] = useState(() => currentWeek());
+  const [data, setData] = useState<WarSpendingResponse | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    let current = true;
+    setLoading(true);
+    setError("");
+    request<WarSpendingResponse>(`/api/hoarding/war?week=${week}`)
+      .then((result) => { if (current) setData(result); })
+      .catch((e) => { if (current) setError(e instanceof Error ? e.message : "Please try again."); })
+      .finally(() => { if (current) setLoading(false); });
+    return () => { current = false; };
+  }, [week]);
+  const recentWeeks = Array.from({ length: 8 }, (_, index) => shiftWeek(currentWeek(), -index));
+  const options = [...new Set([...(data?.warWeeks ?? []), ...recentWeeks, week])].sort().reverse();
+  const known = (data?.rows ?? []).filter((row) => row.spent !== null);
+  const mostSaved = [...known].sort((a, b) => a.spent! - b.spent!).slice(0, 5);
+  const mostSpent = [...known].sort((a, b) => b.spent! - a.spent!).slice(0, 5);
+  const notUpdated = (data?.rows ?? []).filter((row) => row.before !== null && row.after === null);
+  const { sorted, header } = useSortable<WarSpendingRow, "member" | "before" | "after" | "spent" | "war">(data?.rows ?? [], {
+    member: (row) => row.member.username,
+    before: (row) => row.before,
+    after: (row) => row.after,
+    spent: (row) => row.spent,
+    war: (row) => row.warPoints,
+  }, { key: "spent", direction: "desc" });
+  const amount = (value: number | null) => value === null ? "—" : numberFormat(Math.round(value));
+  const list = (rows: WarSpendingRow[], kind: "saved" | "spent") => rows.length ? <ol className="champion-list">{rows.map((row) => <li key={row.member.id}>
+    <MemberAvatar member={row.member} small /><strong><MemberName member={row.member} /></strong>
+    <span className={`champion-count ${kind === "saved" ? "hoard-up" : "hoard-down"}`}>{row.spent! > 0 ? "−" : "+"}{numberFormat(Math.abs(Math.round(row.spent!)))}</span>
+  </li>)}</ol> : <p className="recognition-empty">{t("Not enough saves around this war yet.")}</p>;
+  return <section className="panel war-spend">
+    <div className="war-spend-head">
+      <div>
+        <h2>{t("During a war")}</h2>
+        <p>{t("Hard war? Check “Most saved” — they held back. Easy war? Check “Most spent” — they may have wasted resources.")}</p>
+      </div>
+      <label className="war-spend-week"><span>{t("War week")}</span>
+        <select value={week} onChange={(event) => setWeek(event.target.value)}>
+          {options.map((item) => <option key={item} value={item}>{t("Week of {date}", { date: formatWeek(item) })}{data?.warWeeks.includes(item) ? " 🏆" : ""}</option>)}
+        </select>
+      </label>
+    </div>
+    {error ? <p className="war-message">{t(error)}</p> : !data || loading ? <LoaderCircle size={20} className="spin" /> : <>
+      <div className="recognition-row war-spend-lists">
+        <div><h3>{t("Most saved")}</h3><p className="recognition-sub">{t("Holdings grew the most during this war.")}</p>{list(mostSaved.filter((row) => row.spent! < 0), "saved")}</div>
+        <div><h3>{t("Most spent")}</h3><p className="recognition-sub">{t("Holdings dropped the most during this war.")}</p>{list(mostSpent.filter((row) => row.spent! > 0), "spent")}</div>
+      </div>
+      {notUpdated.length > 0 && <p className="war-hint">{t("Not updated since the war started: {names}", { names: notUpdated.map((row) => row.member.username).join(", ") })}</p>}
+      <details className="war-members">
+        <summary>{t("Everyone ({count})", { count: data.rows.length })}</summary>
+        <div className="table-scroll"><table className="resource-table">
+          <thead><tr>{header("member", t("Member"))}{header("before", t("Before the war"))}{header("after", t("After the war"))}{header("spent", t("Spent"))}{header("war", t("War points"))}</tr></thead>
+          <tbody>{sorted.map((row) => <tr key={row.member.id}>
+            <td><MemberName member={row.member} /></td>
+            <td>{amount(row.before)}</td>
+            <td>{row.after === null ? t("Not updated") : amount(row.after)}</td>
+            <td className={row.spent === null || row.spent === 0 ? "" : row.spent > 0 ? "hoard-down" : "hoard-up"}>{row.spent === null ? "—" : `${row.spent > 0 ? "−" : "+"}${numberFormat(Math.abs(Math.round(row.spent)))}`}</td>
+            <td>{amount(row.warPoints)}</td>
+          </tr>)}</tbody>
+        </table></div>
+      </details>
+      <p className="war-hint">{t("Amounts are estimated war points of everything a member holds, from their saves before and after the war week.")}</p>
+    </>}
+  </section>;
+}
+
 export function HoardingWatch({ notify }: { notify: (message: string, error?: boolean) => void }) {
   const t = useT();
   const [report, setReport] = useState<HoardingResponse | null>(null);
@@ -87,6 +160,7 @@ export function HoardingWatch({ notify }: { notify: (message: string, error?: bo
       </div>
       <button className="button subtle" onClick={() => void load()} disabled={loading}><RefreshCw size={15} className={loading ? "spin" : undefined} />{t("Refresh")}</button>
     </section>
+    <WarSpending />
     <div className="table-tabs hoard-tabs">
       <button className={filter === "flagged" ? "active" : ""} onClick={() => setFilter("flagged")}>{t("Flagged")}<span>{flagged.length}</span></button>
       <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>{t("All members")}<span>{report.rows.length}</span></button>

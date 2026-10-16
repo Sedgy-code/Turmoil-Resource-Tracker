@@ -6,6 +6,7 @@ import { numberFormat } from "@/lib/resources";
 import { DEFAULT_WAR_RATES, WAR_ACTIVITIES, estimateWar } from "@/lib/war";
 import { useT } from "@/lib/i18n";
 import type { ClanSettings, DashboardResponse, WarActivity, WarEstimate, WarRates } from "@/lib/types";
+import { useSortable } from "./sortable";
 
 type Props = {
   data: DashboardResponse;
@@ -81,6 +82,12 @@ export function WarPlanner({ data, notify }: Props) {
       };
     }
   }, [entries, rates, activities, data.live]);
+  const { sorted: sortedRows, header: rowHeader } = useSortable<WarEstimate["rows"][number], "activity" | "actions" | "each" | "points">(estimate.rows, {
+    activity: (row) => t(row.label),
+    actions: (row) => row.quantity,
+    each: (row) => row.activity === "hammers" ? rates.hammersMin : rates[row.activity],
+    points: (row) => row.minimum,
+  }, { key: "points", direction: "desc" });
   const scopeName = scope === "clan" ? t("Clan totals") : scope === "mine" ? t("My totals") : members.find((member) => member.id === memberId)?.username || t("Member");
 
   function toggleActivity(activity: WarActivity) {
@@ -122,7 +129,7 @@ export function WarPlanner({ data, notify }: Props) {
       </div>
       <fieldset className="planning-activities"><legend>{t("Include activities")}</legend>{WAR_ACTIVITIES.map(({ key, label, description }) => <label key={key} className="planning-check"><input type="checkbox" aria-label={t(label)} checked={activities.includes(key)} onChange={() => toggleActivity(key)} /><span><strong>{t(label)}</strong><small>{key === "hammers" ? t("{points} points per hammer.", { points: points(rates.hammersMin, rates.hammersMax) }) : t(description)}</small></span></label>)}</fieldset>
       {estimateError && <p className="planning-notice" role="alert">{t(estimateError)} {t("Try selecting fewer activities or one member.")}</p>}
-      <div className="planning-table-wrap"><table className="planning-table"><caption className="planning-sr-only">{scopeName} · {t("Estimated war points")}</caption><thead><tr><th scope="col">{t("Activity")}</th><th scope="col">{t("Estimated actions")}</th><th scope="col">{t("Points each")}</th><th scope="col">{t("Estimated points")}</th></tr></thead><tbody>{estimate.rows.map((row) => <tr key={row.activity}><th scope="row">{t(row.label)}</th><td>{numberFormat(row.quantity)}</td><td>{row.activity === "hammers" ? points(rates.hammersMin, rates.hammersMax) : numberFormat(rates[row.activity])}</td><td className="planning-gold">{points(row.minimum, row.maximum)}</td></tr>)}{estimate.rows.length === 0 && <tr><td colSpan={4} className="planning-table-empty">{t(estimateError ? "Estimate unavailable until the selected points are reduced." : "Select an activity to calculate an estimate.")}</td></tr>}</tbody></table></div>
+      <div className="planning-table-wrap"><table className="planning-table"><caption className="planning-sr-only">{scopeName} · {t("Estimated war points")}</caption><thead><tr>{rowHeader("activity", t("Activity"))}{rowHeader("actions", t("Estimated actions"))}{rowHeader("each", t("Points each"))}{rowHeader("points", t("Estimated points"))}</tr></thead><tbody>{sortedRows.map((row) => <tr key={row.activity}><th scope="row">{t(row.label)}</th><td>{numberFormat(row.quantity)}</td><td>{row.activity === "hammers" ? points(rates.hammersMin, rates.hammersMax) : numberFormat(rates[row.activity])}</td><td className="planning-gold">{points(row.minimum, row.maximum)}</td></tr>)}{estimate.rows.length === 0 && <tr><td colSpan={4} className="planning-table-empty">{t(estimateError ? "Estimate unavailable until the selected points are reduced." : "Select an activity to calculate an estimate.")}</td></tr>}</tbody></table></div>
       <div className="planning-total"><div><span>{scopeName}</span><small>{t("Total selected points")}</small></div><strong className="war-estimate-total" aria-live="polite">{estimateError ? "--" : points(estimate.minimum, estimate.maximum)}</strong></div>
       {estimate.missingCosts > 0 && <p className="planning-notice" role="status">{t("{count} summon cost(s) missing, so some resources are left out. Add them in My Resources.", { count: numberFormat(estimate.missingCosts) })}</p>}
       {entries.length === 0 && <p className="planning-notice">{t("No saved resources yet. Save yours in My Resources first.")}</p>}
