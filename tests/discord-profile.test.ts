@@ -47,7 +47,7 @@ async function sessionFor(db: Database, id = OWNER_ID) {
   return { member, token };
 }
 async function recheck(db: Database, token: string, body: unknown) {
-  await db.query("UPDATE auth_sessions SET membership_checked_at = NOW() - INTERVAL '6 minutes' WHERE token_hash = $1", [hashToken(token)]);
+  await db.query("UPDATE auth_sessions SET membership_checked_at = NOW() - INTERVAL '25 hours' WHERE token_hash = $1", [hashToken(token)]);
   return authenticatedMember(token, { db, fetcher: fetchMember(body) });
 }
 

@@ -160,7 +160,7 @@ test("PostgreSQL preserves legacy data, live banks, snapshots, planning, rewards
     assert.equal((await authenticatedMember(sessionToken, { db }))?.id, memberId);
     session = (await db.query("SELECT * FROM auth_sessions WHERE token_hash=$1", [tokenHash]))[0];
     assert.ok(new Date(String(session.expires_at)).getTime() > Date.now() + 179 * 86_400_000);
-    await db.query(`UPDATE auth_sessions SET membership_checked_at=NOW()-INTERVAL '6 minutes',
+    await db.query(`UPDATE auth_sessions SET membership_checked_at=NOW()-INTERVAL '25 hours',
       oauth_expires_at=NOW()-INTERVAL '1 minute' WHERE token_hash=$1`, [tokenHash]);
     let refreshes = 0;
     let checks = 0;
