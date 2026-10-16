@@ -12,6 +12,11 @@ export const INDIRECT_KEYS = [
   // Navigation
   "Dashboard", "My Resources", "Manage Members", "Weekly History", "Estimated War Points", "Snipe Plans", "Reward Shop", "Hoarding Watch",
   "Spot members who hold a lot but don’t spend it. Only admins can see this page.",
+  "War Results", "Final clan war scores, read from the end-of-war screenshots.",
+  "Screenshot reading isn’t set up yet. Add ANTHROPIC_API_KEY in Vercel, or type the numbers in.",
+  "The screenshots could not be read. Try clearer screenshots.",
+  "The screenshot reader is unavailable right now. Try again, or type the numbers in.",
+  "Only administrators can add war results.",
   // Hoarding watch labels
   "Hoarding", "Keep an eye on", "OK",
   "Holds at least twice as much as a typical member", "Pile keeps growing with no spending in 4 weeks",

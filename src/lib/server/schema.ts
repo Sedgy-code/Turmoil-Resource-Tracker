@@ -166,4 +166,33 @@ CREATE TABLE IF NOT EXISTS member_admin_notes (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_by TEXT NOT NULL REFERENCES app_members(id)
 );
+CREATE TABLE IF NOT EXISTS war_results (
+  id TEXT PRIMARY KEY,
+  week_start DATE NOT NULL CHECK (EXTRACT(ISODOW FROM week_start) = 1),
+  label TEXT NOT NULL DEFAULT '' CHECK (LENGTH(label) <= 120),
+  clan_total BIGINT CHECK (clan_total IS NULL OR clan_total >= 0),
+  created_by TEXT NOT NULL REFERENCES app_members(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS war_results_week_idx ON war_results(week_start DESC);
+CREATE TABLE IF NOT EXISTS war_result_points (
+  result_id TEXT NOT NULL REFERENCES war_results(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL,
+  game_name TEXT NOT NULL CHECK (LENGTH(game_name) <= 80),
+  member_id TEXT REFERENCES app_members(id),
+  points BIGINT NOT NULL CHECK (points >= 0),
+  PRIMARY KEY (result_id, position)
+);
+CREATE TABLE IF NOT EXISTS war_result_images (
+  id TEXT PRIMARY KEY,
+  result_id TEXT NOT NULL REFERENCES war_results(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL,
+  mime TEXT NOT NULL CHECK (mime IN ('image/jpeg','image/png','image/webp')),
+  data TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS member_game_names (
+  game_name_key TEXT PRIMARY KEY,
+  member_id TEXT NOT NULL REFERENCES app_members(id),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 `;

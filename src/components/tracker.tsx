@@ -7,6 +7,9 @@ import { WarPlanner } from "./war-planner";
 import { SnipePlanner } from "./snipe-planner";
 import { DewStore } from "./dew-store";
 import { HoardingWatch } from "./hoarding-watch";
+import { RecognitionProvider, useRecognition } from "./recognition";
+import { WarResults, WarTotalsHistory } from "./war-results";
+import { SnipeChampions } from "./snipe-champions";
 import { ClanPointsBalance } from "./clan-points-balance";
 import { announceClanPointsUpdate } from "@/lib/clan-points";
 import { MemberAvatar as Avatar, MemberName, MemberTitle } from "./member-identity";
@@ -60,6 +63,8 @@ import {
   ShieldCheck,
   Sparkles,
   ScanEye,
+  Trophy,
+  Crosshair,
   Swords,
   Ticket,
   Users,
@@ -97,7 +102,7 @@ import type {
   WarRates,
 } from "@/lib/types";
 
-type View = "dashboard" | "resources" | "members" | "weeks" | "war" | "snipes" | "store" | "hoarding";
+type View = "dashboard" | "resources" | "members" | "weeks" | "war" | "snipes" | "store" | "hoarding" | "warResults";
 const ADMIN_VIEWS: View[] = ["members", "hoarding"];
 type Icon = ComponentType<{
   size?: number;
@@ -113,12 +118,14 @@ const viewNames = {
   snipes: "Snipe Plans",
   store: "Reward Shop",
   hoarding: "Hoarding Watch",
+  warResults: "War Results",
 };
 const navigation: { view: View; href: string; icon: Icon }[] = [
   { view: "dashboard", href: "/", icon: LayoutDashboard },
   { view: "resources", href: "/resources", icon: Backpack },
   { view: "war", href: "/war-points", icon: Swords },
   { view: "snipes", href: "/snipes", icon: Target },
+  { view: "warResults", href: "/war-results", icon: Trophy },
   { view: "store", href: "/reward-shop", icon: Droplets },
   { view: "members", href: "/members", icon: Users },
   { view: "hoarding", href: "/hoarding-watch", icon: ScanEye },
@@ -448,6 +455,7 @@ function TrackerApp({ view }: { view: View }) {
     catch (e) { warEstimateError = (e as Error).message; }
   }
   return (
+    <RecognitionProvider enabled={!!sessionUserId}>
     <div className="app-shell">
       {mobileOpen && (
         <button
@@ -588,6 +596,7 @@ function TrackerApp({ view }: { view: View }) {
                     : view === "members"
                       ? "Manage who can use the tracker."
                       : view === "hoarding" ? "Spot members who hold a lot but don’t spend it. Only admins can see this page."
+                      : view === "warResults" ? "Final clan war scores, read from the end-of-war screenshots."
                       : view === "war" ? "Pick activities to estimate the clan’s war points."
                         : view === "snipes" ? "Plan events and say when you can join."
                           : view === "store" ? "Earn Clan Points by saving your resources each week and joining snipes."
@@ -698,6 +707,7 @@ function TrackerApp({ view }: { view: View }) {
               </div>
               {warEstimateError && <div className="error-banner" role="alert">{t("War estimate unavailable:")} {t(warEstimateError)}</div>}
               <ClanArsenal data={data} estimate={dashboardWar} rates={warRates} estimateError={warEstimateError} snapshotId={snapshotId} />
+              <SnipeChampions members={data.members} />
               <MemberResources
                 data={data}
                 week={week}
@@ -714,6 +724,8 @@ function TrackerApp({ view }: { view: View }) {
               notify={notify}
               refresh={refresh}
             />
+          ) : data && view === "warResults" ? (
+            <WarResults members={data.members} admin={user.role === "ADMIN"} notify={notify} />
           ) : data && view === "hoarding" ? (
             <HoardingWatch notify={notify} />
           ) : data && view === "members" ? (
@@ -805,6 +817,7 @@ function TrackerApp({ view }: { view: View }) {
         </div>
       )}
     </div>
+    </RecognitionProvider>
   );
 }
 
@@ -997,7 +1010,10 @@ function MemberResources({
   const t = useT();
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("all");
-  type ContributionSort = "username" | "updatedAt" | ResourceKey;
+  type ContributionSort = "username" | "updatedAt" | "snipes" | "war" | ResourceKey;
+  const { data: recognitionData } = useRecognition();
+  const snipeCount = (memberId: string) => recognitionData?.snipes.recent[memberId] ?? 0;
+  const warPoints = (memberId: string) => recognitionData?.latestWar?.points[memberId];
   const [sort, setSort] = useState<{ key: ContributionSort; direction: "asc" | "desc" }>({ key: "username", direction: "asc" });
   const entries = new Map(data.entries.map((entry) => [entry.memberId, entry]));
   const incompleteMembers = memberPlanningIssues(data);
@@ -1016,7 +1032,9 @@ function MemberResources({
     .sort((a, b) => {
       const value = (member: Member) => sort.key === "username" ? member.username : sort.key === "updatedAt"
         ? new Date(entries.get(member.id)?.updatedAt ?? 0).getTime()
-        : entries.get(member.id)?.resources[sort.key] ?? 0;
+        : sort.key === "snipes" ? snipeCount(member.id)
+          : sort.key === "war" ? warPoints(member.id) ?? -1
+            : entries.get(member.id)?.resources[sort.key] ?? 0;
       const av = value(a), bv = value(b);
       const comparison = typeof av === "string" && typeof bv === "string"
         ? av.localeCompare(bv, undefined, { sensitivity: "base", numeric: true }) : Number(av) - Number(bv);
@@ -1087,6 +1105,8 @@ function MemberResources({
                   </th>
                 );
               })}
+              <th aria-sort={sortOrder("snipes")}><button className="column-sort" onClick={() => changeSort("snipes")}><Crosshair size={14} aria-hidden="true" />{t("Snipes (8 wk)")}{sortIcon("snipes")}</button></th>
+              <th aria-sort={sortOrder("war")}><button className="column-sort" onClick={() => changeSort("war")}><Trophy size={14} aria-hidden="true" />{t("Last war points")}{sortIcon("war")}</button></th>
               <th aria-sort={sortOrder("updatedAt")}><button className="column-sort" onClick={() => changeSort("updatedAt")}>{t("Last updated")} {sortIcon("updatedAt")}</button></th>
               <th>{t("Notes")}</th>
               {admin && <th>{t("Edit")}</th>}
@@ -1136,6 +1156,8 @@ function MemberResources({
                       </td>
                     );
                   })}
+                  <td className={snipeCount(member.id) ? "snipe-cell" : undefined}>{snipeCount(member.id) || "—"}</td>
+                  <td className="war-cell">{warPoints(member.id) === undefined ? "—" : numberFormat(warPoints(member.id)!)}</td>
                   <td
                     className="updated-cell"
                     title={
@@ -1946,7 +1968,7 @@ function Weeks({
       <section className="archive-intro panel">
         <CalendarDays size={28} />
         <div>
-          <h2>Every week tells a story.</h2>
+          <h2>Weekly history</h2>
           <p>
             Weekly bank snapshots keep resource totals fixed, including the roster
             at capture time. Compare movements or revisit a saved dashboard.
@@ -1954,6 +1976,7 @@ function Weeks({
         </div>
         <span className="count-badge">{data.weeks.length} saved weeks</span>
       </section>
+      <WarTotalsHistory />
       <BankHistory admin={data.currentUser.role === "ADMIN"} notify={notify} refresh={refresh} />
       <div className="weeks-grid">
         {weeks.map((item) => (
