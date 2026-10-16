@@ -68,3 +68,4 @@
 .rule-input { display: flex; align-items: center; gap: 6px; color: var(--text); font-weight: 700; }
 .rule-input input { width: 90px; height: 38px; padding: 0 10px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 7px; font: inherit; font-size: 14px; font-weight: 700; }
 @media (max-width: 650px) { .rule-grid { grid-template-columns: minmax(0, 1fr); } }
+.rank-never { display: inline-block; margin: 3px 0 0 4px; padding: 1px 6px; border-radius: 99px; background: #3a1715; color: #ff9b94; font-size: 10px; }

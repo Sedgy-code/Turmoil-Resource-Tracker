@@ -10,6 +10,7 @@ const DAY = 86_400_000;
 const RECENT_WEEKS = 8;
 const RECENT_RECORDS = 4;
 const NEW_MEMBER_DAYS = 14;
+export const NEVER_SIGNED_IN_PENALTY = 40;
 
 /** How much each part counts towards the score (out of 100). Parts with no data yet are left out. */
 export const RANKING_WEIGHTS: Record<RankingMetric, number> = {
@@ -95,7 +96,8 @@ export async function contributionRanking(actor: Member, db?: Database, now = ne
   const rows: ContributionRow[] = raw.map((row) => {
     const parts = Object.fromEntries(available.map((metric) => [metric, percentile(Number(row[metric] ?? 0), values(metric))])) as Partial<Record<RankingMetric, number>>;
     const base = totalWeight ? available.reduce((sum, metric) => sum + (parts[metric] ?? 0) * RANKING_WEIGHTS[metric], 0) / totalWeight * 100 : 50;
-    const penalty = (row.hoarding === "high" ? 15 : row.hoarding === "watch" ? 5 : 0) + Math.min(15, row.noShows * 5);
+    // Never signing in to the Clan Hub at all is the biggest red flag.
+    const penalty = (row.member.neverSignedIn ? NEVER_SIGNED_IN_PENALTY : 0) + (row.hoarding === "high" ? 15 : row.hoarding === "watch" ? 5 : 0) + Math.min(15, row.noShows * 5);
     // Good savers who spend when it counts get a small bonus.
     const bonus = row.hoarding === "saver" ? 3 : 0;
     return { ...row, parts, penalty, score: Math.min(100, Math.max(0, Math.round(base - penalty + bonus))), isNew: row.daysInClan < NEW_MEMBER_DAYS && joinedAfterLaunch(row.member), rank: 0 };

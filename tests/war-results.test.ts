@@ -169,3 +169,43 @@ test("the contribution ranking puts the least active members first", async () =>
     assert.equal((await contributionRanking(admin, db)).rows.some((row) => row.isNew), false);
   });
 });
+
+test("clan members who never signed in are added from Discord and ranked with a big penalty", async () => {
+  const { syncDiscordMembers } = await import("../src/lib/server/discord-sync");
+  const { contributionRanking, NEVER_SIGNED_IN_PENALTY } = await import("../src/lib/server/ranking");
+  const { registerDiscordMember } = await import("../src/lib/server/auth");
+  await withDatabase(async (db) => {
+    const admin = await addMember(db, "leader", "ADMIN");
+    const fetcher = (async (url: string) => new Response(JSON.stringify(url.endsWith("/roles")
+      ? [{ id: "r-clan", name: "Turmoil" }, { id: "r-guest", name: "Verified" }]
+      : [
+        { user: { id: admin.discordId, username: "leader" }, roles: ["r-clan"] },
+        { user: { id: "555", username: "lurker", global_name: "Lurker" }, roles: ["r-clan"] },
+        { user: { id: "666", username: "guest" }, roles: ["r-guest"] },
+        { user: { id: "777", username: "somebot", bot: true }, roles: ["r-clan"] },
+      ]))) as typeof fetch;
+    const previous = { token: process.env.DISCORD_BOT_TOKEN, guild: process.env.DISCORD_GUILD_ID };
+    try {
+      process.env.DISCORD_BOT_TOKEN = "bot";
+      process.env.DISCORD_GUILD_ID = "123";
+      const result = await syncDiscordMembers({ db, fetcher });
+      assert.deepEqual(result.added, ["Lurker"]);
+      const rows = await db.query("SELECT discord_id, never_signed_in FROM app_members ORDER BY discord_id");
+      assert.deepEqual(rows.map((row) => [row.discord_id, row.never_signed_in]).filter(([id]) => id !== admin.discordId), [["555", true]]);
+      const ranking = await contributionRanking(admin, db);
+      const lurker = ranking.rows.find(({ member }) => member.discordId === "555")!;
+      assert.equal(lurker.member.neverSignedIn, true);
+      assert.ok(lurker.penalty >= NEVER_SIGNED_IN_PENALTY);
+      assert.equal(ranking.rows[0].member.discordId, "555");
+      // Signing in for the first time clears the flag.
+      const member = await registerDiscordMember({ id: "555", username: "lurker", global_name: "Lurker", avatar: null } as never, db);
+      assert.equal(member.neverSignedIn, undefined);
+      // A second sync doesn't add them again.
+      assert.deepEqual((await syncDiscordMembers({ db, fetcher })).added, []);
+    } finally {
+      for (const [key, value] of [["DISCORD_BOT_TOKEN", previous.token], ["DISCORD_GUILD_ID", previous.guild]] as const) {
+        if (value === undefined) delete process.env[key]; else process.env[key] = value;
+      }
+    }
+  });
+});

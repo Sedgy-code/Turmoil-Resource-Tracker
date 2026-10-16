@@ -66,7 +66,7 @@ export function ContributionRanking() {
         <h2>{t("How the score works")}</h2>
         <p>{t("Each member gets a score out of 100 from how they compare with everyone else. Lowest scores are at the top — talk to them first when you need space.")}</p>
         <ul className="rank-weights">{weights.map(([metric, weight]) => <li key={metric}><strong>{weight}%</strong> {t(METRIC_LABELS[metric])}</li>)}</ul>
-        <p>{t("Minus points for hoarding (5 or 15) and for saying Yes to a snipe but not turning up (5 each, up to 15). Good savers get +3.")}</p>
+        <p>{t("Minus 40 for never signing in to the Clan Hub. Minus points for hoarding (5 or 15) and for saying Yes to a snipe but not turning up (5 each, up to 15). Good savers get +3.")}</p>
         {missing.length > 0 && <p className="hoard-typical">{t("Not counted yet (no records): {parts}", { parts: missing.map((metric) => t(METRIC_LABELS[metric])).join(", ") })}</p>}
       </div>
       <div className="rank-controls">
@@ -84,7 +84,7 @@ export function ContributionRanking() {
         </tr></thead>
         <tbody>{sorted.map((row) => <tr key={row.member.id}>
           <td>{row.rank}</td>
-          <td><div className="table-member"><MemberAvatar member={row.member} small /><div><strong><MemberName member={row.member} /></strong>{row.isNew && <span className="rank-new">{t("New")}</span>}</div></div></td>
+          <td><div className="table-member"><MemberAvatar member={row.member} small /><div><strong><MemberName member={row.member} /></strong>{row.isNew && <span className="rank-new">{t("New")}</span>}{row.member.neverSignedIn && <span className="rank-never">{t("Never signed in")}</span>}</div></div></td>
           <td><span className={`rank-score ${scoreClass(row.score)}`}>{row.score}</span>{row.penalty > 0 && <small className="rank-penalty">−{row.penalty}</small>}</td>
           <td>{amount(row.warPoints)}{row.warPoints !== null && <small className="rank-sub">{t("{count} of {total} wars", { count: row.warsPlayed, total: data.records.wars })}</small>}</td>
           <td>{amount(row.vials)}</td>
