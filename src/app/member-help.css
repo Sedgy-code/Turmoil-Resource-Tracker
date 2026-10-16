@@ -45,17 +45,6 @@
   background: #0c1510;
   color: var(--text);
 }
-.sidebar-language {
-  width: 100%;
-  margin-bottom: 8px;
-}
-.sidebar-language select {
-  flex: 1;
-}
-/* The sidebar holds the picker on wide screens; the top bar holds it on phones. */
-.topbar-language {
-  display: none;
-}
 .login-language {
   position: absolute;
   top: 30px;
@@ -65,7 +54,6 @@
 
 @media (max-width: 800px) {
   .topbar-language {
-    display: inline-flex;
     min-height: 34px;
     padding: 0 7px;
   }

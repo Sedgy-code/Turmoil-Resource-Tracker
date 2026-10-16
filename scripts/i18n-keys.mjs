@@ -1,5 +1,5 @@
 // Lists every English text the interface translates, and reports any that
-// are missing a Traditional Chinese, Simplified Chinese or Korean version.
+// are missing from a language file in src/lib/i18n/locales.
 // Run: node scripts/i18n-keys.mjs
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -33,9 +33,18 @@ for (const file of files) {
 const { INDIRECT_KEYS } = await import(join(root, "src/lib/i18n/indirect-keys.mjs"));
 for (const key of INDIRECT_KEYS) keys.add(key);
 
-const messagesSource = readFileSync(join(root, "src/lib/i18n/messages.ts"), "utf8");
-const missing = [...keys].filter((key) => !messagesSource.includes(JSON.stringify(key) + ":"));
+const localesDir = join(root, "src/lib/i18n/locales");
+let missingTotal = 0;
 if (process.argv.includes("--list")) console.log(JSON.stringify([...keys].sort(), null, 1));
-console.log(`${keys.size} texts, ${missing.length} without translations`);
-for (const key of missing) console.log("  MISSING:", key);
-process.exitCode = missing.length ? 1 : 0;
+for (const file of readdirSync(localesDir).filter((name) => name.endsWith(".json")).sort()) {
+  const dictionary = JSON.parse(readFileSync(join(localesDir, file), "utf8"));
+  const missing = [...keys].filter((key) => typeof dictionary[key] !== "string" || !dictionary[key].trim());
+  // Placeholders such as {count} must survive translation.
+  const broken = [...keys].filter((key) => typeof dictionary[key] === "string" &&
+    (key.match(/\{\w+\}/g) ?? []).some((name) => !dictionary[key].includes(name)));
+  missingTotal += missing.length + broken.length;
+  console.log(`${file}: ${keys.size} texts, ${missing.length} missing, ${broken.length} with a broken {placeholder}`);
+  for (const key of missing) console.log("  MISSING:", key);
+  for (const key of broken) console.log("  PLACEHOLDER:", key);
+}
+process.exitCode = missingTotal ? 1 : 0;

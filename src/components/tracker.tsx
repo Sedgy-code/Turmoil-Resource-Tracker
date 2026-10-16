@@ -457,7 +457,7 @@ function TrackerApp({ view }: { view: View }) {
           </span>
           <span>
             <strong>TURMOIL</strong>
-            <small>{t("RESOURCE TRACKER")}</small>
+            <small>{t("CLAN HUB")}</small>
           </span>
         </Link>
         <span className="sidebar-label">{t("CLAN WORKSPACE")}</span>
@@ -487,10 +487,8 @@ function TrackerApp({ view }: { view: View }) {
             <Swords size={22} />
             <div>
               <strong>Forge Masters</strong>
-              <span>{t("Built for the next battle.")}</span>
             </div>
           </div>
-          <LanguagePicker className="sidebar-language" />
           <button className="nav-link help-link" onClick={() => setHelp(true)}>
             <CircleHelp size={18} />
             {t("Tracker guide")}
@@ -526,7 +524,7 @@ function TrackerApp({ view }: { view: View }) {
             >
               <Menu size={22} />
             </button>
-            <span>{t("Clan workspace")}</span>
+            <span>Turmoil Clan Hub</span>
             <ChevronRight size={13} />
             <strong>{t(viewNames[view])}</strong>
           </div>
@@ -573,17 +571,6 @@ function TrackerApp({ view }: { view: View }) {
         <main className="main-content">
           <div className="page-heading">
             <div>
-              <div className="eyebrow">
-                {t(view === "dashboard"
-                  ? "CLAN OVERVIEW"
-                  : view === "resources"
-                    ? "YOUR CONTRIBUTION"
-                    : view === "members"
-                      ? "CLAN ROSTER"
-                      : view === "war" ? "BATTLE PREPARATION"
-                        : view === "snipes" ? "PLAN TOGETHER"
-                          : view === "store" ? "YOUR CLAN REWARDS" : "THE CLAN ARCHIVE")}
-              </div>
               <h1>
                 {view === "dashboard" ? t("Resource Dashboard") : t(viewNames[view])}
               </h1>
@@ -653,10 +640,7 @@ function TrackerApp({ view }: { view: View }) {
             <>
               <section className="hero">
                 <div className="hero-copy">
-                  <span className="hero-eyebrow">
-                    <span /> {t("UNITED WE FORGE")}
-                  </span>
-                  <h2>{t("Stronger, together.")}</h2>
+                  <h2>{t("Welcome to Turmoil Clan Hub")}</h2>
                   <p>{t("Save your resources so the clan can plan the next war.")}</p>
                   <Link
                     href={`/resources?week=${week}${snapshotId ? `&snapshot=${encodeURIComponent(snapshotId)}` : ""}`}
@@ -752,9 +736,8 @@ function TrackerApp({ view }: { view: View }) {
           <footer className="page-footer">
             <span>
               <Flame size={13} />
-              {t("FORGED FOR TURMOIL")}
+              {t("THE TURMOIL WAY")}
             </span>
-            <span>{t("Plan together. Forge ahead.")}</span>
           </footer>
         </main>
       </div>
@@ -871,14 +854,13 @@ function Login({ configured, error }: { configured: boolean; error: string }) {
             size={480}
             sizes="(max-width: 650px) 195px, (max-width: 900px) 340px, 480px"
           />
-          <span className="crest-caption">{t("FORGED IN UNITY")}</span>
+          <span className="crest-caption">{t("THE TURMOIL WAY")}</span>
         </div>
         <section className="login-card">
-          <div className="eyebrow">{t("THE TURMOIL RESOURCE TRACKER")}</div>
           <h1>
-            {t("One clan.")}
+            Turmoil
             <br />
-            <span>{t("Endless potential.")}</span>
+            <span>Clan Hub</span>
           </h1>
           <p>{t("Sign in with Discord once. This device will remember you.")}</p>
           {message && (
@@ -908,7 +890,6 @@ function Login({ configured, error }: { configured: boolean; error: string }) {
           )}
         </section>
       </div>
-      <footer>{t("Plan together. Forge ahead.")}</footer>
     </main>
   );
 }

@@ -70,7 +70,7 @@ function GuideContent() {
         <LanguagePicker />
       </header>
       <section className="guide-intro">
-        <span className="eyebrow">{t("THE TURMOIL RESOURCE TRACKER")}</span>
+        <span className="eyebrow">TURMOIL CLAN HUB</span>
         <h1>{t("Tracker guide")}</h1>
         <p>{t("Update your resources once a week. It takes about 2 minutes.")}</p>
         <ol className="guide-steps">

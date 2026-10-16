@@ -1,16 +1,27 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { MESSAGES } from "./messages";
 
+/** Each language is labelled in itself so people can find their own. */
 export const LANGUAGES = [
-  { code: "en", label: "English" },
-  { code: "zh-Hant", label: "繁體中文" },
-  { code: "zh-Hans", label: "简体中文" },
-  { code: "ko", label: "한국어" },
+  { code: "en", label: "English", locale: "en-US" },
+  { code: "zh-Hant", label: "繁體中文", locale: "zh-TW" },
+  { code: "zh-Hans", label: "简体中文", locale: "zh-CN" },
+  { code: "ko", label: "한국어", locale: "ko-KR" },
+  { code: "es", label: "Español", locale: "es" },
+  { code: "pt", label: "Português", locale: "pt-BR" },
 ] as const;
 export type Language = (typeof LANGUAGES)[number]["code"];
-type TranslatedLanguage = Exclude<Language, "en">;
+type Dictionary = Record<string, string>;
+
+// Only the chosen language's file is downloaded.
+const LOADERS: Record<Exclude<Language, "en">, () => Promise<{ default: Dictionary }>> = {
+  "zh-Hant": () => import("./locales/zh-Hant.json"),
+  "zh-Hans": () => import("./locales/zh-Hans.json"),
+  ko: () => import("./locales/ko.json"),
+  es: () => import("./locales/es.json"),
+  pt: () => import("./locales/pt.json"),
+};
 export type Translate = (english: string, values?: Record<string, string | number>) => string;
 
 const STORAGE_KEY = "turmoil-language";
@@ -27,7 +38,8 @@ export function languageFromBrowser(preferences: readonly string[]): Language {
       if (tag.includes("hant") || /-(tw|hk|mo)\b/.test(tag)) return "zh-Hant";
       return "zh-Hans";
     }
-    if (tag.startsWith("en")) return "en";
+    const base = tag.split("-")[0];
+    if (LANGUAGES.some(({ code }) => code === base)) return base as Language;
   }
   return "en";
 }
@@ -39,9 +51,8 @@ function fill(text: string, values?: Record<string, string | number>): string {
 }
 
 /** Looks up the English text in the dictionary; untranslated text stays English. */
-export function translate(language: Language, english: string, values?: Record<string, string | number>): string {
-  const entry = language === "en" ? undefined : MESSAGES[english]?.[language as TranslatedLanguage];
-  return fill(entry ?? english, values);
+export function translate(dictionary: Dictionary | null, english: string, values?: Record<string, string | number>): string {
+  return fill(dictionary?.[english] ?? english, values);
 }
 
 function savedLanguage(): Language | null {
@@ -73,9 +84,17 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setLanguageState(savedLanguage() ?? languageFromBrowser(navigator.languages ?? [navigator.language]));
   }, []);
+  const [dictionary, setDictionary] = useState<{ language: Language; words: Dictionary } | null>(null);
   useEffect(() => {
     document.documentElement.lang = language;
+    if (language === "en") return;
+    let current = true;
+    LOADERS[language]().then((module) => {
+      if (current) setDictionary({ language, words: module.default });
+    }).catch(() => undefined);
+    return () => { current = false; };
   }, [language]);
+  const words = dictionary?.language === language ? dictionary.words : null;
   const setLanguage = useCallback((next: Language) => {
     setLanguageState(next);
     try { window.localStorage.setItem(STORAGE_KEY, next); } catch { /* storage unavailable */ }
@@ -85,8 +104,8 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   const value = useMemo<LanguageContextValue>(() => ({
     language,
     setLanguage,
-    t: (english, values) => translate(language, english, values),
-  }), [language, setLanguage]);
+    t: (english, values) => translate(words, english, values),
+  }), [language, setLanguage, words]);
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 }
 
@@ -101,5 +120,5 @@ export function useT(): Translate {
 
 /** Number format for the chosen language (digit grouping stays familiar everywhere). */
 export function localeFor(language: Language): string {
-  return language === "en" ? "en-US" : language === "zh-Hant" ? "zh-TW" : language === "zh-Hans" ? "zh-CN" : "ko-KR";
+  return LANGUAGES.find(({ code }) => code === language)?.locale ?? "en-US";
 }
