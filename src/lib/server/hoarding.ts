@@ -198,7 +198,9 @@ export async function saveHoardingNote(actor: Member, input: { memberId: string;
 export async function warSpending(actor: Member, week: string, db?: Database, now = new Date()): Promise<WarSpendingResponse> {
   const connection = db ?? await database();
   await requireAdmin(connection, actor.id);
-  const start = new Date(`${currentWeek(new Date(`${week}T12:00:00Z`))}T00:00:00Z`);
+  const warWeek = currentWeek(new Date(`${week}T12:00:00Z`));
+  // The war's Day 1 is the Tuesday after the war week's Monday; holdings before it are "before".
+  const start = new Date(new Date(`${warWeek}T00:00:00Z`).getTime() + DAY);
   const settleBy = new Date(Math.min(now.getTime(), start.getTime() + 14 * DAY));
   const settings = await getSettings(undefined, connection);
   const members = (await connection.query("SELECT * FROM app_members WHERE active = TRUE ORDER BY LOWER(COALESCE(NULLIF(display_name, ''), username)), id")).map(memberFromRow);
@@ -207,7 +209,7 @@ export async function warSpending(actor: Member, week: string, db?: Database, no
   for (const row of versionRows) versions.set(String(row.member_id), [...(versions.get(String(row.member_id)) ?? []), versionEntry(row)]);
   const warRows = await connection.query(`SELECT points.member_id, SUM(points.points) AS points FROM war_result_points points
     JOIN war_results result ON result.id = points.result_id
-    WHERE result.week_start = $1 AND result.kind = 'war' AND points.member_id IS NOT NULL GROUP BY points.member_id`, [start.toISOString().slice(0, 10)]);
+    WHERE result.week_start = $1 AND result.kind = 'war' AND points.member_id IS NOT NULL GROUP BY points.member_id`, [warWeek]);
   const warPoints = new Map(warRows.map((row) => [String(row.member_id), Number(row.points)]));
   const weekRows = await connection.query("SELECT DISTINCT week_start::text AS week FROM war_results WHERE kind = 'war' ORDER BY week DESC");
   const rows: WarSpendingRow[] = members.map((member) => {
@@ -225,5 +227,5 @@ export async function warSpending(actor: Member, week: string, db?: Database, no
       savedAfterAt: after?.updatedAt ?? null,
     };
   });
-  return { week: start.toISOString().slice(0, 10), warWeeks: weekRows.map((row) => String(row.week)), rows };
+  return { week: warWeek, warWeeks: weekRows.map((row) => String(row.week)), rows };
 }

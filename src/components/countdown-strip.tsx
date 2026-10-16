@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Backpack, FlaskConical, Swords, Target } from "lucide-react";
-import { countdown, warDay, WAR_DAYS } from "@/lib/war-calendar";
+import { countdown, raceEnd, warDay, WAR_DAYS } from "@/lib/war-calendar";
 import { currentWeek } from "@/lib/resources";
 import { useT } from "@/lib/i18n";
 import type { SnipePlan, SnipesResponse } from "@/lib/types";
@@ -55,7 +55,7 @@ export function CountdownStrip({ lastSavedAt }: { lastSavedAt: string | null }) 
       <div>
         <span>{t("Clan Tech Race")}</span>
         <strong>{t("Knock-out in {time}", { time: countdown(war.nextDay, now) })}</strong>
-        <small>{t("Race ends in {time}", { time: countdown(war.weekEnd, now) })}</small>
+        <small>{t("Race ends in {time}", { time: countdown(raceEnd(now), now) })}</small>
       </div>
     </Link>
     <Link className="countdown-item" href="/resources">
@@ -63,7 +63,7 @@ export function CountdownStrip({ lastSavedAt }: { lastSavedAt: string | null }) 
       <div>
         <span>{t("Your resources")}</span>
         <strong>{savedThisWeek ? t("Saved this week ✓") : t("Not saved this week")}</strong>
-        <small>{t("Week closes in {time}", { time: countdown(war.weekEnd, now) })}</small>
+        <small>{t("Week closes in {time}", { time: countdown(raceEnd(now), now) })}</small>
       </div>
     </Link>
   </section>;

@@ -43,11 +43,10 @@ test("the reminder text includes all four languages", () => {
   for (const phrase of ["Please save", "請在本週", "请在本周", "이번 주"]) assert.ok(text.includes(phrase));
 });
 
-test("Sunday leadership reminder lists only the missing uploads and skips when both are in", async () => {
+test("leadership reminders: vials on Sunday, war results on Monday for the war that just ended", async () => {
   const { randomUUID } = await import("node:crypto");
   const { initializeSchema, openDatabase } = await import("../src/lib/server/db");
   const { sendLeadershipReminder } = await import("../src/lib/server/reminders");
-  const { currentWeek } = await import("../src/lib/resources");
   const db = await openDatabase({ localPath: "memory://" });
   const previous = process.env.DISCORD_BOT_TOKEN;
   try {
@@ -56,15 +55,19 @@ test("Sunday leadership reminder lists only the missing uploads and skips when b
     const posts: { url: string; body: string }[] = [];
     const fetcher = (async (url: string, init?: RequestInit) => { posts.push({ url, body: String(init?.body) }); return new Response("{}"); }) as typeof fetch;
     const admin = (await db.query("INSERT INTO app_members (id,discord_id,username,role) VALUES ($1,'1','leader','ADMIN') RETURNING id", [randomUUID()]))[0].id;
-    assert.deepEqual((await sendLeadershipReminder({ db, fetcher })).missing, ["war", "vials"]);
+    const sunday = new Date("2026-10-18T10:00:00Z");
+    const monday = new Date("2026-10-19T10:00:00Z");
+    assert.deepEqual((await sendLeadershipReminder({ db, fetcher, now: sunday, kinds: ["vials"] })).missing, ["vials"]);
     assert.match(posts[0].url, /channels\/1504758222974746645\/messages/);
-    assert.match(posts[0].body, /Clan war results/);
-    await db.query("INSERT INTO war_results (id, week_start, label, created_by, kind) VALUES ($1, $2, '', $3, 'war')", [randomUUID(), currentWeek(), admin]);
-    const second = await sendLeadershipReminder({ db, fetcher });
-    assert.deepEqual(second.missing, ["vials"]);
-    assert.doesNotMatch(posts[1].body, /Clan war results/);
-    await db.query("INSERT INTO war_results (id, week_start, label, created_by, kind) VALUES ($1, $2, '', $3, 'vials')", [randomUUID(), currentWeek(), admin]);
-    assert.equal((await sendLeadershipReminder({ db, fetcher })).posted, false);
+    assert.doesNotMatch(posts[0].body, /Clan war results/);
+    await db.query("INSERT INTO war_results (id, week_start, label, created_by, kind) VALUES ($1, '2026-10-12', '', $2, 'vials')", [randomUUID(), admin]);
+    assert.equal((await sendLeadershipReminder({ db, fetcher, now: sunday, kinds: ["vials"] })).posted, false);
+    // Monday is Day 7: the war that ran Tuesday 13 to Monday 19 belongs to the week of the 12th.
+    const war = await sendLeadershipReminder({ db, fetcher, now: monday, kinds: ["war"] });
+    assert.deepEqual(war.missing, ["war"]);
+    assert.match(posts[1].body, /Clan war results/);
+    await db.query("INSERT INTO war_results (id, week_start, label, created_by, kind) VALUES ($1, '2026-10-12', '', $2, 'war')", [randomUUID(), admin]);
+    assert.equal((await sendLeadershipReminder({ db, fetcher, now: monday, kinds: ["war"] })).posted, false);
     assert.equal(posts.length, 2);
   } finally {
     if (previous === undefined) delete process.env.DISCORD_BOT_TOKEN; else process.env.DISCORD_BOT_TOKEN = previous;

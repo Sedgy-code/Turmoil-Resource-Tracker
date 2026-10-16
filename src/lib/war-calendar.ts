@@ -2,7 +2,7 @@ import type { ResourceKey } from "./resources";
 
 const DAY = 86_400_000;
 
-/** What counts for war points on each day. Day 1 starts Monday 00:00 UTC. */
+/** What counts for war points on each day. Day 1 starts Tuesday 00:00 UTC; Day 7 (claim) is Monday. */
 export const WAR_DAYS: readonly { day: number; activities: string[]; resources: ResourceKey[]; tip: string }[] = [
   { day: 1, activities: ["Hammers", "Dungeon keys", "Skill summons"], resources: ["hammers", "skillTickets"], tip: "Use hammers and skill tickets today." },
   { day: 2, activities: ["Forge upgrades", "Tech upgrades", "Mount summons"], resources: ["mountKeys", "mountsToMerge"], tip: "Summon and merge mounts today." },
@@ -20,9 +20,27 @@ export function weekStart(now: Date): Date {
   return start;
 }
 
+/** Tuesday 00:00 UTC that started the current clan war (Day 1). */
+export function warStart(now: Date): Date {
+  return new Date(weekStart(new Date(now.getTime() - DAY)).getTime() + DAY);
+}
+
+/**
+ * The Monday "week" a war belongs to on the Clan Hub: the Monday just before its Day 1.
+ * Results uploaded on Day 7 (Monday) still count for the war that just finished.
+ */
+export function warWeekOf(date: Date): string {
+  return weekStart(new Date(date.getTime() - DAY)).toISOString().slice(0, 10);
+}
+
+/** Clan Tech Race: one week, Monday 00:00 UTC to Monday 00:00 UTC, with a knock-out every day at 00:00 UTC. */
+export function raceEnd(now = new Date()): Date {
+  return new Date(weekStart(now).getTime() + 7 * DAY);
+}
+
 /** Which war day it is (1–7) and when the next day starts. */
 export function warDay(now = new Date()): { day: number; dayStart: Date; nextDay: Date; weekEnd: Date } {
-  const start = weekStart(now);
+  const start = warStart(now);
   const day = Math.min(7, Math.floor((now.getTime() - start.getTime()) / DAY) + 1);
   const dayStart = new Date(start.getTime() + (day - 1) * DAY);
   return { day, dayStart, nextDay: new Date(dayStart.getTime() + DAY), weekEnd: new Date(start.getTime() + 7 * DAY) };
