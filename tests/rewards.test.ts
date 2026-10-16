@@ -144,7 +144,45 @@ test("only fresh administrators confirm actual attendance after start; RSVP alon
     assert.equal((await getDew(member, db)).balance, 10);
     await updateSnipe(admin, plan.id, { archived: true }, db);
     assert.deepEqual((await listSnipes(member, db)).plans[0].attendees, confirmed.attendees);
-    await assert.rejects(confirmSnipeAttendance(admin, plan.id, { memberId: member.id, attended: true }, db), apiFailure("SNIPE_ARCHIVED"));
+  });
+});
+
+test("admins can fix attendance after archiving, and unticking takes the reward back", async () => {
+  await withDatabase(async (db) => {
+    const admin = await addMember(db, "Admin", "ADMIN");
+    const member = await addMember(db, "Member");
+    const late = await addMember(db, "Late tick");
+    const plan = await makeSnipe(db, admin);
+    await startSnipe(db, plan.id);
+    await confirmSnipeAttendance(admin, plan.id, { memberId: member.id, attended: true }, db);
+    await updateSnipe(admin, plan.id, { archived: true }, db);
+    const fixed = await confirmSnipeAttendance(admin, plan.id, { memberId: late.id, attended: true }, db);
+    assert.equal(fixed.archived, true);
+    assert.deepEqual(fixed.attendees?.map(({ memberId }) => memberId).sort(), [member.id, late.id].sort());
+    assert.equal((await getDew(late, db)).balance, 10);
+    const removed = await confirmSnipeAttendance(admin, plan.id, { memberId: late.id, attended: false }, db);
+    assert.deepEqual(removed.attendees?.map(({ memberId }) => memberId), [member.id]);
+    assert.equal((await getDew(late, db)).balance, 0);
+    assert.equal((await getDew(late, db)).snipeRewardEarned, false);
+    assert.deepEqual((await listSnipes(admin, db)).plans[0].attendees?.map(({ memberId }) => memberId), [member.id]);
+    const reopened = await updateSnipe(admin, plan.id, { archived: false }, db);
+    assert.equal(reopened.archived, false);
+    assert.deepEqual(reopened.attendees?.map(({ memberId }) => memberId), [member.id]);
+  });
+});
+
+test("unticking one snipe keeps the reward while another snipe that week is still confirmed", async () => {
+  await withDatabase(async (db) => {
+    const admin = await addMember(db, "Admin", "ADMIN");
+    const member = await addMember(db, "Twice");
+    const first = await makeSnipe(db, admin, "First");
+    const second = await makeSnipe(db, admin, "Second");
+    await startSnipe(db, first.id);
+    await startSnipe(db, second.id);
+    await confirmSnipeAttendance(admin, first.id, { memberId: member.id, attended: true }, db);
+    await confirmSnipeAttendance(admin, second.id, { memberId: member.id, attended: true }, db);
+    await confirmSnipeAttendance(admin, first.id, { memberId: member.id, attended: false }, db);
+    assert.equal((await getDew(member, db)).balance, 10);
   });
 });
 
@@ -171,13 +209,24 @@ test("concurrent confirmations across several snipes award only ten points for t
   });
 });
 
-test("historical attendance is recorded without farming the current week's reward", async () => {
+test("a snipe confirmed late still earns its own week's reward", async () => {
+  await withDatabase(async (db) => {
+    const admin = await addMember(db, "Admin", "ADMIN");
+    const member = await addMember(db, "Attendee");
+    const plan = await makeSnipe(db, admin);
+    await db.query("UPDATE snipe_plans SET starts_at=NOW() - INTERVAL '2 days' WHERE id=$1", [plan.id]);
+    await confirmSnipeAttendance(admin, plan.id, { memberId: member.id, attended: true }, db);
+    assert.equal((await getDew(member, db)).balance, 10);
+  });
+});
+
+test("historical attendance is recorded without farming rewards", async () => {
   await withDatabase(async (db) => {
     const admin = await addMember(db, "Admin", "ADMIN");
     const member = await addMember(db, "Attendee");
     const inactive = await addMember(db, "Former member");
     const plan = await makeSnipe(db, admin);
-    await db.query("UPDATE snipe_plans SET starts_at=$2::date - INTERVAL '1 day' WHERE id=$1", [plan.id, currentWeek()]);
+    await db.query("UPDATE snipe_plans SET starts_at=NOW() - INTERVAL '15 days' WHERE id=$1", [plan.id]);
     const confirmed = await confirmSnipeAttendance(admin, plan.id, { memberId: member.id, attended: true }, db);
     assert.equal(confirmed.attendees?.length, 1);
     assert.equal((await getDew(member, db)).balance, 0);

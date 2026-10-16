@@ -8,19 +8,43 @@ export const LANGUAGES = [
   { code: "zh-Hant", label: "繁體中文", locale: "zh-TW" },
   { code: "zh-Hans", label: "简体中文", locale: "zh-CN" },
   { code: "ko", label: "한국어", locale: "ko-KR" },
+  { code: "ja", label: "日本語", locale: "ja-JP" },
+  { code: "vi", label: "Tiếng Việt", locale: "vi-VN" },
+  { code: "th", label: "ไทย", locale: "th-TH" },
+  { code: "id", label: "Bahasa Indonesia", locale: "id-ID" },
+  { code: "ms", label: "Bahasa Melayu", locale: "ms-MY" },
+  { code: "fil", label: "Filipino", locale: "fil-PH" },
   { code: "es", label: "Español", locale: "es" },
   { code: "pt", label: "Português", locale: "pt-BR" },
+  { code: "fr", label: "Français", locale: "fr-FR" },
+  { code: "de", label: "Deutsch", locale: "de-DE" },
+  { code: "ru", label: "Русский", locale: "ru-RU" },
+  { code: "tr", label: "Türkçe", locale: "tr-TR" },
+  { code: "ar", label: "العربية", locale: "ar" },
 ] as const;
 export type Language = (typeof LANGUAGES)[number]["code"];
 type Dictionary = Record<string, string>;
+/** Languages written right to left; the whole page is mirrored for these. */
+const RIGHT_TO_LEFT: readonly Language[] = ["ar"];
 
 // Only the chosen language's file is downloaded.
 const LOADERS: Record<Exclude<Language, "en">, () => Promise<{ default: Dictionary }>> = {
   "zh-Hant": () => import("./locales/zh-Hant.json"),
   "zh-Hans": () => import("./locales/zh-Hans.json"),
   ko: () => import("./locales/ko.json"),
+  ja: () => import("./locales/ja.json"),
+  vi: () => import("./locales/vi.json"),
+  th: () => import("./locales/th.json"),
+  id: () => import("./locales/id.json"),
+  ms: () => import("./locales/ms.json"),
+  fil: () => import("./locales/fil.json"),
   es: () => import("./locales/es.json"),
   pt: () => import("./locales/pt.json"),
+  fr: () => import("./locales/fr.json"),
+  de: () => import("./locales/de.json"),
+  ru: () => import("./locales/ru.json"),
+  tr: () => import("./locales/tr.json"),
+  ar: () => import("./locales/ar.json"),
 };
 export type Translate = (english: string, values?: Record<string, string | number>) => string;
 
@@ -38,7 +62,7 @@ export function languageFromBrowser(preferences: readonly string[]): Language {
       if (tag.includes("hant") || /-(tw|hk|mo)\b/.test(tag)) return "zh-Hant";
       return "zh-Hans";
     }
-    const base = tag.split("-")[0];
+    const base = tag.startsWith("tl") ? "fil" : tag.startsWith("in") ? "id" : tag.split("-")[0];
     if (LANGUAGES.some(({ code }) => code === base)) return base as Language;
   }
   return "en";
@@ -87,6 +111,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   const [dictionary, setDictionary] = useState<{ language: Language; words: Dictionary } | null>(null);
   useEffect(() => {
     document.documentElement.lang = language;
+    document.documentElement.dir = RIGHT_TO_LEFT.includes(language) ? "rtl" : "ltr";
     if (language === "en") return;
     let current = true;
     LOADERS[language]().then((module) => {

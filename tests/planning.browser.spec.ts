@@ -327,7 +327,7 @@ test("snipe creation, attendance, selected points, and archived history use the 
     expect(start.ok(), await start.text()).toBeTruthy();
     await expect.poll(() => Date.now()).toBeGreaterThanOrEqual(new Date(startedAt).getTime());
     await page.getByRole("button", { name: "Refresh", exact: true }).click();
-    await card.getByRole("button", { name: `Mark ${(await ownBank(request)).data.currentUser.username} as attended`, exact: true }).click();
+    await card.getByRole("checkbox", { name: `${(await ownBank(request)).data.currentUser.username} attended`, exact: true }).check();
     await expect(card.getByText("You attended", { exact: true })).toBeVisible();
     const afterAttendance = await read<DewResponse>(request, "/api/dew");
     expect(afterAttendance.snipeRewardEarned).toBe(true);
@@ -393,7 +393,7 @@ test("members can RSVP but only admins see snipe management and attendance contr
     await expect(page.getByRole("button", { name: "New snipe", exact: true })).toHaveCount(0);
     await expect(card.getByRole("button", { name: "Edit plan", exact: true })).toHaveCount(0);
     await expect(card.getByRole("button", { name: "Archive snipe", exact: true })).toHaveCount(0);
-    await expect(card.getByRole("button", { name: /^Mark .* as attended$/ })).toHaveCount(0);
+    await expect(card.getByRole("checkbox", { name: / attended$/ })).toHaveCount(0);
     await card.getByRole("button", { name: "Yes", exact: true }).click();
     await expect(card.locator(".planning-yes")).toHaveText("Yes: 1");
     await expect(card.getByRole("button", { name: "No", exact: true })).toBeEnabled();

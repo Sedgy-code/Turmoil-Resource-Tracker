@@ -125,7 +125,7 @@ export const equipDewSchema = z.object({
 }).strict();
 export const snipeAttendanceSchema = z.object({
   memberId: z.string().uuid(),
-  attended: z.literal(true),
+  attended: z.boolean(),
 }).strict();
 
 export const saveResourcesSchema = z
@@ -151,3 +151,7 @@ export const updateMemberSchema = z
     (value) => value.role !== undefined || value.active !== undefined,
     "Select a change to save.",
   );
+export const hoardingNoteSchema = z.object({
+  memberId: z.string().uuid(),
+  note: z.string().max(1000),
+}).strict();

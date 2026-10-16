@@ -160,4 +160,10 @@ CREATE TABLE IF NOT EXISTS dew_owned (
   purchased_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (member_id, item_id)
 );
+CREATE TABLE IF NOT EXISTS member_admin_notes (
+  member_id TEXT PRIMARY KEY REFERENCES app_members(id),
+  note TEXT NOT NULL DEFAULT '' CHECK (LENGTH(note) <= 1000),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by TEXT NOT NULL REFERENCES app_members(id)
+);
 `;
