@@ -9,6 +9,13 @@ export const INDIRECT_KEYS = [
   "View saved resources", "Update my resources", "Add my resources", "Resources saved", "Not saved yet",
   // Guide page sections
   "Skills screen", "Mounts screen", "Pets screen", "Tech Tree", "Forge screen",
+  // Menu sections and tabs (src/components/tracker.tsx SECTIONS)
+  "Home", "War", "Records", "Leadership", "Resources", "Shop", "This Week", "Snipes", "Points Calculator", "Vials", "Members", "Ranking", "War Week",
+  "What scores on each war day, and how much the clan has saved for it.",
+  // War days (src/lib/war-calendar.ts)
+  "Dungeon keys", "Skill summons", "Forge upgrades", "Tech upgrades", "Mount summons", "Egg hatching", "Pet merges", "Battle", "Claim rewards",
+  "Use hammers and skill tickets today.", "Summon and merge mounts today.", "Hammers, skills, eggs and pets all count today.", "Second mount day.",
+  "Last day for hammers, eggs and pets.", "Fight the other clans. Spending doesn't score today.", "Claim your war rewards. You only have today.",
   // Navigation
   "Dashboard", "My Resources", "Manage Members", "Weekly History", "Estimated War Points", "Snipe Plans", "Reward Shop", "Hoarding Watch",
   "Spot members who hold a lot but don’t spend it. Only admins can see this page.",

@@ -74,7 +74,7 @@ export function BankHistory({ admin, notify, refresh }: Props) {
   const selectedSnapshot = selected && "capturedAt" in selected ? selected as BankHistorySnapshot : null;
   return <section className="panel bank-history">
     <div className="table-section-heading">
-      <div><h2>Weekly bank history</h2><p>Automatic capture at Monday 00:00 UTC · 10am AEST / 11am AEDT in Sydney.</p></div>
+      <div><h2>Weekly bank history</h2><p>Automatic capture at Monday 00:00 UTC.</p></div>
       {admin && <button className="button secondary" disabled={saving || !data} onClick={capture}>{saving ? <LoaderCircle size={15} className="spin" /> : <CalendarDays size={15} />}Save snapshot now</button>}
     </div>
     <div className="history-controls">
