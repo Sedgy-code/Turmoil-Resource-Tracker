@@ -248,4 +248,10 @@ CREATE TABLE IF NOT EXISTS applications (
 CREATE INDEX IF NOT EXISTS applications_created_idx ON applications(created_at DESC);
 ALTER TABLE clan_settings ADD COLUMN IF NOT EXISTS applications_open BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE clan_settings ADD COLUMN IF NOT EXISTS applications_channel_id TEXT;
+CREATE TABLE IF NOT EXISTS clan_tech_levels (
+  node_key TEXT PRIMARY KEY CHECK (LENGTH(node_key) <= 60),
+  level INTEGER NOT NULL CHECK (level BETWEEN 0 AND 100),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by TEXT REFERENCES app_members(id)
+);
 `;

@@ -13,6 +13,7 @@ import { SnipeChampions } from "./snipe-champions";
 import { ContributionRanking } from "./contribution-ranking";
 import { WarWeek } from "./war-week";
 import { MemberHistoryPanel } from "./member-history";
+import { ClanTech } from "./clan-tech";
 import { ApplicationsManager, LeadershipSettings } from "./leadership-applications";
 import { downloadRows } from "@/lib/csv";
 import { CountdownStrip } from "./countdown-strip";
@@ -108,7 +109,7 @@ import type {
   WarRates,
 } from "@/lib/types";
 
-type View = "dashboard" | "resources" | "members" | "weeks" | "war" | "warWeek" | "snipes" | "store" | "hoarding" | "warResults" | "vials" | "ranking" | "applications" | "settings";
+type View = "dashboard" | "resources" | "members" | "weeks" | "war" | "warWeek" | "snipes" | "store" | "hoarding" | "warResults" | "vials" | "ranking" | "applications" | "settings" | "tech";
 const ADMIN_VIEWS: View[] = ["members", "hoarding", "ranking", "applications", "settings"];
 type Icon = ComponentType<{
   size?: number;
@@ -130,6 +131,7 @@ const viewNames = {
   ranking: "Contribution Ranking",
   applications: "Applications",
   settings: "Settings",
+  tech: "Clan Tech",
 };
 const VIEW_HREF: Record<View, string> = {
   dashboard: "/",
@@ -146,6 +148,7 @@ const VIEW_HREF: Record<View, string> = {
   hoarding: "/hoarding-watch",
   applications: "/applications",
   settings: "/settings",
+  tech: "/clan-tech",
 };
 type Section = "home" | "resources" | "war" | "records" | "store" | "leadership";
 /** The menu: each section opens its first tab; sections with more than one page show tabs. */
@@ -153,7 +156,7 @@ const SECTIONS: { section: Section; label: string; short: string; icon: Icon; ta
   { section: "home", label: "Home", short: "Home", icon: LayoutDashboard, tabs: [{ view: "dashboard", label: "Home" }] },
   { section: "resources", label: "My Resources", short: "Resources", icon: Backpack, tabs: [{ view: "resources", label: "My Resources" }] },
   { section: "war", label: "War", short: "War", icon: Swords, tabs: [{ view: "warWeek", label: "This Week" }, { view: "snipes", label: "Snipes" }, { view: "war", label: "Points Calculator" }] },
-  { section: "records", label: "Records", short: "Records", icon: Trophy, tabs: [{ view: "warResults", label: "War Results" }, { view: "vials", label: "Vials" }, { view: "weeks", label: "Weekly History" }] },
+  { section: "records", label: "Records", short: "Records", icon: Trophy, tabs: [{ view: "warResults", label: "War Results" }, { view: "vials", label: "Vials" }, { view: "tech", label: "Clan Tech" }, { view: "weeks", label: "Weekly History" }] },
   { section: "store", label: "Reward Shop", short: "Shop", icon: Droplets, tabs: [{ view: "store", label: "Reward Shop" }] },
   { section: "leadership", label: "Leadership", short: "Leadership", icon: ShieldCheck, admin: true, tabs: [{ view: "members", label: "Members" }, { view: "ranking", label: "Ranking" }, { view: "hoarding", label: "Hoarding" }, { view: "applications", label: "Applications" }, { view: "settings", label: "Settings" }] },
 ];
@@ -636,6 +639,7 @@ function TrackerApp({ view }: { view: View }) {
                     ? "Copy your numbers from the game, then press Save."
                     : view === "members"
                       ? "Manage who can use the tracker."
+                      : view === "tech" ? "The clan’s tech tree and what we spend vials on next."
                       : view === "applications" ? "People who want to join Turmoil. Only admins can see this page."
                       : view === "settings" ? "Clan Hub settings for leadership."
                       : view === "hoarding" ? "Spot members who hold a lot but don’t spend it. Only admins can see this page."
@@ -777,6 +781,8 @@ function TrackerApp({ view }: { view: View }) {
             <ContributionRanking />
           ) : data && view === "warResults" ? (
             <WarResults members={data.members} admin={user.role === "ADMIN"} notify={notify} />
+          ) : data && view === "tech" ? (
+            <ClanTech notify={notify} />
           ) : data && view === "applications" ? (
             <ApplicationsManager notify={notify} />
           ) : data && view === "settings" ? (
