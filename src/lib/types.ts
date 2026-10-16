@@ -165,3 +165,34 @@ export interface HoardingRow {
   noteBy: string | null;
 }
 export interface HoardingResponse { typicalWarValue: number; rows: HoardingRow[]; generatedAt: string }
+
+export interface WarResultPoint { position: number; gameName: string; memberId: string | null; points: number }
+export interface WarResult {
+  id: string;
+  week: string;
+  label: string;
+  clanTotal: number | null;
+  createdAt: string;
+  createdBy: string;
+  points: WarResultPoint[];
+  imageIds: string[];
+}
+export interface WarResultsResponse { results: WarResult[] }
+/** What the screenshot reader found, before an admin checks and saves it. */
+export interface WarReading {
+  clanTotal: number | null;
+  rows: { gameName: string; points: number; memberId: string | null }[];
+}
+export interface SnipeRecognition {
+  /** Confirmed snipes per member in the last eight weeks. */
+  recent: Record<string, number>;
+  /** Confirmed snipes per member, all time. */
+  total: Record<string, number>;
+  /** Members confirmed at a snipe in the previous clan week. */
+  lastWeek: string[];
+}
+export interface RecognitionResponse {
+  snipes: SnipeRecognition;
+  /** Latest war's points per member. */
+  latestWar: { id: string; week: string; label: string; clanTotal: number | null; points: Record<string, number> } | null;
+}

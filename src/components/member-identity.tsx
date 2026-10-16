@@ -3,18 +3,20 @@
 import { useEffect, useState } from "react";
 import { cosmeticItem, equippedCosmetics } from "@/lib/dew";
 import type { Member } from "@/lib/types";
+import { SnipeBadge } from "./recognition";
 
-type IdentityMember = Pick<Member, "username" | "avatarUrl" | "badge" | "cosmetics">;
+type IdentityMember = Pick<Member, "username" | "avatarUrl" | "badge" | "cosmetics"> & { id?: string };
 
-/** Cosmetic styles come only from the trusted reward catalog. */
+/** Cosmetic styles come only from the trusted reward catalog. Snipe attendees also get a 🎯 count. */
 export function MemberName({ member }: { member: IdentityMember }) {
   const slots = equippedCosmetics(member);
   const badge = cosmeticItem(slots.badge, "badge");
   const accent = cosmeticItem(slots.accent, "accent");
   return (
     <span className={`member-name${accent?.style ? ` cosmetic-accent-${accent.style}` : ""}`}>
-      {member.username}
+      <span className="member-name-text">{member.username}</span>
       {badge && <span className="member-cosmetic" role="img" title={badge.name} aria-label={badge.name}>{badge.symbol}</span>}
+      {member.id && <SnipeBadge memberId={member.id} />}
     </span>
   );
 }

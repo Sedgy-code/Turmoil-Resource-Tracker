@@ -1,0 +1,72 @@
+/* War results page */
+.war-page { display: flex; flex-direction: column; gap: 16px; }
+.war-add-open { align-self: flex-start; }
+.war-add { padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; }
+.war-add-head { display: flex; justify-content: space-between; align-items: center; }
+.war-add h2, .war-chart h2, .recognition-panel h2 { display: flex; align-items: center; gap: 8px; font-size: 15px; margin: 0; }
+.war-add h2 svg, .recognition-panel h2 svg { color: var(--gold); }
+.war-steps { margin: 0; padding-inline-start: 20px; color: var(--muted); font-size: 12.5px; line-height: 1.7; }
+.war-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 260px)); gap: 12px; }
+.war-form-grid label, .war-total-field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--muted); }
+.war-form-grid input, .war-total-field input, .war-edit-table input, .war-edit-table select {
+  height: 38px; padding: 0 10px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 7px; font: inherit; font-size: 13px; width: 100%;
+}
+.war-total-field { max-width: 260px; }
+.war-total-field input { font-weight: 700; font-size: 15px; }
+.war-shots { display: flex; flex-wrap: wrap; gap: 10px; }
+.war-shots figure { position: relative; margin: 0; width: 96px; height: 150px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+.war-shots figure img { width: 100%; height: 100%; object-fit: cover; }
+.war-shots figure .icon-button { position: absolute; top: 4px; inset-inline-end: 4px; width: 26px; height: 26px; background: #000a; }
+.war-shot-add { width: 96px; height: 150px; border: 1px dashed #b4974999; border-radius: 8px; background: #0c1510; color: var(--gold); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; font: inherit; font-size: 11.5px; cursor: pointer; }
+.war-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.war-message { margin: 0; padding: 10px 12px; border-radius: 8px; background: #33280f; border: 1px solid #d9a52b55; color: #f0d58a; font-size: 12.5px; line-height: 1.5; }
+.war-edit-table td { padding: 6px 8px; }
+.war-edit-table tr.war-unmatched td { background: #2a2412; }
+.war-edit-table tr.war-unmatched select { border-color: #d9a52b; }
+.war-hint { margin: 0; color: var(--muted); font-size: 11.5px; }
+.war-chart { padding: 18px 20px; }
+.war-bars { display: flex; align-items: flex-end; gap: 8px; height: 170px; margin-top: 14px; overflow-x: auto; }
+.war-bar { flex: 1 0 44px; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; }
+.war-bar i { display: block; width: 70%; border-radius: 5px 5px 2px 2px; background: linear-gradient(180deg, #f0c560, #9a7426); }
+.war-bar-value { font-size: 10px; color: #f0d58a; font-weight: 700; }
+.war-bar-label { font-size: 9.5px; color: var(--muted); white-space: nowrap; }
+.war-empty { padding: 30px; display: flex; flex-direction: column; align-items: center; gap: 10px; color: var(--muted); text-align: center; }
+.war-empty svg { color: var(--gold); }
+.war-card { padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+.war-card header { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
+.war-card h2 { margin: 0; font-size: 15px; }
+.war-card header p { margin: 3px 0 0; color: var(--muted); font-size: 12px; }
+.war-card-total { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.war-card-total span { font-size: 11px; color: var(--muted); }
+.war-card-total strong { font-size: 24px; color: var(--gold); font-variant-numeric: tabular-nums; }
+.war-card-total small { font-size: 11.5px; font-weight: 700; }
+.war-members > summary { cursor: pointer; color: var(--gold); font-size: 12.5px; font-weight: 600; margin-bottom: 8px; }
+.war-table td:first-child { width: 48px; }
+.war-points { font-weight: 700; font-variant-numeric: tabular-nums; }
+.war-guest { color: var(--muted); font-style: italic; }
+.war-card footer { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.war-thumbs { display: flex; gap: 8px; flex-wrap: wrap; }
+.war-thumbs img { width: 54px; height: 84px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); }
+.war-delete { margin-inline-start: auto; }
+.war-history { margin-bottom: 16px; }
+@media (max-width: 650px) {
+  .war-form-grid { grid-template-columns: minmax(0, 1fr); }
+  .war-card-total { align-items: flex-start; }
+}
+
+/* Dashboard recognition boards */
+.recognition-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 14px 0 16px; }
+.recognition-panel { padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; }
+.recognition-sub { margin: 0; color: var(--muted); font-size: 12px; }
+.recognition-empty { margin: 6px 0; color: var(--muted); font-size: 12.5px; line-height: 1.6; }
+.recognition-link { margin-top: auto; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; align-self: flex-start; }
+.champion-list { list-style: none; margin: 4px 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.champion-list li { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; background: #0c1510; border: 1px solid #ffffff0d; min-width: 0; }
+.champion-list li:first-child { border-color: #d9a52b66; background: #221d0e; }
+.champion-place { width: 22px; text-align: center; font-weight: 700; color: var(--muted); }
+.champion-list strong { flex: 1; min-width: 0; font-size: 13px; overflow-wrap: anywhere; }
+.champion-count { font-size: 12px; color: #f0d58a; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.latest-war-total { display: flex; justify-content: space-between; align-items: baseline; padding: 8px 0; }
+.latest-war-total span { color: var(--muted); font-size: 12px; }
+.latest-war-total strong { color: var(--gold); font-size: 24px; font-variant-numeric: tabular-nums; }
+@media (max-width: 800px) { .recognition-row { grid-template-columns: minmax(0, 1fr); } }

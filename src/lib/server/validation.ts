@@ -155,3 +155,20 @@ export const hoardingNoteSchema = z.object({
   memberId: z.string().uuid(),
   note: z.string().max(1000),
 }).strict();
+const screenshotSchema = z.object({
+  mime: z.enum(["image/jpeg", "image/png", "image/webp"]),
+  // Base64 only, at most about 1.5 MB per screenshot after the browser shrinks it.
+  data: z.string().min(16).max(2_000_000).regex(/^[A-Za-z0-9+/=]+$/),
+}).strict();
+export const readWarSchema = z.object({ images: z.array(screenshotSchema).min(1).max(6) }).strict();
+export const saveWarSchema = z.object({
+  week: weekSchema,
+  label: z.string().max(120),
+  clanTotal: z.number().int().min(0).max(1e15).nullable(),
+  rows: z.array(z.object({
+    gameName: z.string().trim().min(1).max(80),
+    memberId: z.string().uuid().nullable(),
+    points: z.number().int().min(0).max(1e15),
+  }).strict()).max(200),
+  images: z.array(screenshotSchema).max(6),
+}).strict();
