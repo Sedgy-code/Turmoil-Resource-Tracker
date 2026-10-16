@@ -26,7 +26,14 @@ export async function GET(request: Request) {
     const state = parameters.get("state");
     const code = parameters.get("code");
     const encryptedState = (await cookies()).get(OAUTH_COOKIE)?.value;
-    if (parameters.has("error"))
+    const discordError = parameters.get("error");
+    // prompt=none can come back asking for approval: show Discord's screen once.
+    if (discordError && ["consent_required", "interaction_required", "login_required"].includes(discordError)) {
+      const retry = NextResponse.redirect(`${appUrl()}/api/auth/login?consent=1`);
+      retry.headers.set("Cache-Control", "no-store");
+      return retry;
+    }
+    if (discordError)
       throw new ApiError(
         401,
         "Discord authorization was cancelled.",

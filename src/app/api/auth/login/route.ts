@@ -6,7 +6,7 @@ import { OAUTH_COOKIE, cookieOptions } from "@/lib/server/auth";
 import { errorResponse } from "@/lib/server/errors";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export async function GET() {
+export async function GET(request: Request) {
   try {
     if (isDemo()) return NextResponse.redirect(`${appUrl()}/`);
     requireConfiguration();
@@ -19,8 +19,9 @@ export async function GET() {
       response_type: "code",
       scope: "identify guilds.members.read",
       // Members who already approved the tracker go straight back in
-      // instead of seeing Discord's Authorize screen every time.
-      prompt: "none",
+      // instead of seeing Discord's Authorize screen every time. If Discord
+      // says approval is needed, the callback retries with the screen shown.
+      prompt: new URL(request.url).searchParams.has("consent") ? "consent" : "none",
       state,
       code_challenge: createHash("sha256").update(verifier).digest("base64url"),
       code_challenge_method: "S256",
