@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { Crosshair } from "lucide-react";
 import { useT } from "@/lib/i18n";
 import type { RecognitionResponse } from "@/lib/types";
+import { AWARDS } from "@/lib/awards";
 
 interface RecognitionContextValue {
   data: RecognitionResponse | null;
@@ -53,4 +54,16 @@ export function SnipeBadge({ memberId }: { memberId: string }) {
       <Crosshair size={11} aria-hidden="true" />{count}
     </span>
   );
+}
+
+/** 🏆 🧪 🎯 💾 for each award the member won last month. */
+export function AwardBadges({ memberId }: { memberId: string }) {
+  const t = useT();
+  const { data } = useRecognition();
+  const won = (data?.awards?.items ?? []).filter((item) => item.memberIds.includes(memberId));
+  if (!won.length) return null;
+  return <>{won.map((item) => {
+    const label = t(AWARDS[item.award].title);
+    return <span key={item.award} className="award-badge" role="img" title={label} aria-label={label}>{AWARDS[item.award].emoji}</span>;
+  })}</>;
 }

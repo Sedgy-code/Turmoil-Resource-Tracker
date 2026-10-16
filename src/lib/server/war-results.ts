@@ -1,3 +1,4 @@
+import { storedAwards } from "./awards";
 import { randomUUID } from "node:crypto";
 import { currentWeek, shiftWeek } from "../resources";
 import type { Member, RecognitionResponse, WarReading, WarResult, WarResultsResponse } from "../types";
@@ -251,5 +252,6 @@ export async function recognition(actor: Member, db?: Database): Promise<Recogni
   return {
     snipes: await snipeRecognition(connection),
     latestWar: war ? { id: war.id, week: war.week, label: war.label, clanTotal: war.clanTotal, points } : null,
+    awards: await storedAwards(connection),
   };
 }

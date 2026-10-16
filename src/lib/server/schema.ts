@@ -254,4 +254,11 @@ CREATE TABLE IF NOT EXISTS clan_tech_levels (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_by TEXT REFERENCES app_members(id)
 );
+CREATE TABLE IF NOT EXISTS monthly_awards (
+  month TEXT NOT NULL CHECK (month ~ '^[0-9]{4}-[0-9]{2}$'),
+  award TEXT NOT NULL CHECK (LENGTH(award) <= 30),
+  member_id TEXT NOT NULL REFERENCES app_members(id),
+  value BIGINT NOT NULL DEFAULT 0,
+  PRIMARY KEY (month, award, member_id)
+);
 `;

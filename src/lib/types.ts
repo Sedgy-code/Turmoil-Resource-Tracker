@@ -217,7 +217,11 @@ export interface RecognitionResponse {
   snipes: SnipeRecognition;
   /** Latest war's points per member. */
   latestWar: { id: string; week: string; label: string; clanTotal: number | null; points: Record<string, number> } | null;
+  /** Last month's awards (stored on the 1st of each month). */
+  awards?: MonthlyAwards | null;
 }
+export type AwardKey = "war" | "vials" | "snipes" | "saver";
+export interface MonthlyAwards { month: string; items: { award: AwardKey; memberIds: string[]; value: number }[] }
 export interface WarSpendingRow {
   member: Member;
   /** Holdings (estimated war points) before the war week; null if they never saved before it. */
