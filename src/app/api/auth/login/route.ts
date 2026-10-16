@@ -18,6 +18,9 @@ export async function GET() {
       redirect_uri: `${appUrl()}/api/auth/callback`,
       response_type: "code",
       scope: "identify guilds.members.read",
+      // Members who already approved the tracker go straight back in
+      // instead of seeing Discord's Authorize screen every time.
+      prompt: "none",
       state,
       code_challenge: createHash("sha256").update(verifier).digest("base64url"),
       code_challenge_method: "S256",

@@ -235,6 +235,11 @@ export default function Tracker({ view }: { view: View }) {
   const checkSession = useCallback(async () => {
     try {
       const result = await api<SessionResponse>("/api/session");
+      if (result.canonicalOrigin && window.location.origin !== result.canonicalOrigin) {
+        // Opened from an old link: move to the public address so sign-in sticks.
+        window.location.replace(`${result.canonicalOrigin}${window.location.pathname}${window.location.search}`);
+        return;
+      }
       setSessionError("");
       setSession(result);
       if (!result.user) {

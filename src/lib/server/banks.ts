@@ -251,8 +251,33 @@ async function dashboardInTransaction(tx: SqlConnection, actor: Member, week: st
   };
 }
 
+/**
+ * Weekly snapshots are only missing straight after the Monday cutoff. The full
+ * capture replays every bank version, so check cheaply whether last week is
+ * already frozen (or history only began this week) before taking the clan-wide lock.
+ */
+async function snapshotsUpToDate(connection: SqlConnection, now: Date): Promise<boolean> {
+  const endingWeek = shiftWeek(currentWeek(now), -1);
+  const rows = await connection.query(
+    `SELECT
+       EXISTS (SELECT 1 FROM bank_snapshots WHERE week_start = $1::date) AS captured,
+       (SELECT started_at FROM bank_history_state WHERE id = 'live-banks') AS started_at`,
+    [endingWeek],
+  );
+  if (rows[0]?.captured === true) return true;
+  const startedAt = iso(rows[0]?.started_at);
+  return startedAt !== null && currentWeek(new Date(startedAt)) > endingWeek;
+}
+
 export async function liveDashboard(actor: Member, db?: Database): Promise<DashboardResponse> {
   const connection = db ?? await database();
+  const now = new Date();
+  if (await snapshotsUpToDate(connection, now)) {
+    return connection.transaction(async (tx) => {
+      const freshActor = await activeActor(tx, actor.id);
+      return dashboardInTransaction(tx, freshActor, currentWeek(now));
+    });
+  }
   return connection.transaction(async (tx) => {
     await lockAdministration(tx, connection.dialect);
     const freshActor = await activeActor(tx, actor.id);

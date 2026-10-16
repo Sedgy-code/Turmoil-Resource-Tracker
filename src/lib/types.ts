@@ -33,6 +33,8 @@ export interface SessionResponse {
   demo: boolean;
   configured: boolean;
   error?: string;
+  /** Public address of the tracker; the browser moves there if opened elsewhere. */
+  canonicalOrigin?: string;
 }
 
 export interface DashboardResponse {

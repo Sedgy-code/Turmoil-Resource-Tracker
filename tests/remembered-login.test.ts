@@ -80,7 +80,7 @@ function request(token?: string) {
 
 async function requireRecheck(token: string) {
   await db.query(
-    "UPDATE auth_sessions SET expires_at = NOW() + INTERVAL '1 day', membership_checked_at = NOW() - INTERVAL '6 minutes' WHERE token_hash = $1",
+    "UPDATE auth_sessions SET expires_at = NOW() + INTERVAL '1 day', membership_checked_at = NOW() - INTERVAL '25 hours' WHERE token_hash = $1",
     [hashToken(token)],
   );
 }
@@ -226,6 +226,28 @@ test("a Discord outage keeps the session without renewal; a successful retry ren
     assert.equal(recovered.cookies.get(SESSION_COOKIE)?.value, token);
     assertSixMonths((await storedSession(token)).expires_at, before, after);
   } finally { globalThis.fetch = originalFetch; }
+});
+
+test("a brief Discord outage keeps a recently confirmed member signed in", async () => {
+  const token = await newSession();
+  await db.query(
+    "UPDATE auth_sessions SET membership_checked_at = NOW() - INTERVAL '2 hours' WHERE token_hash = $1",
+    [hashToken(token)],
+  );
+  const result = await authenticatedMember(token, {
+    db,
+    fetcher: (async () => Response.json({}, { status: 503 })) as typeof fetch,
+  });
+  assert.equal(result?.id, member.id);
+});
+
+test("a recently checked session is answered without contacting Discord", async () => {
+  const token = await newSession();
+  const result = await authenticatedMember(token, {
+    db,
+    fetcher: (async () => { throw new Error("Discord should not be called"); }) as typeof fetch,
+  });
+  assert.equal(result?.id, member.id);
 });
 
 test("a rejected Discord refresh token revokes the browser session", async () => {

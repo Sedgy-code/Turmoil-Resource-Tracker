@@ -245,7 +245,7 @@ describe("Authentication boundaries", () => {
     assert.notEqual(rows[0].encrypted_access_token, "sensitive-access");
     assert.equal((await authenticatedMember(token, { db }))?.id, member.id);
     await db.query(
-      "UPDATE auth_sessions SET membership_checked_at = NOW() - INTERVAL '6 minutes' WHERE token_hash = $1",
+      "UPDATE auth_sessions SET membership_checked_at = NOW() - INTERVAL '25 hours' WHERE token_hash = $1",
       [hashToken(token)],
     );
     await assert.rejects(
@@ -275,7 +275,7 @@ describe("Authentication boundaries", () => {
       db,
     );
     await db.query(
-      "UPDATE auth_sessions SET membership_checked_at = NOW() - INTERVAL '6 minutes' WHERE token_hash = $1",
+      "UPDATE auth_sessions SET membership_checked_at = NOW() - INTERVAL '25 hours' WHERE token_hash = $1",
       [hashToken(token)],
     );
     await assert.rejects(
@@ -314,7 +314,7 @@ describe("Authentication boundaries", () => {
       db,
     );
     await db.query(
-      "UPDATE auth_sessions SET membership_checked_at = NOW() - INTERVAL '6 minutes', oauth_expires_at = NOW() - INTERVAL '1 minute' WHERE token_hash = $1",
+      "UPDATE auth_sessions SET membership_checked_at = NOW() - INTERVAL '25 hours', oauth_expires_at = NOW() - INTERVAL '1 minute' WHERE token_hash = $1",
       [hashToken(token)],
     );
     let refreshes = 0;
@@ -365,7 +365,7 @@ describe("Authentication boundaries", () => {
       db,
     );
     await db.query(
-      "UPDATE auth_sessions SET membership_checked_at = NOW() - INTERVAL '6 minutes', oauth_expires_at = NOW() - INTERVAL '1 minute' WHERE token_hash = $1",
+      "UPDATE auth_sessions SET membership_checked_at = NOW() - INTERVAL '25 hours', oauth_expires_at = NOW() - INTERVAL '1 minute' WHERE token_hash = $1",
       [hashToken(token)],
     );
     const fetcher = (async (url) =>

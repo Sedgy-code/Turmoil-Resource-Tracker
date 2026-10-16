@@ -12,9 +12,16 @@ export function isDemo(): boolean {
   return true;
 }
 
+/** Vercel preview builds run on their own branch address, not the public one. */
+export function isPreviewDeployment(): boolean {
+  return process.env.VERCEL_ENV === "preview";
+}
+
 export function appUrl(): string {
   const value =
-    process.env.APP_URL ||
+    (isPreviewDeployment() && process.env.VERCEL_BRANCH_URL
+      ? `https://${process.env.VERCEL_BRANCH_URL}`
+      : process.env.APP_URL) ||
     (process.env.NODE_ENV !== "production" ? "http://localhost:3000" : "");
   try {
     const url = new URL(value);
