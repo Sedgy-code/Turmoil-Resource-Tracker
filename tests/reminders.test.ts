@@ -44,7 +44,7 @@ test("only members without this week's resource reward are reminded", async () =
 test("automatic posts are English only (the translation bot handles other languages)", () => {
   const otherScripts = /[\u3040-\u30ff\u4e00-\u9fff\uac00-\ud7af]|\u{1F1F9}\u{1F1FC}|\u{1F1E8}\u{1F1F3}|\u{1F1F0}\u{1F1F7}|\u{1F1EC}\u{1F1E7}/u;
   const reminder = reminderMessage(["<@1>"], "https://x");
-  assert.match(reminder, /Please save your resources this week \(\+20 Clan Points\): https:\/\/x/);
+  assert.match(reminder, /Please save your resources before Clan War Day 1 starts \(Tuesday 00:00 UTC\) \(\+20 Clan Points\): https:\/\/x/);
   assert.doesNotMatch(reminder, otherScripts);
   const shoutout = shoutoutMessage(["🥇 <@1> — 3 (8 wk)"], "https://x/snipes");
   assert.match(shoutout, /Thank you to everyone who joined last week's snipes!/);

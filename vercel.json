@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/cron/reminder",
-      "schedule": "0 8 * * 6"
+      "schedule": "0 12 * * 1"
     },
     {
       "path": "/api/cron/discord-sync",

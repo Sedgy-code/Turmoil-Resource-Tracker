@@ -27,13 +27,16 @@ export async function membersWithoutWeeklyUpdate(db: Database, week = currentWee
   return rows.map((row) => ({ discordId: String(row.discord_id), name: String(row.name) }));
 }
 
-/** English only: members use the server's translation bot for other languages. */
+/**
+ * Sent Monday 12:00 UTC (vercel.json): the gap day between wars, once rewards are claimed, so
+ * leadership has fresh numbers before Day 1. English only: the server's translation bot does the rest.
+ */
 export function reminderMessage(mentions: string[], link: string): string {
   return [
     "📋 **Weekly resource update**",
     mentions.join(" "),
     "",
-    `Please save your resources this week (+20 Clan Points): ${link}`,
+    `Please save your resources before Clan War Day 1 starts (Tuesday 00:00 UTC) (+20 Clan Points): ${link}`,
   ].join("\n");
 }
 

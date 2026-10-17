@@ -88,7 +88,7 @@ export function MemberHistoryPanel({ member, onClose, onChanged, notify }: {
         <h3><Sun size={15} />Holiday</h3>
         {current.holidayUntil
           ? <div className="history-strike"><div><strong>On holiday until {current.holidayUntil}</strong><small>No reminders, and the ranking shows 🏖️.</small></div><button className="button subtle small-button" disabled={busy} onClick={() => void act({ action: "holiday", until: null }, "Holiday ended.")}>End now</button></div>
-          : <p className="history-hint">Not on holiday. Members on holiday skip the Saturday reminder.</p>}
+          : <p className="history-hint">Not on holiday. Members on holiday skip the Monday reminder.</p>}
         <form className="history-form" onSubmit={setHoliday}>
           <label className="history-date"><CalendarDays size={14} /><input type="date" aria-label="Away until" min={today} value={until} onChange={(event) => setUntil(event.target.value)} /></label>
           <button className="button secondary small-button" disabled={busy || !until}>{current.holidayUntil ? "Change date" : "Set holiday"}</button>
