@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { initializeSchema, openDatabase, type Database } from "../src/lib/server/db";
 import { handleInteraction } from "../src/lib/server/discord-interactions";
-import { agreesToRules } from "../src/lib/server/discord-applications";
+import { agreesToRules, refreshApplyPost } from "../src/lib/server/discord-applications";
 
 const previous = { ...process.env };
 before(() => {
@@ -138,6 +138,8 @@ test("/apply-setup is for admins and posts the Apply button", async () => {
     assert.equal(posted.data.flags, undefined);
     assert.equal(posted.data.components?.[0].components[0].custom_id, "apply:open");
     assert.match(String(posted.data.content), /Want to join Turmoil\?[\s\S]*Clan Hub[\s\S]*black mark[\s\S]*Clan Tech Vials[\s\S]*will be removed[\s\S]*20B\+ power/);
+    // English only: the server's translation bot handles other languages.
+    assert.doesNotMatch(String(posted.data.content), /[\u3040-\u30ff\u4e00-\u9fff\uac00-\ud7af]/);
   });
 });
 
@@ -164,4 +166,19 @@ test("applicants must agree to the clan rules", async () => {
     assert.equal(calls.length, 0);
     assert.equal((await db.query("SELECT COUNT(*)::int AS n FROM discord_applications"))[0].n, 0);
   });
+});
+
+test("the Apply post in #apply can be updated in place to the latest wording", async () => {
+  const calls: Call[] = [];
+  const fetcher = (async (url: string, init?: RequestInit) => {
+    calls.push({ url, method: init?.method ?? "GET", body: init?.body ? JSON.parse(String(init.body)) : undefined });
+    if (url.endsWith("/channels/1560840057705857204/messages?limit=50"))
+      return Response.json([{ id: "a1", components: [] }, { id: "a2", components: [{ components: [{ custom_id: "apply:open" }] }] }]);
+    return Response.json({ id: "a2" });
+  }) as typeof fetch;
+  assert.deepEqual(await refreshApplyPost(fetcher), { updated: true });
+  const edit = calls.find((call) => call.method === "PATCH");
+  assert.equal(edit?.url, "https://discord.com/api/v10/channels/1560840057705857204/messages/a2");
+  assert.match(String(edit?.body?.content), /Want to join Turmoil\?/);
+  assert.doesNotMatch(String(edit?.body?.content), /[\u4e00-\u9fff\uac00-\ud7af]/);
 });

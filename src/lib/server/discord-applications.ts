@@ -19,6 +19,8 @@ export const APPLY_FORM_ID = "apply:form";
 const DECISION = /^apply:(accept|decline):([0-9a-f-]{36})$/;
 /** #📋-applications: the private Leadership channel where applications arrive. */
 export const APPLICATIONS_CHANNEL_ID = "1560839494612295741";
+/** #📝-apply: the public, read-only channel with the Apply button. */
+export const APPLY_CHANNEL_ID = "1560840057705857204";
 
 /** What every member commits to. Shown on the Apply post; applicants must type "I agree". */
 export const CLAN_RULES = [
@@ -54,7 +56,7 @@ type DiscordUser = { id?: string; username?: string; global_name?: string | null
 
 const ephemeral = (content: string) => ({ type: 4, data: { content, flags: EPHEMERAL, allowed_mentions: { parse: [] } } });
 
-/** The message /apply-setup posts: four languages, so guests don't need to translate it. */
+/** The message /apply-setup posts (English only: the server's translation bot handles the rest). */
 export function applyMessage() {
   return {
     content: [
@@ -65,10 +67,6 @@ export function applyMessage() {
       ...CLAN_RULES,
       "",
       "**Requirements:** 20B+ power · play every war day",
-      "",
-      "🇹🇼 想加入 Turmoil？點下方 **Apply** 填寫簡短表單。",
-      "🇨🇳 想加入 Turmoil？点下方 **Apply** 填写简短表格。",
-      "🇰🇷 Turmoil에 가입하고 싶다면 아래 **Apply**를 눌러 짧은 양식을 작성하세요.",
     ].join("\n"),
     allowed_mentions: { parse: [] },
     components: [{ type: 1, components: [{ type: 2, style: 1, label: "Apply", emoji: { name: "📝" }, custom_id: APPLY_BUTTON_ID }] }],
@@ -162,12 +160,7 @@ export async function submitApplication(connection: SqlConnection, interaction: 
   }
   const message = (await posted.json().catch(() => ({}))) as { id?: unknown };
   await connection.query("UPDATE discord_applications SET message_id = $2 WHERE id = $1", [id, String(message.id ?? "sent")]);
-  return ephemeral([
-    `✅ Thanks, ${values.game_name}! Your application is in. Leadership will reply to you here on Discord.`,
-    "🇹🇼 謝謝！已收到你的申請，管理層會在 Discord 回覆你。",
-    "🇨🇳 谢谢！已收到你的申请，管理层会在 Discord 回复你。",
-    "🇰🇷 감사합니다! 신청서가 접수되었습니다. 운영진이 Discord로 답장드릴게요.",
-  ].join("\n"));
+  return ephemeral(`✅ Thanks, ${values.game_name}! Your application is in. Leadership will reply to you here on Discord.`);
 }
 
 async function sendDirectMessage(token: string, discordId: string, content: string, fetcher: typeof fetch): Promise<boolean> {
@@ -227,4 +220,28 @@ export async function decideApplication(connection: SqlConnection, interaction: 
   const original = interaction.message?.content || `📝 Application from <@${applicant}> (${rows[0].game_name})`;
   // Type 7 replaces the leadership message, so the buttons disappear once answered.
   return { type: 7, data: { content: `${original}\n\n${[verdict, ...notes].join(" · ")}`, components: [], allowed_mentions: { parse: [] } } };
+}
+
+/**
+ * Updates the Apply post already in #📝-apply to the current wording (no need to delete and
+ * repost it). Finds the bot's message that carries the Apply button.
+ */
+export async function refreshApplyPost(fetcher: typeof fetch = fetch): Promise<{ updated: boolean; reason?: string }> {
+  const token = process.env.DISCORD_BOT_TOKEN;
+  if (!token) return { updated: false, reason: "Set DISCORD_BOT_TOKEN first." };
+  const headers = { Authorization: `Bot ${token}`, "Content-Type": "application/json" };
+  const channel = process.env.DISCORD_APPLY_CHANNEL_ID || APPLY_CHANNEL_ID;
+  const listed = await fetcher(`${DISCORD_API}/channels/${channel}/messages?limit=50`, { headers }).catch(() => null);
+  if (!listed?.ok) return { updated: false, reason: `Couldn’t read #📝-apply (HTTP ${listed?.status ?? "error"}).` };
+  const messages = (await listed.json().catch(() => [])) as { id: string; components?: { components?: { custom_id?: string }[] }[] }[];
+  const post = Array.isArray(messages)
+    ? messages.find((message) => message.components?.some((row) => row.components?.some((component) => component.custom_id === APPLY_BUTTON_ID)))
+    : undefined;
+  if (!post) return { updated: false, reason: "No Apply post found in #📝-apply. Run /apply-setup there first." };
+  const edited = await fetcher(`${DISCORD_API}/channels/${channel}/messages/${post.id}`, { method: "PATCH", headers, body: JSON.stringify(applyMessage()) }).catch(() => null);
+  if (!edited?.ok) {
+    const body = (await edited?.json().catch(() => null)) as { message?: unknown } | null;
+    return { updated: false, reason: typeof body?.message === "string" ? body.message : `HTTP ${edited?.status ?? "error"}` };
+  }
+  return { updated: true };
 }
