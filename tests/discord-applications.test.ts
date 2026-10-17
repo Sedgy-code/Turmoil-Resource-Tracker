@@ -9,7 +9,7 @@ const previous = { ...process.env };
 before(() => {
   Object.assign(process.env, { NODE_ENV: "test", APP_URL: "https://tracker.example", DISCORD_BOT_TOKEN: "bot", DISCORD_GUILD_ID: "999" });
   delete process.env.DISCORD_ROLE_ID;
-  delete process.env.DISCORD_LEADERSHIP_CHANNEL_ID;
+  delete process.env.DISCORD_APPLICATIONS_CHANNEL_ID;
 });
 after(() => { process.env = previous; });
 
@@ -27,7 +27,7 @@ function fakeDiscord(options: { leadershipOk?: boolean; dmOk?: boolean } = {}) {
   const calls: Call[] = [];
   const fetcher = (async (url: string, init?: RequestInit) => {
     calls.push({ url, method: init?.method ?? "GET", body: init?.body ? JSON.parse(String(init.body)) : undefined });
-    if (url.endsWith("/channels/1504758222974746645/messages"))
+    if (url.endsWith("/channels/1560839494612295741/messages"))
       return options.leadershipOk === false ? Response.json({ message: "Missing Permissions", code: 50013 }, { status: 403 }) : Response.json({ id: "m1" });
     if (url.endsWith("/guilds/999/roles")) return Response.json([{ id: "r1", name: "Turmoil" }, { id: "r2", name: "Leadership" }]);
     if (url.endsWith("/roles/r1") && init?.method === "PUT") return new Response(null, { status: 204 });
@@ -76,7 +76,7 @@ test("a sent form goes to leadership with Accept / Decline, and the applicant is
     const reply = await handleInteraction(form("900"), db, new Date(), fetcher) as Reply;
     assert.equal(reply.data.flags, 64);
     assert.match(String(reply.data.content), /Thanks, Kael!/);
-    const post = calls.find((call) => call.url.endsWith("/channels/1504758222974746645/messages"));
+    const post = calls.find((call) => call.url.endsWith("/channels/1560839494612295741/messages"));
     assert.ok(post);
     assert.match(String(post.body?.content), /In-game name:\*\* Kael[\s\S]*Power:\*\* 25B[\s\S]*Clan rules:\*\* ✅ agreed/);
     assert.deepEqual(post.body?.allowed_mentions, { parse: [] });

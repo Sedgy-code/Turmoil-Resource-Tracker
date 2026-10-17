@@ -2,13 +2,12 @@ import { randomUUID } from "node:crypto";
 import { appUrl, guildId } from "./config";
 import type { SqlConnection } from "./db";
 import { clanRoleId } from "./discord-sync";
-import { LEADERSHIP_CHANNEL_ID } from "./reminders";
 
 /**
  * Applying to join Turmoil, all inside Discord:
- * 1. An admin runs /apply-setup in a channel guests can see; the bot posts an Apply button there.
+ * 1. An admin runs /apply-setup in #📝-apply (public, read-only); the bot posts an Apply button there.
  * 2. A guest taps Apply (or runs /apply), fills in a short Discord form and agrees to the clan rules.
- * 3. The bot posts it in the leadership channel with Accept / Decline buttons.
+ * 3. The bot posts it in #📋-applications (Leadership only) with Accept / Decline buttons.
  * 4. An admin answers: the applicant gets a DM, and accepted players get the Turmoil role
  *    when the bot is allowed to give it.
  */
@@ -18,6 +17,8 @@ const EPHEMERAL = 64;
 export const APPLY_BUTTON_ID = "apply:open";
 export const APPLY_FORM_ID = "apply:form";
 const DECISION = /^apply:(accept|decline):([0-9a-f-]{36})$/;
+/** #📋-applications: the private Leadership channel where applications arrive. */
+export const APPLICATIONS_CHANNEL_ID = "1560839494612295741";
 
 /** What every member commits to. Shown on the Apply post; applicants must type "I agree". */
 export const CLAN_RULES = [
@@ -147,7 +148,7 @@ export async function submitApplication(connection: SqlConnection, interaction: 
     [id, discordId, name, values.game_name, values.power, values.server, values.about],
   );
   const token = process.env.DISCORD_BOT_TOKEN;
-  const channel = process.env.DISCORD_LEADERSHIP_CHANNEL_ID || LEADERSHIP_CHANNEL_ID;
+  const channel = process.env.DISCORD_APPLICATIONS_CHANNEL_ID || APPLICATIONS_CHANNEL_ID;
   const posted = token
     ? await fetcher(`${DISCORD_API}/channels/${channel}/messages`, {
         method: "POST",

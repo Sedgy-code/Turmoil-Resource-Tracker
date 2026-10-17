@@ -120,7 +120,7 @@ export async function sendSnipeShoutout(
 }
 
 /** #the-dictators-den, where leadership gets the upload reminders (vials Sunday, war results Monday). */
-export const LEADERSHIP_CHANNEL_ID = "1504758222974746645";
+const LEADERSHIP_CHANNEL_ID = "1504758222974746645";
 
 /** Which uploads are still missing for this clan week. */
 /**
