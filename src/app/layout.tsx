@@ -1,16 +1,31 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "@fontsource-variable/dm-sans";
 import "@fontsource-variable/manrope";
 import "./globals.css";
 import "./clan-theme.css";
 import "./planning.css";
 import "./member-help.css";
+import {
+  APP_DESCRIPTION,
+  APP_NAME,
+  APP_SHORT_NAME,
+  APP_THEME_COLOR,
+} from "@/lib/app-shell";
 
 export const metadata: Metadata = {
-  title: "Turmoil Clan Hub",
-  description:
-    "The Turmoil clan hub for Forge Masters. The Turmoil Way.",
-  applicationName: "Turmoil Clan Hub",
+  title: APP_NAME,
+  description: APP_DESCRIPTION,
+  applicationName: APP_NAME,
+  // Opened from an iPhone's home screen: full screen with a dark clock bar.
+  appleWebApp: {
+    capable: true,
+    title: APP_SHORT_NAME,
+    statusBarStyle: "black",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: APP_THEME_COLOR,
 };
 
 export default function RootLayout({

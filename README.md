@@ -24,7 +24,9 @@ The stack is Next.js 16, React 19, TypeScript, and PostgreSQL. Discord OAuth is 
 
 ## Clan branding
 
-The full crest is stored in `public/turmoil-crest.png` and is optimized for each screen by Next Image. A simplified emerald-and-gold emblem is used in navigation (`public/clan-emblem.svg`) and the browser tab (`src/app/icon.svg`). `src/components/clan-brand.tsx` renders both logo variants.
+The full crest is stored in `public/turmoil-crest.png` and is optimized for each screen by Next Image. A small copy (`public/turmoil-crest-mark.webp`) is used in navigation. `src/components/clan-brand.tsx` renders both logo variants.
+
+The browser tab icon (`src/app/icon.png`), the iPhone home screen icon (`src/app/apple-icon.png`) and the Android home screen icons (`public/app-icons/`) are all made from the crest. `src/app/manifest.ts` lets members add the hub to their phone's home screen and open it full screen, like an app, with no browser bar; its name, colour and icon list live in `src/lib/app-shell.ts`.
 
 The core palette is defined at the beginning of `src/app/globals.css`; clan-specific surfaces, controls, and responsive crest layouts are in `src/app/clan-theme.css`. Publishing design changes to the GitHub branch connected to Vercel triggers a new website deployment. Editing the downloaded Windows folder updates only the local copy.
 
