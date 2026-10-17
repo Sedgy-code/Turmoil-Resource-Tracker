@@ -1,0 +1,83 @@
+/* Opened from a phone's home screen, the hub fills the whole screen (viewport-fit=cover in
+   layout.tsx), so on iPhones the page can sit under the clock, the notch and the home bar.
+   These keep content clear of them. On computers and most Android phones the safe-area
+   values are 0, so nothing changes there. */
+body {
+  padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+.app-shell, .login-page {
+  min-height: calc(100vh - env(safe-area-inset-top));
+}
+/* A solid strip behind the phone's clock, so scrolled content never shows through it. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto;
+  height: env(safe-area-inset-top);
+  background: var(--bg);
+  z-index: 120;
+  pointer-events: none;
+}
+.sidebar {
+  padding-top: calc(32px + env(safe-area-inset-top));
+}
+@media (max-width: 800px) {
+  .sidebar {
+    padding-top: calc(28px + env(safe-area-inset-top));
+  }
+}
+
+/* Member contributions on phones: a narrower pinned member column (smaller picture, long
+   names shortened with "…") and tighter number columns, so more resources fit beside it. */
+@media (max-width: 650px) {
+  .resource-table .sticky-member {
+    min-width: 0;
+    padding-left: 12px;
+    padding-right: 10px;
+  }
+  .resource-table th.sticky-member,
+  .resource-table td.sticky-member {
+    padding-left: 12px;
+  }
+  .resource-table td.sticky-member .table-member {
+    width: min(34vw, 150px);
+    gap: 8px;
+  }
+  .resource-table td.sticky-member .avatar {
+    width: 26px;
+    height: 26px;
+    font-size: 8px;
+    flex-shrink: 0;
+  }
+  .resource-table td.sticky-member .table-member > div {
+    flex: 1;
+    min-width: 0;
+  }
+  .resource-table td.sticky-member .table-member strong {
+    min-width: 0;
+  }
+  .resource-table td.sticky-member .member-name {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+  }
+  .resource-table td.sticky-member .member-name > :not(.member-name-text) {
+    flex-shrink: 0;
+  }
+  .resource-table td.sticky-member .member-name-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .resource-table td.sticky-member .row-missing {
+    max-width: none;
+  }
+  .resource-table th:not(.sticky-member),
+  .resource-table td:not(.sticky-member) {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+}

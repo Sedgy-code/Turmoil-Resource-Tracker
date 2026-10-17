@@ -5,6 +5,7 @@ import "./globals.css";
 import "./clan-theme.css";
 import "./planning.css";
 import "./member-help.css";
+import "./app-shell.css";
 import {
   APP_DESCRIPTION,
   APP_NAME,
@@ -26,6 +27,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: APP_THEME_COLOR,
+  // Lets the page use the whole phone screen; app-shell.css keeps content clear of the clock and notch.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
