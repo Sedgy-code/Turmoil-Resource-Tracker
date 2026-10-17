@@ -29,7 +29,6 @@ export function ContributionRanking() {
   const [data, setData] = useState<ContributionRankingResponse | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [hideNew, setHideNew] = useState(true);
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -42,7 +41,7 @@ export function ContributionRanking() {
     finally { setLoading(false); }
   }, []);
   useEffect(() => { void load(); }, [load]);
-  const rows = (data?.rows ?? []).filter((row) => !hideNew || !row.isNew);
+  const rows = data?.rows ?? [];
   const { sorted, header } = useSortable<ContributionRow, Column>(rows, {
     rank: (row) => -row.rank,
     member: (row) => row.member.username,
@@ -71,7 +70,6 @@ export function ContributionRanking() {
         {missing.length > 0 && <p className="hoard-typical">{t("Not counted yet (no records): {parts}", { parts: missing.map((metric) => t(METRIC_LABELS[metric])).join(", ") })}</p>}
       </div>
       <div className="rank-controls">
-        <label className="rank-toggle"><input type="checkbox" checked={hideNew} onChange={(event) => setHideNew(event.target.checked)} />{t("Hide new members (under 2 weeks)")}</label>
         <button className="button subtle" onClick={() => downloadRows(`turmoil-ranking-${new Date().toISOString().slice(0, 10)}.csv`, [
           ["Rank", "Member", "Score", "Penalty", "War points (avg)", "Wars played", "Vials donated", "Snipes (8 wk)", "No-shows", "Weekly updates", "Spent in wars", "Hoarding", "Strikes", "Holiday until", "Days in clan", "Last saved", "Never signed in"],
           ...sorted.map((row) => [row.rank, row.member.username, row.score, row.penalty, row.warPoints === null ? "" : Math.round(row.warPoints), row.warsPlayed, row.vials ?? "", row.snipes, row.noShows, row.updates, row.warSpending === null ? "" : Math.round(row.warSpending), row.hoarding, row.member.strikes ?? 0, row.member.holidayUntil ?? "", row.daysInClan, row.lastSavedAt ?? "", row.member.neverSignedIn ? "Yes" : ""]),
