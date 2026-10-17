@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { initializeSchema, openDatabase, type Database } from "../src/lib/server/db";
 import { handleInteraction } from "../src/lib/server/discord-interactions";
+import { agreesToRules } from "../src/lib/server/discord-applications";
 
 const previous = { ...process.env };
 before(() => {
@@ -40,8 +41,8 @@ function fakeDiscord(options: { leadershipOk?: boolean; dmOk?: boolean } = {}) {
 const button = (discordId: string, customId: string, content?: string) =>
   ({ type: 3, guild_id: "999", member: { user: { id: discordId, username: "guest" } }, message: { content }, data: { custom_id: customId } });
 
-function form(discordId: string, gameName = "Kael") {
-  const values: Record<string, string> = { game_name: gameName, power: "25B", server: "27", war_days: "All 6", about: "English, online daily" };
+function form(discordId: string, gameName = "Kael", agree = "I agree") {
+  const values: Record<string, string> = { game_name: gameName, power: "25B", server: "27", about: "English, online daily", agree };
   return {
     type: 5,
     guild_id: "999",
@@ -77,7 +78,7 @@ test("a sent form goes to leadership with Accept / Decline, and the applicant is
     assert.match(String(reply.data.content), /Thanks, Kael!/);
     const post = calls.find((call) => call.url.endsWith("/channels/1504758222974746645/messages"));
     assert.ok(post);
-    assert.match(String(post.body?.content), /In-game name:\*\* Kael[\s\S]*Power:\*\* 25B[\s\S]*War days:\*\* All 6/);
+    assert.match(String(post.body?.content), /In-game name:\*\* Kael[\s\S]*Power:\*\* 25B[\s\S]*Clan rules:\*\* ✅ agreed/);
     assert.deepEqual(post.body?.allowed_mentions, { parse: [] });
     const ids = (post.body?.components as Reply["data"]["components"])![0].components.map((component) => component.custom_id);
     assert.match(ids[0], /^apply:accept:[0-9a-f-]{36}$/);
@@ -136,7 +137,7 @@ test("/apply-setup is for admins and posts the Apply button", async () => {
     assert.equal(posted.type, 4);
     assert.equal(posted.data.flags, undefined);
     assert.equal(posted.data.components?.[0].components[0].custom_id, "apply:open");
-    assert.match(String(posted.data.content), /Want to join Turmoil\?[\s\S]*20B\+ power/);
+    assert.match(String(posted.data.content), /Want to join Turmoil\?[\s\S]*Clan Hub[\s\S]*black mark[\s\S]*Clan Tech Vials[\s\S]*will be removed[\s\S]*20B\+ power/);
   });
 });
 
@@ -147,5 +148,20 @@ test("if leadership can't be reached, the applicant is told and can try again", 
     assert.match(String(reply.data.content), /couldn’t be sent/);
     const retry = await handleInteraction(button("900", "apply:open"), db, new Date(), fetcher) as Reply;
     assert.equal(retry.type, 9);
+  });
+});
+
+test("applicants must agree to the clan rules", async () => {
+  assert.equal(agreesToRules("I agree"), true);
+  assert.equal(agreesToRules("yes I AGREE."), true);
+  assert.equal(agreesToRules("I don't agree"), false);
+  assert.equal(agreesToRules("disagree"), false);
+  assert.equal(agreesToRules("ok"), false);
+  await withDatabase(async (db) => {
+    const { calls, fetcher } = fakeDiscord();
+    const reply = await handleInteraction(form("900", "Kael", "maybe"), db, new Date(), fetcher) as Reply;
+    assert.match(String(reply.data.content), /need to agree to our clan rules/);
+    assert.equal(calls.length, 0);
+    assert.equal((await db.query("SELECT COUNT(*)::int AS n FROM discord_applications"))[0].n, 0);
   });
 });

@@ -7,7 +7,7 @@ import { LEADERSHIP_CHANNEL_ID } from "./reminders";
 /**
  * Applying to join Turmoil, all inside Discord:
  * 1. An admin runs /apply-setup in a channel guests can see; the bot posts an Apply button there.
- * 2. A guest taps Apply (or runs /apply) and fills in a short Discord form.
+ * 2. A guest taps Apply (or runs /apply), fills in a short Discord form and agrees to the clan rules.
  * 3. The bot posts it in the leadership channel with Accept / Decline buttons.
  * 4. An admin answers: the applicant gets a DM, and accepted players get the Turmoil role
  *    when the bot is allowed to give it.
@@ -19,13 +19,27 @@ export const APPLY_BUTTON_ID = "apply:open";
 export const APPLY_FORM_ID = "apply:form";
 const DECISION = /^apply:(accept|decline):([0-9a-f-]{36})$/;
 
+/** What every member commits to. Shown on the Apply post; applicants must type "I agree". */
+export const CLAN_RULES = [
+  "📊 Join the Clan Hub (our resource tracker) and update your resources every week",
+  "⚔️ Spend resources only on Clan War days. Spending outside them earns a black mark",
+  "🧪 Put Clan Tech Vials first in clan missions. They power the whole clan’s progress",
+  "🤝 Play as a team. Players who put their own progress first will be removed",
+];
+
 const FIELDS = [
   { id: "game_name", label: "In-game name", style: 1, max: 40, required: true, placeholder: "Exactly as it shows in Forge Master" },
   { id: "power", label: "Power", style: 1, max: 20, required: true, placeholder: "e.g. 25B" },
   { id: "server", label: "Server", style: 1, max: 20, required: true, placeholder: "e.g. 27" },
-  { id: "war_days", label: "War days you can play each week", style: 1, max: 20, required: true, placeholder: "e.g. All 6" },
   { id: "about", label: "Languages and anything else about you", style: 2, max: 500, required: false, placeholder: "e.g. English and Chinese, online every day" },
+  { id: "agree", label: "Type I AGREE to accept our clan rules", style: 1, max: 20, required: true, placeholder: "I agree" },
 ] as const;
+
+/** "I agree", "yes i agree", "AGREE" count; "I don't agree" or "disagree" don't. */
+export function agreesToRules(answer: string): boolean {
+  const words = answer.toLowerCase().replace(/[^a-z\s']/g, " ");
+  return /\bagree\b/.test(words) && !/\b(dis|not|don't|dont|no)\b|disagree/.test(words);
+}
 type FieldId = (typeof FIELDS)[number]["id"];
 
 export type ApplyInteraction = {
@@ -46,11 +60,14 @@ export function applyMessage() {
       "📝 **Want to join Turmoil?**",
       "Tap **Apply** below and fill in the short form. Leadership will reply to you here on Discord.",
       "",
+      "**By applying, you agree to:**",
+      ...CLAN_RULES,
+      "",
+      "**Requirements:** 20B+ power · play every war day",
+      "",
       "🇹🇼 想加入 Turmoil？點下方 **Apply** 填寫簡短表單。",
       "🇨🇳 想加入 Turmoil？点下方 **Apply** 填写简短表格。",
       "🇰🇷 Turmoil에 가입하고 싶다면 아래 **Apply**를 눌러 짧은 양식을 작성하세요.",
-      "",
-      "**Requirements:** 20B+ power · play every war day",
     ].join("\n"),
     allowed_mentions: { parse: [] },
     components: [{ type: 1, components: [{ type: 2, style: 1, label: "Apply", emoji: { name: "📝" }, custom_id: APPLY_BUTTON_ID }] }],
@@ -101,8 +118,8 @@ function leadershipMessage(id: string, discordId: string, name: string, values: 
       `**In-game name:** ${values.game_name}`,
       `**Power:** ${values.power}`,
       `**Server:** ${values.server}`,
-      `**War days:** ${values.war_days}`,
       `**About:** ${values.about || "—"}`,
+      "**Clan rules:** ✅ agreed",
     ].join("\n"),
     allowed_mentions: { parse: [] },
     components: [{
@@ -119,13 +136,15 @@ function leadershipMessage(id: string, discordId: string, name: string, values: 
 export async function submitApplication(connection: SqlConnection, interaction: ApplyInteraction, discordId: string, fetcher: typeof fetch = fetch) {
   const values = formValues(interaction);
   if (!values.game_name) return ephemeral("Please add your in-game name and try again.");
+  if (!agreesToRules(values.agree))
+    return ephemeral("To join Turmoil you need to agree to our clan rules. Tap **Apply** again and type **I agree** in the last box.");
   const user = interaction.member?.user ?? interaction.user;
   const name = displayName(user, interaction.member?.nick);
   const id = randomUUID();
   await connection.query(
-    `INSERT INTO discord_applications (id, discord_id, discord_name, game_name, power, server, war_days, about)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-    [id, discordId, name, values.game_name, values.power, values.server, values.war_days, values.about],
+    `INSERT INTO discord_applications (id, discord_id, discord_name, game_name, power, server, about, agreed)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE)`,
+    [id, discordId, name, values.game_name, values.power, values.server, values.about],
   );
   const token = process.env.DISCORD_BOT_TOKEN;
   const channel = process.env.DISCORD_LEADERSHIP_CHANNEL_ID || LEADERSHIP_CHANNEL_ID;
@@ -195,7 +214,12 @@ export async function decideApplication(connection: SqlConnection, interaction: 
   const notes: string[] = [];
   if (token && status === "accepted") notes.push((await giveClanRole(token, applicant, fetcher)) ? "Turmoil role given" : "⚠️ couldn’t give the Turmoil role, please add it by hand");
   const dm = status === "accepted"
-    ? `🎉 **Welcome to Turmoil!** Your application was accepted. A leader will invite you in game soon.\nSign in to our Clan Hub with Discord: ${appUrl()}\n***The Turmoil Way.***`
+    ? [
+        "🎉 **Welcome to Turmoil!** Your application was accepted. A leader will invite you in game soon.",
+        `Sign in to our Clan Hub with Discord and save your resources: ${appUrl()}`,
+        "Remember: spend only on Clan War days, put Clan Tech Vials first in clan missions, and play as a team.",
+        "***The Turmoil Way.***",
+      ].join("\n")
     : "Thanks for applying to **Turmoil**. We can’t take you in right now, but you’re welcome to apply again later. Good luck out there! ⚔️";
   if (token) notes.push((await sendDirectMessage(token, applicant, dm, fetcher)) ? "DM sent" : "⚠️ couldn’t DM them (their DMs are closed)");
   const verdict = status === "accepted" ? `✅ **Accepted** by ${decidedBy}` : `✖️ **Declined** by ${decidedBy}`;

@@ -256,4 +256,5 @@ CREATE TABLE IF NOT EXISTS discord_applications (
   decided_by TEXT CHECK (LENGTH(decided_by) <= 100)
 );
 CREATE INDEX IF NOT EXISTS discord_applications_discord_idx ON discord_applications(discord_id, created_at DESC);
+ALTER TABLE discord_applications ADD COLUMN IF NOT EXISTS agreed BOOLEAN NOT NULL DEFAULT FALSE;
 `;
