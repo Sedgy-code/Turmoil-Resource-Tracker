@@ -1,6 +1,7 @@
 import { AWARDS } from "../awards";
 import { appUrl } from "./config";
 import { database, type Database, type SqlConnection } from "./db";
+import { webhookLook } from "./discord-branding";
 import { ApiError } from "./errors";
 import type { AwardKey, MonthlyAwards } from "../types";
 import { numberFormat } from "../resources";
@@ -104,6 +105,7 @@ export async function sendMonthlyAwards(dependencies: { db?: Database; fetcher?:
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      ...webhookLook(),
       content: awardsMessage(awards, (id) => `<@${discordIds.get(id)}>`, appUrl()),
       allowed_mentions: { parse: [], users: mentioned.map((id) => discordIds.get(id)).filter(Boolean).slice(0, 100) },
     }),

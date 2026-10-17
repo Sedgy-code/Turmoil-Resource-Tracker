@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { initializeSchema, openDatabase, type Database } from "../src/lib/server/db";
 import { registerDiscordMember } from "../src/lib/server/auth";
-import { membersWithoutWeeklyUpdate, reminderMessage, sendWeeklyReminder } from "../src/lib/server/reminders";
+import { membersWithoutWeeklyUpdate, reminderMessage, sendWeeklyReminder, shoutoutMessage } from "../src/lib/server/reminders";
 import { currentWeek } from "../src/lib/resources";
 
 let db: Database;
@@ -25,7 +25,7 @@ test("only members without this week's resource reward are reminded", async () =
   const pending = await membersWithoutWeeklyUpdate(db);
   assert.deepEqual(pending.map((member) => member.discordId), ["222222222222222222"]);
 
-  const sent: { url: string; body: { content: string; allowed_mentions: { users: string[]; parse: string[] } } }[] = [];
+  const sent: { url: string; body: { content: string; username: string; avatar_url: string; allowed_mentions: { users: string[]; parse: string[] } } }[] = [];
   const fetcher = (async (url: string, init: RequestInit) => {
     sent.push({ url, body: JSON.parse(String(init.body)) });
     return new Response(null, { status: 204 });
@@ -36,11 +36,19 @@ test("only members without this week's resource reward are reminded", async () =
   assert.deepEqual(sent[0].body.allowed_mentions, { parse: [], users: ["222222222222222222"] });
   assert.match(sent[0].body.content, /<@222222222222222222>/);
   assert.match(sent[0].body.content, /https:\/\/tracker\.example\/resources/);
+  // Same name and crest as the Turmoil bot, not the webhook's own name and a blank icon.
+  assert.equal(sent[0].body.username, "Turmoil");
+  assert.equal(sent[0].body.avatar_url, "https://tracker.example/app-icons/icon-maskable-512.png");
 });
 
-test("the reminder text includes all four languages", () => {
-  const text = reminderMessage(["<@1>"], "https://x");
-  for (const phrase of ["Please save", "請在本週", "请在本周", "이번 주"]) assert.ok(text.includes(phrase));
+test("automatic posts are English only (the translation bot handles other languages)", () => {
+  const otherScripts = /[\u3040-\u30ff\u4e00-\u9fff\uac00-\ud7af]|\u{1F1F9}\u{1F1FC}|\u{1F1E8}\u{1F1F3}|\u{1F1F0}\u{1F1F7}|\u{1F1EC}\u{1F1E7}/u;
+  const reminder = reminderMessage(["<@1>"], "https://x");
+  assert.match(reminder, /Please save your resources this week \(\+20 Clan Points\): https:\/\/x/);
+  assert.doesNotMatch(reminder, otherScripts);
+  const shoutout = shoutoutMessage(["🥇 <@1> — 3 (8 wk)"], "https://x/snipes");
+  assert.match(shoutout, /Thank you to everyone who joined last week's snipes!/);
+  assert.doesNotMatch(shoutout, otherScripts);
 });
 
 test("leadership reminders: vials on Sunday, war results on Monday for the war that just ended", async () => {

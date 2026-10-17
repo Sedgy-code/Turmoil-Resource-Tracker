@@ -40,11 +40,12 @@ test("awards use war totals, each week's last vial upload, and full weekly saves
 });
 
 test("the monthly job stores awards and mentions only winners", async () => {
-  const sent: { allowed_mentions: { users: string[] } }[] = [];
+  const sent: { username: string; allowed_mentions: { users: string[] } }[] = [];
   const fetcher = (async (_url: string, init: RequestInit) => { sent.push(JSON.parse(String(init.body))); return new Response("{}", { status: 200 }); }) as typeof fetch;
   const result = await sendMonthlyAwards({ db, fetcher, now: new Date("2026-10-01T00:20:00Z") });
   assert.equal(result.posted, true);
   assert.deepEqual(sent[0].allowed_mentions.users.sort(), ["11", "22", "33"]);
+  assert.equal(sent[0].username, "Turmoil");
   const stored = await storedAwards(db);
   assert.equal(stored?.month, "2026-09");
   assert.equal(stored?.items.length, 3);

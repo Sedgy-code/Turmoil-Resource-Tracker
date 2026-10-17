@@ -2,6 +2,7 @@ import { warWeekOf } from "../war-calendar";
 import { currentWeek } from "../resources";
 import { appUrl } from "./config";
 import { database, type Database } from "./db";
+import { webhookLook } from "./discord-branding";
 import { ApiError } from "./errors";
 import { snipeRecognition } from "./war-results";
 
@@ -26,16 +27,13 @@ export async function membersWithoutWeeklyUpdate(db: Database, week = currentWee
   return rows.map((row) => ({ discordId: String(row.discord_id), name: String(row.name) }));
 }
 
-/** One short message in all four languages, so nobody needs to translate it. */
+/** English only: members use the server's translation bot for other languages. */
 export function reminderMessage(mentions: string[], link: string): string {
   return [
-    "📋 **Weekly resource update · 每週資源更新 · 每周资源更新 · 주간 자원 업데이트**",
+    "📋 **Weekly resource update**",
     mentions.join(" "),
     "",
-    `🇬🇧 Please save your resources this week (+20 Clan Points): ${link}`,
-    `🇹🇼 請在本週儲存你的資源（+20 公會點數）：${link}`,
-    `🇨🇳 请在本周保存你的资源（+20 公会点数）：${link}`,
-    `🇰🇷 이번 주 자원을 저장해 주세요 (+20 클랜 포인트): ${link}`,
+    `Please save your resources this week (+20 Clan Points): ${link}`,
   ].join("\n");
 }
 
@@ -65,6 +63,7 @@ export async function sendWeeklyReminder(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        ...webhookLook(),
         content: reminderMessage(mentions, link),
         // Only ping the listed members, never @everyone or roles.
         allowed_mentions: { parse: [], users: mentions.map((mention) => mention.slice(2, -1)) },
@@ -75,15 +74,12 @@ export async function sendWeeklyReminder(
   return { week, pending: pending.length, posted: true };
 }
 
-/** Thank-you post naming everyone confirmed at a snipe last clan week, with their recent count. */
+/** Thank-you post naming everyone confirmed at a snipe last clan week, with their recent count (English only). */
 export function shoutoutMessage(lines: string[], link: string): string {
   return [
-    "🎯 **Snipe Champions · 狙擊冠軍 · 狙击冠军 · 스나이프 챔피언**",
+    "🎯 **Snipe Champions**",
     "",
-    "🇬🇧 Thank you to everyone who joined last week's snipes!",
-    "🇹🇼 感謝上週參加狙擊的每一位！",
-    "🇨🇳 感谢上周参加狙击的每一位！",
-    "🇰🇷 지난주 스나이프에 참여한 모든 분께 감사드려요!",
+    "Thank you to everyone who joined last week's snipes!",
     "",
     ...lines,
     "",
@@ -110,6 +106,7 @@ export async function sendSnipeShoutout(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      ...webhookLook(),
       content: shoutoutMessage(lines, `${appUrl()}/snipes`),
       // Mention only the thanked members.
       allowed_mentions: { parse: [], users: champions.map((id) => discordIds.get(id)) },

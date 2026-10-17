@@ -6,6 +6,11 @@ const DISCORD_API = "https://discord.com/api/v10";
 export const BOT_NAME = "Turmoil";
 export const BOT_AVATAR_PATH = "/app-icons/icon-maskable-512.png";
 
+/** Name and picture for posts sent through a webhook, which would otherwise show the webhook's own name and a blank icon. */
+export function webhookLook(): { username: string; avatar_url: string } {
+  return { username: BOT_NAME, avatar_url: `${appUrl()}${BOT_AVATAR_PATH}` };
+}
+
 export interface BrandingResult {
   nickname: boolean;
   username: boolean;
