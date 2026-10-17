@@ -4,6 +4,16 @@ import { database, lockAdministration, type Database, type SqlConnection } from 
 import { guildId } from "./config";
 import { iso, memberFromRow } from "./mappers";
 import { awardWeeklyDew, SNIPE_REWARD_WINDOW_MS } from "./planning";
+import {
+  APPLY_BUTTON_ID,
+  APPLY_FORM_ID,
+  applyMessage,
+  decideApplication,
+  isApplicationDecision,
+  openApplyForm,
+  submitApplication,
+  type ApplyInteraction,
+} from "./discord-applications";
 
 /** The Turmoil Resource Tracker app's public key (not a secret); DISCORD_PUBLIC_KEY overrides it. */
 const DEFAULT_PUBLIC_KEY = "d88e07eec52a0316cdf5f908e6e5236bfe5ec519c80bc3beb625f8da44677709";
@@ -24,13 +34,7 @@ export function verifyDiscordSignature(body: string, signature: string | null, t
   }
 }
 
-type Interaction = {
-  type: number;
-  guild_id?: string;
-  member?: { user?: { id?: string } };
-  user?: { id?: string };
-  data?: { name?: string; custom_id?: string };
-};
+type Interaction = ApplyInteraction & { guild_id?: string };
 
 const reply = (content: string, ephemeral = true) => ({ type: 4, data: { content, flags: ephemeral ? EPHEMERAL : 0, allowed_mentions: { parse: [] } } });
 
@@ -86,7 +90,7 @@ async function isAdmin(connection: SqlConnection, discordId: string): Promise<bo
 }
 
 /** Handles slash commands and button presses sent by Discord. */
-export async function handleInteraction(interaction: Interaction, db?: Database, now = new Date()): Promise<unknown> {
+export async function handleInteraction(interaction: Interaction, db?: Database, now = new Date(), fetcher: typeof fetch = fetch): Promise<unknown> {
   if (interaction.type === 1) return { type: 1 };
   const connection = db ?? await database();
   const discordId = interaction.member?.user?.id ?? interaction.user?.id;
@@ -110,10 +114,19 @@ export async function handleInteraction(interaction: Interaction, db?: Database,
       },
     };
   }
+  // Applying to join (see discord-applications.ts).
+  if (interaction.type === 2 && interaction.data?.name === "apply") return openApplyForm(connection, discordId);
+  if (interaction.type === 3 && interaction.data?.custom_id === APPLY_BUTTON_ID) return openApplyForm(connection, discordId);
+  if (interaction.type === 5 && interaction.data?.custom_id === APPLY_FORM_ID) return submitApplication(connection, interaction, discordId, fetcher);
+  if (interaction.type === 3 && isApplicationDecision(interaction.data?.custom_id)) return decideApplication(connection, interaction, discordId, fetcher);
+  if (interaction.type === 2 && interaction.data?.name === "apply-setup") {
+    if (!(await isAdmin(connection, discordId))) return reply("Only clan admins can post the Apply button.");
+    return { type: 4, data: applyMessage() };
+  }
   return reply("Unknown command.");
 }
 
-/** Adds /checkin and /snipe-start to the Turmoil server (safe to repeat). */
+/** Adds /checkin, /snipe-start, /apply and /apply-setup to the Turmoil server (safe to repeat). */
 export async function registerCommands(fetcher: typeof fetch = fetch): Promise<boolean> {
   const token = process.env.DISCORD_BOT_TOKEN;
   if (!token || !guildId()) {
@@ -127,6 +140,8 @@ export async function registerCommands(fetcher: typeof fetch = fetch): Promise<b
     body: JSON.stringify([
       { name: "checkin", description: "Check in for the snipe that's happening now (+10 Clan Points)", type: 1 },
       { name: "snipe-start", description: "Admins: post the check-in button for the snipe starting now", type: 1 },
+      { name: "apply", description: "Apply to join Turmoil", type: 1 },
+      { name: "apply-setup", description: "Admins: post the Apply button in this channel", type: 1 },
     ]),
   });
   if (!response.ok) {

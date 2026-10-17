@@ -4,7 +4,7 @@ import { handleInteraction, verifyDiscordSignature } from "@/lib/server/discord-
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Discord sends /checkin, /snipe-start and button presses here (Interactions Endpoint URL). */
+/** Discord sends /checkin, /snipe-start, /apply, /apply-setup, buttons and forms here (Interactions Endpoint URL). */
 export async function POST(request: Request) {
   const body = await request.text();
   if (!verifyDiscordSignature(body, request.headers.get("x-signature-ed25519"), request.headers.get("x-signature-timestamp"))) {

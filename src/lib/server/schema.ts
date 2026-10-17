@@ -240,4 +240,20 @@ CREATE TABLE IF NOT EXISTS monthly_awards (
   value BIGINT NOT NULL DEFAULT 0,
   PRIMARY KEY (month, award, member_id)
 );
+CREATE TABLE IF NOT EXISTS discord_applications (
+  id TEXT PRIMARY KEY,
+  discord_id TEXT NOT NULL CHECK (LENGTH(discord_id) <= 30),
+  discord_name TEXT NOT NULL DEFAULT '' CHECK (LENGTH(discord_name) <= 100),
+  game_name TEXT NOT NULL CHECK (LENGTH(game_name) BETWEEN 1 AND 40),
+  power TEXT NOT NULL DEFAULT '' CHECK (LENGTH(power) <= 20),
+  server TEXT NOT NULL DEFAULT '' CHECK (LENGTH(server) <= 20),
+  war_days TEXT NOT NULL DEFAULT '' CHECK (LENGTH(war_days) <= 20),
+  about TEXT NOT NULL DEFAULT '' CHECK (LENGTH(about) <= 500),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','accepted','declined')),
+  message_id TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  decided_at TIMESTAMPTZ,
+  decided_by TEXT CHECK (LENGTH(decided_by) <= 100)
+);
+CREATE INDEX IF NOT EXISTS discord_applications_discord_idx ON discord_applications(discord_id, created_at DESC);
 `;

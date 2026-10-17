@@ -25,7 +25,7 @@ interface GuildMember {
 }
 
 /** The clan's Discord role ("Turmoil" unless DISCORD_CLAN_ROLE_NAME says otherwise). */
-async function clanRoleId(token: string, fetcher: typeof fetch): Promise<string | null> {
+export async function clanRoleId(token: string, fetcher: typeof fetch): Promise<string | null> {
   if (process.env.DISCORD_ROLE_ID) return process.env.DISCORD_ROLE_ID;
   const response = await fetcher(`https://discord.com/api/v10/guilds/${encodeURIComponent(guildId())}/roles`, { headers: { Authorization: `Bot ${token}` } });
   if (!response.ok) return null;
