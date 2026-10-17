@@ -227,27 +227,6 @@ CREATE TABLE IF NOT EXISTS member_events (
   created_by TEXT REFERENCES app_members(id)
 );
 CREATE INDEX IF NOT EXISTS member_events_member_idx ON member_events(member_id, created_at DESC);
-CREATE TABLE IF NOT EXISTS applications (
-  id TEXT PRIMARY KEY,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','accepted','declined')),
-  game_name TEXT NOT NULL CHECK (LENGTH(game_name) BETWEEN 1 AND 40),
-  discord_name TEXT NOT NULL CHECK (LENGTH(discord_name) BETWEEN 2 AND 40),
-  power TEXT NOT NULL DEFAULT '' CHECK (LENGTH(power) <= 20),
-  stage TEXT NOT NULL DEFAULT '' CHECK (LENGTH(stage) <= 20),
-  server TEXT NOT NULL DEFAULT '' CHECK (LENGTH(server) <= 20),
-  timezone TEXT NOT NULL DEFAULT '' CHECK (LENGTH(timezone) <= 20),
-  war_days TEXT NOT NULL DEFAULT '' CHECK (LENGTH(war_days) <= 20),
-  languages TEXT NOT NULL DEFAULT '' CHECK (LENGTH(languages) <= 80),
-  about TEXT NOT NULL DEFAULT '' CHECK (LENGTH(about) <= 1000),
-  ip_hash TEXT NOT NULL DEFAULT '',
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  decided_at TIMESTAMPTZ,
-  decided_by TEXT,
-  discord_message_id TEXT
-);
-CREATE INDEX IF NOT EXISTS applications_created_idx ON applications(created_at DESC);
-ALTER TABLE clan_settings ADD COLUMN IF NOT EXISTS applications_open BOOLEAN NOT NULL DEFAULT TRUE;
-ALTER TABLE clan_settings ADD COLUMN IF NOT EXISTS applications_channel_id TEXT;
 CREATE TABLE IF NOT EXISTS clan_tech_levels (
   node_key TEXT PRIMARY KEY CHECK (LENGTH(node_key) <= 60),
   level INTEGER NOT NULL CHECK (level BETWEEN 0 AND 100),

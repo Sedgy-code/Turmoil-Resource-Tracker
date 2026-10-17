@@ -267,22 +267,3 @@ export interface ContributionRankingResponse {
   generatedAt: string;
 }
 
-export type ApplicationStatus = "pending" | "accepted" | "declined";
-export interface Application {
-  id: string;
-  status: ApplicationStatus;
-  gameName: string;
-  discordName: string;
-  power: string;
-  stage: string;
-  server: string;
-  timezone: string;
-  warDays: string;
-  languages: string;
-  about: string;
-  createdAt: string;
-  decidedAt: string | null;
-  decidedBy: string | null;
-}
-export interface ApplicationSettings { open: boolean; channelId: string }
-export interface ApplicationsResponse { applications: Application[]; settings: ApplicationSettings }

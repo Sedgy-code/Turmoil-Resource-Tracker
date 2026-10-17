@@ -4,7 +4,6 @@ import { database, lockAdministration, type Database, type SqlConnection } from 
 import { guildId } from "./config";
 import { iso, memberFromRow } from "./mappers";
 import { awardWeeklyDew, SNIPE_REWARD_WINDOW_MS } from "./planning";
-import { decideFromDiscord } from "./applications";
 
 /** The Turmoil Resource Tracker app's public key (not a secret); DISCORD_PUBLIC_KEY overrides it. */
 const DEFAULT_PUBLIC_KEY = "d88e07eec52a0316cdf5f908e6e5236bfe5ec519c80bc3beb625f8da44677709";
@@ -95,12 +94,6 @@ export async function handleInteraction(interaction: Interaction, db?: Database,
   if (interaction.guild_id && guildId() && interaction.guild_id !== guildId()) return reply("This only works in the Turmoil server.");
   if (interaction.type === 3 && interaction.data?.custom_id?.startsWith("checkin:")) {
     return reply(await checkIn(discordId, interaction.data.custom_id.slice("checkin:".length), connection, now));
-  }
-  const application = interaction.type === 3 ? /^app:(accepted|declined):([0-9a-f-]{36})$/.exec(interaction.data?.custom_id ?? "") : null;
-  if (application) {
-    const result = await decideFromDiscord(discordId, application[2], application[1] as "accepted" | "declined", connection, now);
-    // Type 7 replaces the application message, so the buttons disappear once answered.
-    return "error" in result ? reply(result.error) : { type: 7, data: result.message };
   }
   if (interaction.type === 2 && interaction.data?.name === "checkin") return reply(await checkIn(discordId, null, connection, now));
   if (interaction.type === 2 && interaction.data?.name === "snipe-start") {
