@@ -1,6 +1,7 @@
 import { storedAwards } from "./awards";
 import { randomUUID } from "node:crypto";
 import { currentWeek, shiftWeek } from "../resources";
+import { nameKey } from "../war-records";
 import type { Member, RecognitionResponse, WarReading, WarResult, WarResultsResponse } from "../types";
 import { database, type Database, type SqlConnection } from "./db";
 import { ApiError } from "./errors";
@@ -24,10 +25,8 @@ async function requireAdmin(connection: SqlConnection, actorId: string): Promise
   return actor;
 }
 
-/** Lower-case letters and digits only, so "Lone Wolf" and "lonewolf" match. */
-export function nameKey(name: string): string {
-  return name.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
-}
+/** Shared with the browser, so names match the same way on both sides. */
+export { nameKey };
 
 /** Finds the clan member an in-game name belongs to: remembered matches first, then names that look the same. */
 export async function matchGameNames(connection: SqlConnection, names: string[]): Promise<Map<string, string | null>> {
@@ -56,17 +55,19 @@ showing how many vials each clan member has donated.
 Read them and reply with ONLY a JSON object, no other text, in exactly this shape:
 {"clanTotal": <total vials donated by the clan if shown as a whole number, otherwise null>,
  "members": [{"name": "<player name exactly as shown>", "points": <that player's vials donated as a whole number>}]}
-Rules: list every player you can see once (screenshots may overlap; skip duplicates). Write numbers in full
-(e.g. "1.2K" becomes 1200, "1,234" becomes 1234). Keep names exactly as written, including symbols.
-Do not guess numbers you cannot read; leave such a player out.`;
+Rules: list every player row you can see, top to bottom, once each (screenshots may overlap; skip duplicates).
+Include players whose number is 0. Write numbers in full (e.g. "1.2K" becomes 1200, "1,234" becomes 1234).
+Keep names exactly as written, including symbols. If you can read a name but not its number, include it with
+"points": null. Never guess a number.`;
 
 const READER_PROMPT = `These are screenshots of the end-of-war results from the mobile game Forge Masters.
 Read them and reply with ONLY a JSON object, no other text, in exactly this shape:
 {"clanTotal": <the clan's final total war points as a whole number, or null if not shown>,
  "members": [{"name": "<player name exactly as shown>", "points": <that player's war points as a whole number>}]}
-Rules: list every player you can see once (screenshots may overlap; skip duplicates). Write numbers in full
-(e.g. "1.2M" becomes 1200000, "35.6K" becomes 35600, "1,234,567" becomes 1234567). Keep names exactly as written,
-including symbols. Do not guess numbers you cannot read; leave such a player out.`;
+Rules: list every player row you can see, top to bottom, once each (screenshots may overlap; skip duplicates).
+Include players whose number is 0. Write numbers in full (e.g. "1.2M" becomes 1200000, "35.6K" becomes 35600,
+"1,234,567" becomes 1234567). Keep names exactly as written, including symbols. If you can read a name but not its
+number, include it with "points": null. Never guess a number.`;
 
 function wholeNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value) && value >= 0) return Math.round(value);
@@ -80,22 +81,33 @@ function wholeNumber(value: unknown): number | null {
   return null;
 }
 
-/** Turns the reader's reply into clean rows, dropping anything unreadable. */
-export function parseReading(text: string): { clanTotal: number | null; members: { name: string; points: number }[] } {
+/**
+ * Turns the reader's reply into clean rows. A readable name whose number couldn't be read is kept with
+ * points null, so an admin can type the number in instead of the player silently going missing.
+ */
+export function parseReading(text: string): { clanTotal: number | null; members: { name: string; points: number | null }[] } {
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start < 0 || end <= start) throw new ApiError(502, "The screenshots could not be read. Try clearer screenshots.", "WAR_READ_FAILED");
   let parsed: { clanTotal?: unknown; members?: unknown };
   try { parsed = JSON.parse(text.slice(start, end + 1)); }
   catch { throw new ApiError(502, "The screenshots could not be read. Try clearer screenshots.", "WAR_READ_FAILED"); }
-  const seen = new Set<string>();
-  const members: { name: string; points: number }[] = [];
+  const byKey = new Map<string, { name: string; points: number | null }>();
+  const members: { name: string; points: number | null }[] = [];
   for (const item of Array.isArray(parsed.members) ? parsed.members : []) {
     const name = typeof item?.name === "string" ? item.name.trim().slice(0, 80) : "";
     const points = wholeNumber(item?.points);
-    if (!name || points === null || seen.has(nameKey(name) || name)) continue;
-    seen.add(nameKey(name) || name);
-    members.push({ name, points });
+    const key = nameKey(name);
+    // Nothing to go on: no readable name, or a name made only of symbols with no number either.
+    if (!name || (!key && points === null)) continue;
+    const seen = byKey.get(key || name);
+    if (seen) {
+      if (seen.points === null && points !== null) seen.points = points;
+      continue;
+    }
+    const row = { name, points };
+    byKey.set(key || name, row);
+    members.push(row);
   }
   return { clanTotal: wholeNumber(parsed.clanTotal), members };
 }
@@ -116,7 +128,7 @@ export async function readWarScreenshots(
     headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
     body: JSON.stringify({
       model: process.env.WAR_READER_MODEL || "claude-sonnet-5-5",
-      max_tokens: 4000,
+      max_tokens: 8000,
       messages: [{
         role: "user",
         content: [
@@ -146,35 +158,104 @@ export interface WarResultInput {
   images: ScreenshotImage[];
 }
 
+type ResultRow = WarResultInput["rows"][number];
+
+function assertHasContent(rows: ResultRow[], clanTotal: number | null): void {
+  if (!rows.length && clanTotal === null) throw new ApiError(400, "Add the clan total or at least one member’s points.", "INVALID_WAR_RESULT");
+}
+
+async function assertMembersExist(tx: SqlConnection, rows: ResultRow[]): Promise<void> {
+  const memberIds = [...new Set(rows.map((row) => row.memberId).filter((id): id is string => !!id))];
+  for (const memberId of memberIds) {
+    if (!(await tx.query("SELECT id FROM app_members WHERE id = $1", [memberId])).length) {
+      throw new ApiError(404, "One of the chosen members could not be found.", "MEMBER_NOT_FOUND");
+    }
+  }
+}
+
+async function insertRows(tx: SqlConnection, id: string, rows: ResultRow[]): Promise<void> {
+  for (const [position, row] of rows.entries()) {
+    await tx.query("INSERT INTO war_result_points (result_id, position, game_name, member_id, points) VALUES ($1, $2, $3, $4, $5)",
+      [id, position, row.gameName.trim().slice(0, 80), row.memberId, Math.round(row.points)]);
+    // Remember who this in-game name belongs to, so next time it matches automatically.
+    if (row.memberId && nameKey(row.gameName)) {
+      await tx.query(`INSERT INTO member_game_names (game_name_key, member_id, updated_at) VALUES ($1, $2, NOW())
+        ON CONFLICT (game_name_key) DO UPDATE SET member_id = EXCLUDED.member_id, updated_at = NOW()`, [nameKey(row.gameName), row.memberId]);
+    }
+  }
+}
+
+async function insertImages(tx: SqlConnection, id: string, images: ScreenshotImage[], firstPosition: number): Promise<string[]> {
+  const ids: string[] = [];
+  for (const [offset, image] of images.entries()) {
+    const imageId = randomUUID();
+    await tx.query("INSERT INTO war_result_images (id, result_id, position, mime, data) VALUES ($1, $2, $3, $4, $5)",
+      [imageId, id, firstPosition + offset, image.mime, image.data]);
+    ids.push(imageId);
+  }
+  return ids;
+}
+
+async function assertRecordExists(tx: SqlConnection, id: string): Promise<void> {
+  if (!(await tx.query("SELECT id FROM war_results WHERE id = $1", [id])).length) {
+    throw new ApiError(404, "This record could not be found.", "WAR_RESULT_NOT_FOUND");
+  }
+}
+
 export async function saveWarResult(actor: Member, input: WarResultInput, db?: Database): Promise<WarResult> {
   const connection = db ?? await database();
   return connection.transaction(async (tx) => {
     const admin = await requireAdmin(tx, actor.id);
     const week = currentWeek(new Date(`${input.week}T12:00:00Z`));
-    if (!input.rows.length && input.clanTotal === null) throw new ApiError(400, "Add the clan total or at least one member’s points.", "INVALID_WAR_RESULT");
-    const memberIds = [...new Set(input.rows.map((row) => row.memberId).filter((id): id is string => !!id))];
-    for (const memberId of memberIds) {
-      if (!(await tx.query("SELECT id FROM app_members WHERE id = $1", [memberId])).length) {
-        throw new ApiError(404, "One of the chosen members could not be found.", "MEMBER_NOT_FOUND");
-      }
-    }
+    assertHasContent(input.rows, input.clanTotal);
+    await assertMembersExist(tx, input.rows);
     const id = randomUUID();
     await tx.query("INSERT INTO war_results (id, week_start, label, clan_total, created_by, kind) VALUES ($1, $2, $3, $4, $5, $6)",
       [id, week, input.label.trim().slice(0, 120), input.clanTotal, admin.id, input.kind ?? "war"]);
-    for (const [position, row] of input.rows.entries()) {
-      await tx.query("INSERT INTO war_result_points (result_id, position, game_name, member_id, points) VALUES ($1, $2, $3, $4, $5)",
-        [id, position, row.gameName.trim().slice(0, 80), row.memberId, Math.round(row.points)]);
-      // Remember who this in-game name belongs to, so next time it matches automatically.
-      if (row.memberId && nameKey(row.gameName)) {
-        await tx.query(`INSERT INTO member_game_names (game_name_key, member_id, updated_at) VALUES ($1, $2, NOW())
-          ON CONFLICT (game_name_key) DO UPDATE SET member_id = EXCLUDED.member_id, updated_at = NOW()`, [nameKey(row.gameName), row.memberId]);
-      }
-    }
-    for (const [position, image] of input.images.entries()) {
-      await tx.query("INSERT INTO war_result_images (id, result_id, position, mime, data) VALUES ($1, $2, $3, $4, $5)",
-        [randomUUID(), id, position, image.mime, image.data]);
-    }
+    await insertRows(tx, id, input.rows);
+    await insertImages(tx, id, input.images, 0);
     return (await loadResults(tx, id))[0];
+  });
+}
+
+export interface WarResultUpdate {
+  label: string;
+  clanTotal: number | null;
+  rows: ResultRow[];
+}
+
+/** Admins fix a saved record: change numbers, add players the reader missed, or remove rows. Screenshots stay. */
+export async function updateWarResult(actor: Member, id: string, input: WarResultUpdate, db?: Database): Promise<WarResult> {
+  const connection = db ?? await database();
+  return connection.transaction(async (tx) => {
+    await requireAdmin(tx, actor.id);
+    await assertRecordExists(tx, id);
+    assertHasContent(input.rows, input.clanTotal);
+    await assertMembersExist(tx, input.rows);
+    await tx.query("UPDATE war_results SET label = $2, clan_total = $3 WHERE id = $1", [id, input.label.trim().slice(0, 120), input.clanTotal]);
+    await tx.query("DELETE FROM war_result_points WHERE result_id = $1", [id]);
+    await insertRows(tx, id, input.rows);
+    return (await loadResults(tx, id))[0];
+  });
+}
+
+/** The most screenshots one record keeps (a 50-member list takes about 8). */
+export const MAX_RECORD_SCREENSHOTS = 20;
+
+/**
+ * Adds screenshots to a saved record. The site sends them one at a time after saving, so a long
+ * member list never runs into the upload size limit.
+ */
+export async function addWarResultImages(actor: Member, id: string, images: ScreenshotImage[], db?: Database): Promise<{ imageIds: string[] }> {
+  const connection = db ?? await database();
+  return connection.transaction(async (tx) => {
+    await requireAdmin(tx, actor.id);
+    await assertRecordExists(tx, id);
+    const stored = await tx.query("SELECT COUNT(*)::int AS count, COALESCE(MAX(position), -1)::int AS last FROM war_result_images WHERE result_id = $1", [id]);
+    if (Number(stored[0].count) + images.length > MAX_RECORD_SCREENSHOTS) {
+      throw new ApiError(400, `A record can keep up to ${MAX_RECORD_SCREENSHOTS} screenshots.`, "TOO_MANY_SCREENSHOTS");
+    }
+    return { imageIds: await insertImages(tx, id, images, Number(stored[0].last) + 1) };
   });
 }
 

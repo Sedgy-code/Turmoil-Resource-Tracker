@@ -977,6 +977,8 @@ h1 {
   color: #69775b;
 }
 .table-scroll {
+  /* Keeps hidden labels inside tables from stretching the page sideways on phones. */
+  position: relative;
   overflow-x: auto;
   overscroll-behavior-x: contain;
 }

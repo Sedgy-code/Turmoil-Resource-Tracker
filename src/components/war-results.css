@@ -80,3 +80,13 @@
 .monthly-awards li strong { font-size: 12.5px; color: #f0d58a; }
 .monthly-award-winners { font-size: 13px; }
 .monthly-awards li small { color: var(--muted); font-size: 11px; }
+/* Editing a saved record, and adding members the reader missed. */
+.war-card-actions { margin-inline-start: auto; display: flex; flex-wrap: wrap; gap: 8px; }
+.war-card-actions .war-delete { margin-inline-start: 0; }
+.war-edit-table tr.war-no-number td input[inputmode="numeric"] { border-color: #d9a52b; background: #2a2412; }
+.war-missing { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 8px; border: 1px dashed #d9a52b66; background: #1d1a10; }
+.war-missing p { margin: 0; font-size: 12.5px; line-height: 1.5; color: #f0d58a; }
+.war-missing-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.war-missing-chip { display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font: inherit; font-size: 12.5px; cursor: pointer; }
+.war-missing-chip svg { color: var(--gold); }
+.war-missing-chip:hover, .war-missing-chip:focus-visible { border-color: var(--gold); color: #f8d67d; }

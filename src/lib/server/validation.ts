@@ -162,18 +162,26 @@ const screenshotSchema = z.object({
 }).strict();
 export const recordKindSchema = z.enum(["war", "vials"]);
 export const readWarSchema = z.object({ images: z.array(screenshotSchema).min(1).max(6), kind: recordKindSchema.optional() }).strict();
+const warRowsSchema = z.array(z.object({
+  gameName: z.string().trim().min(1).max(80),
+  memberId: z.string().uuid().nullable(),
+  points: z.number().int().min(0).max(1e15),
+}).strict()).max(200);
 export const saveWarSchema = z.object({
   kind: recordKindSchema.optional(),
   week: weekSchema,
   label: z.string().max(120),
   clanTotal: z.number().int().min(0).max(1e15).nullable(),
-  rows: z.array(z.object({
-    gameName: z.string().trim().min(1).max(80),
-    memberId: z.string().uuid().nullable(),
-    points: z.number().int().min(0).max(1e15),
-  }).strict()).max(200),
+  rows: warRowsSchema,
+  // The site now saves screenshots one at a time afterwards (see addScreenshotsSchema).
   images: z.array(screenshotSchema).max(6),
 }).strict();
+export const updateWarSchema = z.object({
+  label: z.string().max(120),
+  clanTotal: z.number().int().min(0).max(1e15).nullable(),
+  rows: warRowsSchema,
+}).strict();
+export const addScreenshotsSchema = z.object({ images: z.array(screenshotSchema).min(1).max(3) }).strict();
 export const hoardingRulesSchema = z.object({
   largeMultiple: z.number().min(1).max(20),
   spendPercent: z.number().min(0).max(100),

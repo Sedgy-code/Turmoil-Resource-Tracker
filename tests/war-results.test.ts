@@ -7,7 +7,7 @@ import { initializeSchema, openDatabase, type Database } from "../src/lib/server
 import { ApiError } from "../src/lib/server/errors";
 import { memberFromRow } from "../src/lib/server/mappers";
 import { sendSnipeShoutout } from "../src/lib/server/reminders";
-import { deleteWarResult, listWarResults, nameKey, parseReading, readWarScreenshots, recognition, saveWarResult, snipeRecognition } from "../src/lib/server/war-results";
+import { addWarResultImages, deleteWarResult, listWarResults, MAX_RECORD_SCREENSHOTS, nameKey, parseReading, readWarScreenshots, recognition, saveWarResult, snipeRecognition, updateWarResult } from "../src/lib/server/war-results";
 
 const apiFailure = (code: string) => (error: unknown) => error instanceof ApiError && error.code === code;
 const IMAGE = { mime: "image/jpeg" as const, data: "aGVsbG8gd29ybGQgaW1hZ2U=" };
@@ -25,9 +25,15 @@ async function addMember(db: Database, username: string, role: Member["role"] = 
 test("reader replies are cleaned: K/M numbers, commas, duplicates and unreadable rows", () => {
   const reading = parseReading(`Here you go:\n{"clanTotal":"12.5M","members":[
     {"name":"Lone Wolf","points":"1,234,567"},{"name":"lonewolf","points":5},
-    {"name":"Ash","points":"35.6K"},{"name":"???","points":"n/a"},{"name":"","points":9}]}`);
+    {"name":"Ash","points":"35.6K"},{"name":"???","points":"n/a"},{"name":"","points":9},
+    {"name":"Mira","points":null},{"name":"Zed","points":0},{"name":"zed","points":40}]}`);
   assert.equal(reading.clanTotal, 12_500_000);
-  assert.deepEqual(reading.members, [{ name: "Lone Wolf", points: 1_234_567 }, { name: "Ash", points: 35_600 }]);
+  // A readable name with an unreadable number is kept (to type in); 0 is a real number.
+  assert.deepEqual(reading.members, [
+    { name: "Lone Wolf", points: 1_234_567 }, { name: "Ash", points: 35_600 }, { name: "Mira", points: null }, { name: "Zed", points: 0 },
+  ]);
+  // An overlapping screenshot can fill in a number that was missing the first time.
+  assert.deepEqual(parseReading('{"members":[{"name":"Mira","points":null},{"name":"MIRA","points":"1.5K"}]}').members, [{ name: "Mira", points: 1500 }]);
   assert.throws(() => parseReading("sorry, I can't"), apiFailure("WAR_READ_FAILED"));
   assert.equal(nameKey("  Lone-Wolf_77 "), "lonewolf77");
 });
@@ -207,5 +213,36 @@ test("clan members who never signed in are added from Discord and ranked with a 
         if (value === undefined) delete process.env[key]; else process.env[key] = value;
       }
     }
+  });
+});
+
+test("admins can fix a saved record and add screenshots to it", async () => {
+  await withDatabase(async (db) => {
+    const admin = await addMember(db, "leader", "ADMIN");
+    const member = await addMember(db, "member");
+    const missed = await addMember(db, "missed");
+    const saved = await saveWarResult(admin, {
+      kind: "vials", week: currentWeek(), label: "Day 1", clanTotal: 300,
+      rows: [{ gameName: "member", memberId: member.id, points: 300 }], images: [IMAGE],
+    }, db);
+    await assert.rejects(updateWarResult(member, saved.id, { label: "", clanTotal: 1, rows: [] }, db), apiFailure("ADMIN_REQUIRED"));
+    await assert.rejects(updateWarResult(admin, randomUUID(), { label: "", clanTotal: 1, rows: [] }, db), apiFailure("WAR_RESULT_NOT_FOUND"));
+    const fixed = await updateWarResult(admin, saved.id, {
+      label: "Day 1 (fixed)", clanTotal: 450,
+      rows: [{ gameName: "member", memberId: member.id, points: 320 }, { gameName: "Missed One", memberId: missed.id, points: 130 }],
+    }, db);
+    assert.equal(fixed.label, "Day 1 (fixed)");
+    assert.equal(fixed.clanTotal, 450);
+    assert.deepEqual(fixed.points.map((point) => [point.memberId, point.points]), [[member.id, 320], [missed.id, 130]]);
+    assert.equal(fixed.imageIds.length, 1, "screenshots stay when rows are edited");
+    assert.equal(fixed.week, saved.week);
+
+    await assert.rejects(addWarResultImages(member, saved.id, [IMAGE], db), apiFailure("ADMIN_REQUIRED"));
+    const added = await addWarResultImages(admin, saved.id, [IMAGE, IMAGE], db);
+    assert.equal(added.imageIds.length, 2);
+    const listed = (await listWarResults(admin, db, "vials")).results.find((result) => result.id === saved.id)!;
+    assert.deepEqual(listed.imageIds.slice(1), added.imageIds, "new screenshots go after the old ones");
+    const tooMany = Array.from({ length: MAX_RECORD_SCREENSHOTS }, () => IMAGE);
+    await assert.rejects(addWarResultImages(admin, saved.id, tooMany, db), apiFailure("TOO_MANY_SCREENSHOTS"));
   });
 });

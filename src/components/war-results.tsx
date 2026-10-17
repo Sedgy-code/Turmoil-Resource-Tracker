@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ImagePlus, LoaderCircle, Plus, ScanText, Trash2, Trophy, X } from "lucide-react";
+import { ImagePlus, LoaderCircle, Pencil, Plus, ScanText, Trash2, Trophy, X } from "lucide-react";
 import { currentWeek, formatWeek, numberFormat } from "@/lib/resources";
 import { useT } from "@/lib/i18n";
 import type { Member, WarReading, WarResult, WarResultsResponse } from "@/lib/types";
@@ -10,14 +10,21 @@ import { MemberName } from "./member-identity";
 import { useRecognition } from "./recognition";
 import { VialDaily } from "./vial-daily";
 import { warWeekOf } from "@/lib/war-calendar";
+import { mergeReadings, newRow, readGroups, type DraftRow } from "@/lib/war-records";
 import { useSortable } from "./sortable";
 import "./war-results.css";
 
-type Screenshot = { mime: "image/jpeg"; data: string; preview: string };
-type DraftRow = { key: string; gameName: string; memberId: string; points: string };
-/** Vercel accepts about 4.5 MB per request; screenshots are shrunk and capped below that. */
-const MAX_UPLOAD_CHARS = 3_800_000;
-const MAX_SCREENSHOTS = 6;
+type Screenshot = { mime: "image/jpeg"; data: string; preview: string; read?: boolean };
+/**
+ * Vercel accepts about 4.5 MB per request, so screenshots are read two at a time and saved one at a
+ * time after the record. A 50-member list (about 8 screenshots) then never hits that limit.
+ */
+const MAX_SCREENSHOTS = 15;
+/** Must match MAX_RECORD_SCREENSHOTS on the server. */
+const MAX_RECORD_SCREENSHOTS = 20;
+const READ_AT_ONCE = 3;
+/** The server refuses a single screenshot over 2,000,000 characters. */
+const MAX_SHOT_CHARS = 1_900_000;
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, { ...options, headers: { "Content-Type": "application/json", ...options?.headers }, cache: "no-store" });
@@ -34,7 +41,9 @@ async function shrink(file: File): Promise<Screenshot> {
   canvas.width = Math.round(bitmap.width * scale);
   canvas.height = Math.round(bitmap.height * scale);
   canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  const url = canvas.toDataURL("image/jpeg", 0.85);
+  let url = canvas.toDataURL("image/jpeg", 0.85);
+  // Very detailed screenshots can come out big; a little more compression keeps them under the limit.
+  for (const quality of [0.75, 0.6]) if (url.length - url.indexOf(",") - 1 > MAX_SHOT_CHARS) url = canvas.toDataURL("image/jpeg", quality);
   return { mime: "image/jpeg", data: url.slice(url.indexOf(",") + 1), preview: url };
 }
 
@@ -61,23 +70,32 @@ const TEXT = {
   },
 } as const;
 const compact = (value: number) => value >= 1e6 ? `${numberFormat(Math.round(value / 1e5) / 10)}M` : value >= 1e4 ? `${numberFormat(Math.round(value / 100) / 10)}K` : numberFormat(value);
-let rowCounter = 0;
-const newRow = (row?: Partial<DraftRow>): DraftRow => ({ key: `row-${++rowCounter}`, gameName: "", memberId: "", points: "", ...row });
-
-function AddWarResult({ kind, members, onSaved, notify }: { kind: RecordKind; members: Member[]; onSaved: () => void; notify: (message: string, error?: boolean) => void }) {
+/** Add a new record from screenshots, or fix a saved one: change numbers, add missing players, add screenshots. */
+function RecordEditor({ kind, members, existing, onSaved, onClose, notify }: {
+  kind: RecordKind;
+  members: Member[];
+  existing?: WarResult;
+  onSaved: () => void;
+  onClose: () => void;
+  notify: (message: string, error?: boolean) => void;
+}) {
   const t = useT();
   const words = TEXT[kind];
-  const [open, setOpen] = useState(false);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [label, setLabel] = useState("");
+  const [label, setLabel] = useState(existing?.label ?? "");
   const [shots, setShots] = useState<Screenshot[]>([]);
-  const [rows, setRows] = useState<DraftRow[]>([]);
-  const [clanTotal, setClanTotal] = useState("");
+  const [rows, setRows] = useState<DraftRow[]>(() => (existing?.points ?? []).map((point) => newRow({ gameName: point.gameName, memberId: point.memberId ?? "", points: String(point.points) })));
+  const [clanTotal, setClanTotal] = useState(existing?.clanTotal != null ? String(existing.clanTotal) : "");
   const [busy, setBusy] = useState<"" | "reading" | "saving" | "adding">("");
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [message, setMessage] = useState("");
+  const [focusKey, setFocusKey] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
   const sortedMembers = useMemo(() => [...members].filter((member) => member.active).sort((a, b) => a.username.localeCompare(b.username)), [members]);
-  const uploadSize = shots.reduce((total, shot) => total + shot.data.length, 0);
+  const room = Math.max(0, Math.min(MAX_SCREENSHOTS, MAX_RECORD_SCREENSHOTS - (existing?.imageIds.length ?? 0)) - shots.length);
+  const unread = shots.filter((shot) => !shot.read);
+  const present = new Set(rows.map((row) => row.memberId).filter(Boolean));
+  const missing = sortedMembers.filter((member) => !present.has(member.id));
 
   async function addFiles(files: FileList | null) {
     if (!files?.length) return;
@@ -85,12 +103,9 @@ function AddWarResult({ kind, members, onSaved, notify }: { kind: RecordKind; me
     setMessage("");
     try {
       const added: Screenshot[] = [];
-      for (const file of [...files].slice(0, MAX_SCREENSHOTS - shots.length)) added.push(await shrink(file));
-      const next = [...shots, ...added];
-      if (next.reduce((total, shot) => total + shot.data.length, 0) > MAX_UPLOAD_CHARS) {
-        setMessage(t("That’s too much at once. Use fewer screenshots (up to {count}).", { count: Math.max(1, shots.length) }));
-      } else setShots(next);
-      if (files.length > MAX_SCREENSHOTS - shots.length) setMessage(t("Up to {count} screenshots per war.", { count: MAX_SCREENSHOTS }));
+      for (const file of [...files].slice(0, room)) added.push(await shrink(file));
+      setShots((current) => [...current, ...added]);
+      if (files.length > room) setMessage(t("Up to {count} screenshots at a time.", { count: MAX_SCREENSHOTS }));
     } catch {
       setMessage(t("One of those files couldn’t be opened as a picture."));
     } finally {
@@ -100,23 +115,50 @@ function AddWarResult({ kind, members, onSaved, notify }: { kind: RecordKind; me
   }
 
   async function read() {
+    const groups = readGroups(unread);
+    if (!groups.length) return;
     setBusy("reading");
     setMessage("");
-    try {
-      const { reading } = await request<{ reading: WarReading }>("/api/war-results/read", {
-        method: "POST", body: JSON.stringify({ kind, images: shots.map(({ mime, data }) => ({ mime, data })) }),
-      });
-      setRows(reading.rows.map((row) => newRow({ gameName: row.gameName, memberId: row.memberId ?? "", points: String(row.points) })));
-      if (reading.clanTotal !== null) setClanTotal(String(reading.clanTotal));
-      const unmatched = reading.rows.filter((row) => !row.memberId).length;
-      setMessage(reading.rows.length
-        ? t("Found {count} players. Check the numbers, pick a member for any amber rows, then press Save.", { count: reading.rows.length }) + (unmatched ? ` ${t("{count} name(s) need a member picked.", { count: unmatched })}` : "")
-        : t("No players found. Type them in below, or try clearer screenshots."));
-    } catch (error) {
-      const text = error instanceof Error ? error.message : "Please try again.";
-      setMessage(t(text));
-      if (!rows.length) setRows([newRow()]);
-    } finally { setBusy(""); }
+    setProgress({ done: 0, total: groups.length });
+    const readings: (WarReading | null)[] = groups.map(() => null);
+    let next = 0;
+    let done = 0;
+    let lastError = "";
+    const worker = async () => {
+      while (next < groups.length) {
+        const index = next++;
+        try {
+          readings[index] = (await request<{ reading: WarReading }>("/api/war-results/read", {
+            method: "POST", body: JSON.stringify({ kind, images: groups[index].map(({ mime, data }) => ({ mime, data })) }),
+          })).reading;
+        } catch (error) {
+          lastError = error instanceof Error ? error.message : "Please try again.";
+        }
+        setProgress({ done: ++done, total: groups.length });
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(READ_AT_ONCE, groups.length) }, worker));
+    const found = readings.filter((reading): reading is WarReading => reading !== null);
+    // Screenshots that were read aren't sent again; ones that failed can be retried with the same button.
+    const readShots = new Set(groups.filter((_, index) => readings[index] !== null).flat());
+    setShots((current) => current.map((shot) => readShots.has(shot) ? { ...shot, read: true } : shot));
+    const merged = mergeReadings(rows, found);
+    const total = found.find((reading) => reading.clanTotal !== null)?.clanTotal ?? null;
+    if (total !== null && !clanTotal) setClanTotal(String(total));
+    const unmatched = merged.rows.filter((row) => !row.memberId).length;
+    const needNumbers = merged.rows.filter((row) => !row.points).length;
+    const parts: string[] = [];
+    if (!found.length) parts.push(t(lastError));
+    else if (existing) parts.push(t("Added {count} players from the new screenshots.", { count: merged.added }));
+    else parts.push(merged.rows.length
+      ? t("Found {count} players. Check the numbers, pick a member for any amber rows, then press Save.", { count: merged.rows.length })
+      : t("No players found. Type them in below, or try clearer screenshots."));
+    if (found.length && unmatched) parts.push(t("{count} name(s) need a member picked.", { count: unmatched }));
+    if (found.length && needNumbers) parts.push(t("{count} number(s) need typing in.", { count: needNumbers }));
+    if (found.length && found.length < groups.length) parts.push(t("Some screenshots couldn’t be read. Try them again, or add the missing members by hand."));
+    setRows(merged.rows.length ? merged.rows : [newRow()]);
+    setMessage(parts.join(" "));
+    setBusy("");
   }
 
   async function save() {
@@ -131,45 +173,62 @@ function AddWarResult({ kind, members, onSaved, notify }: { kind: RecordKind; me
     }
     setBusy("saving");
     try {
-      await request("/api/war-results", {
-        method: "POST",
-        body: JSON.stringify({
-          kind,
-          // A war runs Tuesday–Monday, so results saved on Day 7 (Monday) belong to the war that just ended.
-          week: kind === "war" ? warWeekOf(new Date(`${date}T12:00:00Z`)) : currentWeek(new Date(`${date}T12:00:00Z`)),
-          label: label.trim(),
-          clanTotal: clanTotal ? Number(clanTotal) : null,
-          rows: cleaned.map((row) => ({
-            gameName: row.gameName.trim() || members.find((member) => member.id === row.memberId)?.username || "Member",
-            memberId: row.memberId || null,
-            points: Number(row.points),
-          })),
-          images: shots.map(({ mime, data }) => ({ mime, data })),
-        }),
-      });
-      notify(t(words.saved));
-      setShots([]); setRows([]); setClanTotal(""); setLabel(""); setMessage(""); setOpen(false);
+      const content = {
+        label: label.trim(),
+        clanTotal: clanTotal ? Number(clanTotal) : null,
+        rows: cleaned.map((row) => ({
+          gameName: row.gameName.trim() || members.find((member) => member.id === row.memberId)?.username || "Member",
+          memberId: row.memberId || null,
+          points: Number(row.points),
+        })),
+      };
+      const id = existing
+        ? (await request<{ result: WarResult }>(`/api/war-results/${existing.id}`, { method: "PATCH", body: JSON.stringify(content) })).result.id
+        : (await request<{ result: WarResult }>("/api/war-results", {
+          method: "POST",
+          body: JSON.stringify({
+            kind,
+            // A war runs Tuesday–Monday, so results saved on Day 7 (Monday) belong to the war that just ended.
+            week: kind === "war" ? warWeekOf(new Date(`${date}T12:00:00Z`)) : currentWeek(new Date(`${date}T12:00:00Z`)),
+            ...content,
+            images: [],
+          }),
+        })).result.id;
+      // Screenshots go up one at a time, so a long list never hits the upload size limit.
+      let unsaved = 0;
+      for (const shot of shots) {
+        try { await request(`/api/war-results/${id}/images`, { method: "POST", body: JSON.stringify({ images: [{ mime: shot.mime, data: shot.data }] }) }); }
+        catch { unsaved++; }
+      }
+      if (unsaved) notify(t("Saved, but some screenshots couldn’t be stored."), true);
+      else notify(existing ? t("Changes saved.") : t(words.saved));
       onSaved();
     } catch (error) {
       const text = error instanceof Error ? error.message : "Please try again.";
       setMessage(t(text));
-    } finally { setBusy(""); }
+      setBusy("");
+    }
+  }
+
+  function addMissing(member: Member) {
+    const row = newRow({ gameName: member.username, memberId: member.id });
+    setRows((current) => [...current, row]);
+    setFocusKey(row.key);
   }
 
   const update = (key: string, change: Partial<DraftRow>) => setRows((current) => current.map((row) => row.key === key ? { ...row, ...change } : row));
-  if (!open) return <button className="button primary war-add-open" onClick={() => setOpen(true)}><Plus size={16} />{t(words.add)}</button>;
   return <section className="panel war-add">
     <div className="war-add-head">
-      <h2><Trophy size={17} />{t(words.add)}</h2>
-      <button className="icon-button" aria-label={t("Close")} onClick={() => setOpen(false)}><X size={17} /></button>
+      <h2>{existing ? <Pencil size={17} /> : <Trophy size={17} />}{existing ? `${t("Edit")}: ${existing.label || t("Week of {date}", { date: formatWeek(existing.week) })}` : t(words.add)}</h2>
+      <button className="icon-button" aria-label={t("Close")} onClick={onClose}><X size={17} /></button>
     </div>
-    <ol className="war-steps">
+    {!existing && <ol className="war-steps">
       <li>{t(words.step1)}</li>
       <li>{t("Press “Read screenshots”. The site fills in the table for you.")}</li>
       <li>{t("Check the numbers, fix anything wrong, then press Save.")}</li>
-    </ol>
+    </ol>}
     <div className="war-form-grid">
-      <label><span>{t(words.date)}</span><input type="date" value={date} onChange={(event) => event.target.value && setDate(event.target.value)} /></label>
+      {!existing && <label><span>{t(words.date)}</span><input type="date" value={date} onChange={(event) => event.target.value && setDate(event.target.value)} /></label>}
       <label><span>{t("Name (optional)")}</span><input value={label} maxLength={120} placeholder={t(words.labelExample)} onChange={(event) => setLabel(event.target.value)} /></label>
     </div>
     <div className="war-shots">
@@ -178,14 +237,14 @@ function AddWarResult({ kind, members, onSaved, notify }: { kind: RecordKind; me
         <img src={shot.preview} alt={t("Screenshot {number}", { number: index + 1 })} />
         <button className="icon-button" aria-label={t("Remove screenshot {number}", { number: index + 1 })} onClick={() => setShots((current) => current.filter((_, i) => i !== index))}><X size={14} /></button>
       </figure>)}
-      {shots.length < MAX_SCREENSHOTS && <button className="war-shot-add" onClick={() => fileInput.current?.click()} disabled={busy !== ""}>
+      {room > 0 && <button className="war-shot-add" onClick={() => fileInput.current?.click()} disabled={busy !== ""}>
         {busy === "adding" ? <LoaderCircle size={20} className="spin" /> : <ImagePlus size={20} />}<span>{t("Add screenshots")}</span>
       </button>}
       <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={(event) => void addFiles(event.target.files)} />
     </div>
     <div className="war-actions">
-      <button className="button primary" disabled={!shots.length || busy !== "" || uploadSize > MAX_UPLOAD_CHARS} onClick={() => void read()}>
-        {busy === "reading" ? <LoaderCircle size={15} className="spin" /> : <ScanText size={15} />}{busy === "reading" ? t("Reading… (up to a minute)") : t("Read screenshots")}
+      <button className="button primary" disabled={!unread.length || busy !== ""} onClick={() => void read()}>
+        {busy === "reading" ? <LoaderCircle size={15} className="spin" /> : <ScanText size={15} />}{busy === "reading" ? t("Reading… {done} of {total}", { done: progress.done, total: progress.total }) : t("Read screenshots")}
       </button>
       {!rows.length && <button className="button subtle" onClick={() => setRows([newRow()])}>{t("Type them in instead")}</button>}
     </div>
@@ -194,19 +253,23 @@ function AddWarResult({ kind, members, onSaved, notify }: { kind: RecordKind; me
       <label className="war-total-field"><span>{t(words.total)}</span><input inputMode="numeric" value={clanTotal} onChange={(event) => setClanTotal(digits(event.target.value))} placeholder="0" /></label>
       <div className="table-scroll"><table className="resource-table war-edit-table">
         <thead><tr><th>{t("Name in game")}</th><th>{t("Clan member")}</th><th>{t(words.points)}</th><th><span className="visually-hidden">{t("Remove")}</span></th></tr></thead>
-        <tbody>{rows.map((row) => <tr key={row.key} className={row.memberId ? undefined : "war-unmatched"}>
+        <tbody>{rows.map((row) => <tr key={row.key} className={[row.memberId ? "" : "war-unmatched", row.points ? "" : "war-no-number"].filter(Boolean).join(" ") || undefined}>
           <td><input aria-label={t("Name in game")} value={row.gameName} maxLength={80} onChange={(event) => update(row.key, { gameName: event.target.value })} /></td>
           <td><select aria-label={t("Clan member")} value={row.memberId} onChange={(event) => update(row.key, { memberId: event.target.value })}>
             <option value="">{t("— Pick a member —")}</option>
             {sortedMembers.map((member) => <option key={member.id} value={member.id}>{member.username}</option>)}
           </select></td>
-          <td><input aria-label={t(words.points)} inputMode="numeric" value={row.points} onChange={(event) => update(row.key, { points: digits(event.target.value) })} /></td>
+          <td><input aria-label={t(words.points)} inputMode="numeric" value={row.points} autoFocus={row.key === focusKey} onChange={(event) => update(row.key, { points: digits(event.target.value) })} /></td>
           <td><button className="icon-button" aria-label={t("Remove")} onClick={() => setRows((current) => current.filter((item) => item.key !== row.key))}><Trash2 size={15} /></button></td>
         </tr>)}</tbody>
       </table></div>
+      {missing.length > 0 && <div className="war-missing">
+        <p>{t("Not in this list yet ({count}). Tap a name to add them:", { count: missing.length })}</p>
+        <div className="war-missing-list">{missing.map((member) => <button key={member.id} type="button" className="war-missing-chip" onClick={() => addMissing(member)}><Plus size={13} aria-hidden="true" />{member.username}</button>)}</div>
+      </div>}
       <div className="war-actions">
         <button className="button subtle" onClick={() => setRows((current) => [...current, newRow()])}><Plus size={15} />{t("Add a row")}</button>
-        <button className="button primary" disabled={busy !== ""} onClick={() => void save()}>{busy === "saving" && <LoaderCircle size={15} className="spin" />}{t(words.save)}</button>
+        <button className="button primary" disabled={busy !== ""} onClick={() => void save()}>{busy === "saving" && <LoaderCircle size={15} className="spin" />}{existing ? t("Save changes") : t(words.save)}</button>
       </div>
       <p className="war-hint">{t("Names you match are remembered, so next time they’re matched automatically.")}</p>
     </>}
@@ -251,6 +314,9 @@ export function WarResults({ kind = "war", members, admin, notify }: { kind?: Re
   const words = TEXT[kind];
   const { results, error, load } = useWarResults(kind);
   const { reload: reloadRecognition } = useRecognition();
+  const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
+  const refresh = () => { void load(); void reloadRecognition(); };
   const byId = new Map(members.map((member) => [member.id, member]));
   const chart = [...(results ?? [])].filter((result) => result.clanTotal !== null).slice(0, 12).reverse();
   const highest = Math.max(1, ...chart.map((result) => result.clanTotal ?? 0));
@@ -259,14 +325,16 @@ export function WarResults({ kind = "war", members, admin, notify }: { kind?: Re
     try {
       await request(`/api/war-results/${result.id}`, { method: "DELETE" });
       notify(t(words.deleted));
-      await load(); await reloadRecognition();
+      refresh();
     } catch (e) {
       const text = e instanceof Error ? e.message : "Please try again.";
       notify(t(text), true);
     }
   }
   return <div className="war-page">
-    {admin && <AddWarResult kind={kind} members={members} notify={notify} onSaved={() => { void load(); void reloadRecognition(); }} />}
+    {admin && (adding
+      ? <RecordEditor kind={kind} members={members} notify={notify} onClose={() => setAdding(false)} onSaved={() => { setAdding(false); refresh(); }} />
+      : <button className="button primary war-add-open" onClick={() => setAdding(true)}><Plus size={16} />{t(words.add)}</button>)}
     {chart.length > 1 && <section className="panel war-chart">
       <h2>{t(words.chart)}</h2>
       <div className="war-bars" role="list">{chart.map((result) => <div key={result.id} role="listitem" className="war-bar" title={`${result.label || formatWeek(result.week)}: ${numberFormat(result.clanTotal ?? 0)}`}>
@@ -280,6 +348,8 @@ export function WarResults({ kind = "war", members, admin, notify }: { kind?: Re
     {!results ? <section className="panel war-empty"><LoaderCircle size={22} className="spin" /></section>
       : !results.length ? <section className="panel war-empty"><Trophy size={30} /><p>{t(words.empty)}</p></section>
         : results.map((result, index) => {
+          if (admin && editing === result.id) return <RecordEditor key={result.id} kind={kind} members={members} existing={result} notify={notify}
+            onClose={() => setEditing(null)} onSaved={() => { setEditing(null); refresh(); }} />;
           const previous = results.slice(index + 1).find((item) => item.clanTotal !== null);
           const change = result.clanTotal !== null && previous?.clanTotal != null ? result.clanTotal - previous.clanTotal : null;
           return <article className="panel war-card" key={result.id}>
@@ -297,7 +367,10 @@ export function WarResults({ kind = "war", members, admin, notify }: { kind?: Re
                 {/* eslint-disable-next-line @next/next/no-img-element -- stored screenshot */}
                 <img src={`/api/war-results/images/${id}`} alt={t("Screenshot {number}", { number: n + 1 })} loading="lazy" />
               </a>)}</div>}
-              {admin && <button className="button subtle war-delete" onClick={() => void remove(result)}><Trash2 size={14} />{t("Delete")}</button>}
+              {admin && <div className="war-card-actions">
+                <button className="button subtle" onClick={() => setEditing(result.id)}><Pencil size={14} />{t("Edit")}</button>
+                <button className="button subtle war-delete" onClick={() => void remove(result)}><Trash2 size={14} />{t("Delete")}</button>
+              </div>}
             </footer>
           </article>;
         })}

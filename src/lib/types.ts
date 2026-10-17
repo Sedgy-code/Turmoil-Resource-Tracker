@@ -203,7 +203,8 @@ export interface WarResultsResponse { results: WarResult[] }
 /** What the screenshot reader found, before an admin checks and saves it. */
 export interface WarReading {
   clanTotal: number | null;
-  rows: { gameName: string; points: number; memberId: string | null }[];
+  /** points is null when the reader could see the name but not the number. */
+  rows: { gameName: string; points: number | null; memberId: string | null }[];
 }
 export interface SnipeRecognition {
   /** Confirmed snipes per member in the last eight weeks. */
