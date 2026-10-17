@@ -27,7 +27,7 @@ export async function postAnnouncement(
   actor: Member,
   input: z.infer<typeof announcementSchema>,
   dependencies: { db?: Database; fetcher?: typeof fetch } = {},
-): Promise<{ channel: string; messageId: string }> {
+): Promise<{ channel: string; messageId: string; via: "bot" | "webhook" }> {
   const db = dependencies.db ?? await database();
   const rows = await db.query("SELECT role, active FROM app_members WHERE id = $1", [actor.id]);
   if (!rows.length || rows[0].role !== "ADMIN" || rows[0].active !== true)
@@ -52,14 +52,37 @@ export async function postAnnouncement(
       "CHANNEL_NOT_FOUND",
     );
 
-  const posted = await fetcher(`${DISCORD_API}/channels/${matches[0].id}/messages`, {
-    method: "POST",
-    headers,
-    // flags 4 = no link previews, so the post stays short.
-    body: JSON.stringify({ content: input.content, allowed_mentions: { parse: [] }, flags: 4 }),
-  });
-  if (!posted.ok)
-    throw new ApiError(502, "Discord did not accept the post. Check the bot can send messages in that channel.", "ANNOUNCE_FAILED");
-  const message = (await posted.json()) as { id?: unknown };
-  return { channel: matches[0].name, messageId: String(message.id ?? "") };
+  const target = matches[0];
+  // flags 4 = no link previews, so the post stays short.
+  const message = JSON.stringify({ content: input.content, allowed_mentions: { parse: [] }, flags: 4 });
+  const posted = await fetcher(`${DISCORD_API}/channels/${target.id}/messages`, { method: "POST", headers, body: message });
+  if (posted.ok) return { channel: target.name, messageId: await messageId(posted), via: "bot" };
+  const reason = await discordReason(posted);
+
+  // The bot may not be allowed to post in that channel, but the weekly reminder's webhook
+  // (which posts as the Turmoil bot) may live there. Use it when it does.
+  const webhook = process.env.DISCORD_REMINDER_WEBHOOK_URL;
+  if (webhook && WEBHOOK_URL.test(webhook)) {
+    const info = await fetcher(webhook);
+    const hook = info.ok ? ((await info.json()) as { channel_id?: unknown }) : null;
+    if (hook?.channel_id === target.id) {
+      const sent = await fetcher(`${webhook}?wait=true`, { method: "POST", headers: { "Content-Type": "application/json" }, body: message });
+      if (sent.ok) return { channel: target.name, messageId: await messageId(sent), via: "webhook" };
+    }
+  }
+  throw new ApiError(502, `Discord did not accept the post (${reason}). The bot needs permission to send messages in #${target.name}.`, "ANNOUNCE_FAILED");
+}
+
+const WEBHOOK_URL = /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\//;
+
+async function messageId(response: Response): Promise<string> {
+  const body = (await response.json().catch(() => ({}))) as { id?: unknown };
+  return String(body.id ?? "");
+}
+
+/** Discord's own reason, such as "Missing Permissions (50013)". It never contains secrets. */
+async function discordReason(response: Response): Promise<string> {
+  const body = (await response.json().catch(() => null)) as { message?: unknown; code?: unknown } | null;
+  if (typeof body?.message === "string") return typeof body.code === "number" ? `${body.message}, ${body.code}` : body.message;
+  return `HTTP ${response.status}`;
 }

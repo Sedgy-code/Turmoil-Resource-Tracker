@@ -47,7 +47,7 @@ test("channel names match however people type them", () => {
 test("an admin posts as the bot, with no pings and no link previews", async () => {
   const { calls, fetcher } = fakeDiscord();
   const result = await postAnnouncement(await member("ADMIN"), { channel: "turmoil resource tracker", content: "Hello @everyone" }, { db, fetcher });
-  assert.deepEqual(result, { channel: "📊-turmoil-resource-tracker", messageId: "555" });
+  assert.deepEqual(result, { channel: "📊-turmoil-resource-tracker", messageId: "555", via: "bot" });
   const post = calls.find((call) => call.method === "POST");
   assert.equal(post?.url, "https://discord.com/api/v10/channels/2/messages");
   assert.deepEqual(post?.body, { content: "Hello @everyone", allowed_mentions: { parse: [] }, flags: 4 });
@@ -60,6 +60,41 @@ test("members who aren't admins can't post, and nothing reaches Discord", async 
     (error: unknown) => error instanceof ApiError && error.status === 403,
   );
   assert.equal(calls.length, 0);
+});
+
+function botBlocked(webhookChannel: string) {
+  const calls: { url: string; method: string }[] = [];
+  const fetcher = (async (url: string, init?: RequestInit) => {
+    calls.push({ url, method: init?.method ?? "GET" });
+    if (url.endsWith("/guilds/999/channels")) return Response.json([{ id: "2", name: "turmoil-resource-tracker", type: 0 }]);
+    if (url.endsWith("/channels/2/messages")) return Response.json({ message: "Missing Permissions", code: 50013 }, { status: 403 });
+    if (url === "https://discord.com/api/webhooks/7/secret") return Response.json({ channel_id: webhookChannel });
+    if (url === "https://discord.com/api/webhooks/7/secret?wait=true") return Response.json({ id: "777" });
+    return new Response(null, { status: 404 });
+  }) as typeof fetch;
+  return { calls, fetcher };
+}
+
+test("when the bot can't post there, the reminder webhook in that channel posts instead", async () => {
+  process.env.DISCORD_REMINDER_WEBHOOK_URL = "https://discord.com/api/webhooks/7/secret";
+  try {
+    const { calls, fetcher } = botBlocked("2");
+    const result = await postAnnouncement(await member("ADMIN"), { channel: "turmoil resource tracker", content: "Hi" }, { db, fetcher });
+    assert.deepEqual(result, { channel: "turmoil-resource-tracker", messageId: "777", via: "webhook" });
+    assert.ok(calls.some((call) => call.method === "POST" && call.url.endsWith("?wait=true")));
+  } finally { delete process.env.DISCORD_REMINDER_WEBHOOK_URL; }
+});
+
+test("a webhook in a different channel is never used, and Discord's reason is shown", async () => {
+  process.env.DISCORD_REMINDER_WEBHOOK_URL = "https://discord.com/api/webhooks/7/secret";
+  try {
+    const { calls, fetcher } = botBlocked("other-channel");
+    await assert.rejects(
+      postAnnouncement(await member("ADMIN"), { channel: "turmoil resource tracker", content: "Hi" }, { db, fetcher }),
+      (error: unknown) => error instanceof ApiError && error.status === 502 && /Missing Permissions, 50013/.test(error.message) && !/secret/.test(error.message),
+    );
+    assert.ok(!calls.some((call) => call.url.endsWith("?wait=true")));
+  } finally { delete process.env.DISCORD_REMINDER_WEBHOOK_URL; }
 });
 
 test("an unknown channel is refused and lists the channels the bot can see", async () => {
