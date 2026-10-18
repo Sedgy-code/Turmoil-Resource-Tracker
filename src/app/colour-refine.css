@@ -1,0 +1,102 @@
+/* Colour refinements from the colour research: every colour keeps one job, text is easier to
+   read, and "missing" no longer wears the yellow of points. Loaded after glow-theme.css. */
+
+:root {
+  --subtle: #a0b4d4;
+  --row-bg: #141d1bd9;
+}
+
+/* 1. Missing: a dashed outline and "!" instead of yellow, so a warning never looks like points. */
+.app-shell .contrib-value.missing {
+  border: 1.5px dashed #c9d4e3;
+  border-radius: 8px;
+  padding: 2px 8px;
+  color: #f2f5f8;
+}
+.app-shell .resource-table td.cell-missing {
+  outline: 1.5px dashed #c9d4e3;
+  outline-offset: -5px;
+  box-shadow: none;
+  background: #ffffff08;
+  color: #f2f5f8;
+}
+.app-shell .cell-missing-icon { color: #f2f5f8; }
+.app-shell .row-missing { color: #dfe7f1 !important; }
+.app-shell .member-resources .contrib-status .pending > i {
+  width: 12px;
+  height: 12px;
+  border: 1.5px dashed #dfe7f1;
+  background: transparent;
+  box-shadow: none;
+}
+.app-shell .snipe-needs-attendance {
+  border: 1.5px dashed #c9d4e3 !important;
+  background: transparent !important;
+  color: #f2f5f8 !important;
+}
+
+/* 2. Readable text: no grey that fades into the background, and a lighter battle red. */
+.app-shell .contrib-rank.none { color: var(--subtle); }
+.app-shell .war-week-now.tone-battle .war-week-kicker,
+.app-shell .home-badge.battle { color: #ff939b; }
+
+/* 3. Gold is for points and the main button. Clan tech progress is green, like all progress, and
+   a chosen vote day shows a tick, so the choice doesn't rely on colour alone. */
+.app-shell .tech-bar b { background: linear-gradient(90deg, #1c9a4b, #2fe46c); }
+.app-shell .home-vote-days button[aria-pressed="true"] { position: relative; }
+.app-shell .home-vote-days button[aria-pressed="true"]::after {
+  content: "✓";
+  position: absolute;
+  top: -7px;
+  inset-inline-end: -5px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffd56b;
+  box-shadow: 0 0 0 2px #080b09;
+  color: #1d1404;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+/* 4. Resource colours that don't match the clan green or each other. */
+.app-shell .contrib-board.tone-green { --tone: #ccee94; }
+.app-shell .contrib-board.tone-teal { --tone: #9cfee5; }
+.app-shell .contrib-board.tone-pink { --tone: #ff7ad9; }
+.app-shell .contrib-board.tone-peach { --tone: #e8d2b8; }
+.app-shell .table-scroll.tone-teal,
+.app-shell .vial-daily .table-scroll { --table-tone: #9cfee5; }
+
+/* 6. A softer glow behind words; borders, bars and buttons keep theirs. */
+.app-shell .section-tabs a.active,
+.app-shell .bottom-bar a.active,
+.app-shell .table-tabs button.active,
+.app-shell .nav-link.active { text-shadow: 0 0 10px #e6bd5933; }
+.app-shell .home-arsenal-range strong { text-shadow: 0 0 18px #f6c95a26; }
+
+/* 7. Hold days: lavender-blue with the hand, so they never look like "done" green. */
+.app-shell .war-week-now.tone-hold,
+.app-shell .home-today.tone-hold {
+  border-color: #8b90f0aa;
+  background: radial-gradient(100% 70% at 0% 0%, #20235599, transparent 62%), linear-gradient(180deg, #14162a, #0e0f1a);
+  box-shadow: 0 0 22px -10px #8b90f088;
+}
+.app-shell .war-week-now.tone-hold .war-week-kicker,
+.app-shell .home-today.tone-hold .home-kicker svg { color: #a6acfe; }
+.app-shell .home-badge.hold { border-color: #7a80e0; background: #16182c; color: #a6acfe; }
+
+/* 8. Second place is silver everywhere: gold, silver, bronze. */
+.app-shell .contrib-rank.m2 {
+  background: linear-gradient(180deg, #f4f7fa, #a3afbb);
+  box-shadow: inset 0 1px 0 #fff9, 0 0 10px -2px #c9d1d9;
+  color: #1d2329;
+  text-shadow: none;
+}
+
+/* 1 (continued). "Fill in every box": a to-do, so a dashed outline rather than gold. */
+.app-shell .bank-completeness.incomplete { border: 1.5px dashed #c9d4e3; background: #ffffff06; }
+.app-shell .bank-completeness.incomplete > svg,
+.app-shell .bank-completeness.incomplete strong,
+.app-shell .bank-completeness .bank-missing-fields { color: #f2f5f8; }

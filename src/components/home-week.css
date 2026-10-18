@@ -104,7 +104,7 @@
 .home-track i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #1fc057, #4cf08a); box-shadow: 0 0 10px #2fe46c99; }
 
 /* Cards */
-.home-card { min-width: 0; padding: 14px; border: 1px solid #22302c; border-radius: 18px; background: linear-gradient(180deg, #0a1311, #060c0b); }
+.home-card { min-width: 0; padding: 14px; border: 1px solid #22302c; border-radius: 18px; background: linear-gradient(180deg, #111c19, #0c1513); }
 .home-card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; margin-bottom: 11px; }
 .home-card-head > .home-fold { margin-inline-start: auto; }
 .home-card-head h2 { display: flex; align-items: center; gap: 10px; margin: 0; font-family: var(--heading); font-size: 19px; font-weight: 800; letter-spacing: -0.2px; color: var(--hw-ink); }
@@ -158,7 +158,7 @@
   padding: 10px 11px;
   border: 1px solid var(--hw-row-line);
   border-radius: 15px;
-  background: #040a09d9;
+  background: #141d1bd9;
 }
 .home-job.with-side { grid-template-columns: 40px minmax(0, 1fr) auto; }
 .home-job-mark { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border: 1.5px solid; border-radius: 50%; }
@@ -228,7 +228,7 @@
 .home-today .home-kicker svg { color: var(--hw-cool); }
 .home-today.tone-battle {
   border: 1.5px solid #d63a4dc4;
-  background: radial-gradient(100% 70% at 0% 0%, #3b0f17aa, transparent 62%), linear-gradient(180deg, #120a0c, #0a0708);
+  background: radial-gradient(100% 70% at 0% 0%, #3b0f17aa, transparent 62%), linear-gradient(180deg, #1a0f12, #120d0e);
   box-shadow: 0 0 22px -8px #d63a4d99;
 }
 .home-today.tone-battle .home-kicker svg { color: #ff5a6a; }
@@ -257,7 +257,7 @@
 /* Next war: vote for the clan days. Gold, like the other things that earn Clan Points. */
 .home-next-war {
   border: 1.5px solid #c9952ec0;
-  background: radial-gradient(100% 70% at 0% 0%, #3a2b0a77, transparent 62%), linear-gradient(180deg, #13100a, #0b0906);
+  background: radial-gradient(100% 70% at 0% 0%, #3a2b0a77, transparent 62%), linear-gradient(180deg, #1a160e, #13100b);
   box-shadow: 0 0 22px -8px #e2ad3c88, inset 0 0 24px -12px #e2ad3c66;
 }
 .home-next-war .home-kicker svg { color: var(--hw-gold); }

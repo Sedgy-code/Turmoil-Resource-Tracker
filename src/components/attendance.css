@@ -32,11 +32,11 @@
 .snipe-confirmed-list svg { flex-shrink: 0; color: #77cb8a; }
 .snipe-confirmed-list small { color: #a1c6a9; font-size: 9px; }
 .snipe-attendance-management { border-top: 1px solid var(--border); margin-top: 15px; padding-top: 4px; }
-.snipe-attendance-management h4 { color: var(--muted); font-size: 10px; margin: 15px 0 0; }
+.snipe-attendance-management h4 { color: var(--muted); font-size: 12px; margin: 15px 0 0; }
 .snipe-attendance-actions li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; }
 .snipe-attendance-actions li + li { border-top: 1px solid var(--border); }
 .snipe-attendance-actions li > span { min-width: 0; color: var(--text); font-size: 11px; overflow-wrap: anywhere; }
-.snipe-attendance-actions .planning-button { font-size: 10px; min-height: 34px; padding: 7px 10px; }
+.snipe-attendance-actions .planning-button { font-size: 12px; min-height: 34px; padding: 7px 10px; }
 .snipe-additional-attendees { margin-top: 12px; }
 .snipe-additional-attendees summary { cursor: pointer; color: var(--gold); font-size: 11px; line-height: 1.7; }
 @media (max-width: 600px) {
@@ -84,5 +84,5 @@
   accent-color: #4caf61;
   cursor: pointer;
 }
-.snipe-said-yes { color: #9fd3a9; font-size: 10px; white-space: nowrap; }
+.snipe-said-yes { color: #9fd3a9; font-size: 12px; white-space: nowrap; }
 .snipe-needs-attendance { border-color: #d9a52b88 !important; color: #f0c560 !important; }

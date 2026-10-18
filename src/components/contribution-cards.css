@@ -90,7 +90,7 @@
   overflow: hidden;
   border: 1.5px solid color-mix(in srgb, var(--tone) 70%, transparent);
   border-radius: 16px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--tone) 9%, #060b0b), #050909 72%);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tone) 9%, #0f1715), #0c1412 72%);
   box-shadow: 0 0 22px -8px color-mix(in srgb, var(--tone) 60%, transparent), inset 0 0 22px -12px color-mix(in srgb, var(--tone) 45%, transparent);
 }
 .contrib-board.tone-green { --tone: #3ee67a; }
@@ -154,7 +154,7 @@
 .contrib-name .member-name-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 a.contrib-name:hover .member-name-text,
 a.contrib-name:focus-visible .member-name-text { text-decoration: underline; text-underline-offset: 3px; }
-.contrib-member .you-badge { flex-shrink: 0; padding: 1px 5px; font-size: 10px; }
+.contrib-member .you-badge { flex-shrink: 0; padding: 1px 5px; font-size: 12px; }
 .contrib-ascending { flex-shrink: 0; color: #6cf59a; }
 .contrib-value {
   display: inline-flex;

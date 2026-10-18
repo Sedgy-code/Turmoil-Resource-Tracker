@@ -12,15 +12,15 @@
 .hoard-card.hoard-watch { border-left-color: #d9a52b; }
 .hoard-card header { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .hoard-card header strong { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
-.hoard-level { font-size: 10.5px; font-weight: 700; padding: 4px 8px; border-radius: 99px; white-space: nowrap; border: 1px solid; }
+.hoard-level { font-size: 12.5px; font-weight: 700; padding: 4px 8px; border-radius: 99px; white-space: nowrap; border: 1px solid; }
 .hoard-level-high { color: #ff9b94; border-color: #d9534f88; background: #3a1715; }
 .hoard-level-watch { color: #f0c560; border-color: #d9a52b88; background: #33280f; }
 .hoard-level-ok { color: #9fd3a9; border-color: #3f7a4c; background: #15281a; }
 .hoard-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; margin: 0; }
 .hoard-facts div { min-width: 0; }
-.hoard-facts dt { color: var(--muted); font-size: 10.5px; margin-bottom: 2px; }
+.hoard-facts dt { color: var(--muted); font-size: 12.5px; margin-bottom: 2px; }
 .hoard-facts dd { margin: 0; font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text); }
-.hoard-facts dd small { display: block; color: #dec486; font-size: 10.5px; font-weight: 600; }
+.hoard-facts dd small { display: block; color: #dec486; font-size: 12.5px; font-weight: 600; }
 .hoard-up { color: #f0c560 !important; }
 .hoard-down { color: #8fdc6a !important; }
 .hoard-reasons { margin: 0; padding-left: 18px; color: #e8d7a6; font-size: 12px; line-height: 1.6; }
@@ -52,9 +52,9 @@
 .rank-low { background: #3a1715; color: #ff9b94; border: 1px solid #d9534f88; }
 .rank-mid { background: #33280f; color: #f0c560; border: 1px solid #d9a52b88; }
 .rank-high { background: #15281a; color: #9fd3a9; border: 1px solid #3f7a4c; }
-.rank-penalty { margin-inline-start: 6px; color: #ff9b94; font-size: 10.5px; font-weight: 700; }
-.rank-sub { display: block; color: var(--muted); font-size: 10.5px; }
-.rank-new { display: inline-block; margin-top: 3px; padding: 1px 6px; border-radius: 99px; background: #1b2a3a; color: #9cc8ff; font-size: 10px; }
+.rank-penalty { margin-inline-start: 6px; color: #ff9b94; font-size: 12.5px; font-weight: 700; }
+.rank-sub { display: block; color: var(--muted); font-size: 12.5px; }
+.rank-new { display: inline-block; margin-top: 3px; padding: 1px 6px; border-radius: 99px; background: #1b2a3a; color: #9cc8ff; font-size: 12px; }
 .rank-table td { white-space: nowrap; }
 @media (max-width: 650px) { .rank-controls { align-items: flex-start; } }
 .hoard-card.hoard-saver { border-left-color: #4caf61; }
@@ -68,4 +68,4 @@
 .rule-input { display: flex; align-items: center; gap: 6px; color: var(--text); font-weight: 700; }
 .rule-input input { width: 90px; height: 38px; padding: 0 10px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 7px; font: inherit; font-size: 14px; font-weight: 700; }
 @media (max-width: 650px) { .rule-grid { grid-template-columns: minmax(0, 1fr); } }
-.rank-never { display: inline-block; margin: 3px 0 0 4px; padding: 1px 6px; border-radius: 99px; background: #3a1715; color: #ff9b94; font-size: 10px; }
+.rank-never { display: inline-block; margin: 3px 0 0 4px; padding: 1px 6px; border-radius: 99px; background: #3a1715; color: #ff9b94; font-size: 12px; }

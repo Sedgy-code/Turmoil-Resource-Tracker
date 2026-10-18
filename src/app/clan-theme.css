@@ -308,7 +308,7 @@ body {
 .summon-note,
 .war-points-note,
 .summon-warning {
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
@@ -393,7 +393,7 @@ body {
 }
 .eggs-pets-total span {
   color: #91a396;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.5;
 }
 .skeleton-eggs-pets {
@@ -543,7 +543,7 @@ body {
 .summoning-cost-field small {
   display: block;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.5;
   margin-top: 7px;
 }
@@ -713,7 +713,7 @@ body {
 }
 .login-security {
   color: #acbda9;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.6;
   text-align: center;
 }
@@ -723,12 +723,12 @@ body {
 }
 .login-card .login-config {
   color: #96aa9c;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.7;
 }
 .login-page > footer {
   color: #9daf9f;
-  font-size: 10px;
+  font-size: 12px;
 }
 @media (min-width: 1550px) {
   .hero {
@@ -860,7 +860,7 @@ body {
     display: block;
   }
   .hero-participation strong {
-    font-size: 10px;
+    font-size: 12px;
   }
   .hero-participation span:not(.avatar) {
     font-size: 8px;
@@ -915,7 +915,7 @@ body {
     font-size: 9px;
   }
   .login-card .login-config {
-    font-size: 10px;
+    font-size: 12px;
   }
 }
 @media (max-width: 360px) {
@@ -1070,17 +1070,17 @@ body {
 }
 .arsenal-grid .war-points-label { color: #bed0c3; font-size: 11px; }
 .arsenal-grid .war-points-total { font-size: 25px; letter-spacing: -0.4px; }
-.arsenal-grid .war-points-note { font-size: 10px; color: #92a697; line-height: 1.6; }
-.arsenal-grid .summon-warning { font-size: 10px; margin: 7px 0 0; }
+.arsenal-grid .war-points-note { font-size: 12px; color: #92a697; line-height: 1.6; }
+.arsenal-grid .summon-warning { font-size: 12px; margin: 7px 0 0; }
 .war-point-range { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; min-width: 0; }
 .war-point-range > div { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-.war-point-range > div > span { font-size: 10px; color: #9fb1a4; }
+.war-point-range > div > span { font-size: 12px; color: #9fb1a4; }
 .war-point-range strong { font-family: var(--heading); color: var(--gold); font-size: clamp(18px, 1.6vw, 24px); line-height: 1.2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .arsenal-grid .arsenal-summary { background: radial-gradient(ellipse at top right, #ae8d2a1c, transparent 70%), linear-gradient(145deg, #1d291f, #121c15); border-color: #b69e565f; }
 .arsenal-summary-copy { font-size: 11px; line-height: 1.5; color: #a7bcad; margin: 16px 0 15px; }
 .arsenal-summary .war-point-range strong { font-size: clamp(21px, 1.8vw, 28px); }
 .arsenal-summary-footer { margin-top: auto; padding-top: 20px; }
-.arsenal-summary-tag { display: inline-flex; align-items: center; gap: 6px; color: #d4c589; font-size: 10px; }
+.arsenal-summary-tag { display: inline-flex; align-items: center; gap: 6px; color: #d4c589; font-size: 12px; }
 .arsenal-planner-link { display: inline-flex; align-items: center; gap: 7px; margin-top: 14px; color: #e7ce88; font-size: 11px; font-weight: 600; }
 .arsenal-planner-link:hover { color: #ffe3a2; }
 .bank-completeness { display: flex; gap: 11px; align-items: flex-start; margin: 0 0 18px; padding: 15px 17px; border: 1px solid #be9e4145; background: #96722110; border-radius: 9px; }
@@ -1100,7 +1100,7 @@ body {
 .sidebar-profile .member-name > .member-cosmetic { display: inline; margin: 0 0 0 5px; font-size: 14px; color: inherit; }
 .member-title,
 .sidebar-profile .member-title,
-.table-member > div > .member-title { display: block; margin-top: 3px; color: #d1bd7b; font-size: 10px; line-height: 1.5; font-weight: 500; }
+.table-member > div > .member-title { display: block; margin-top: 3px; color: #d1bd7b; font-size: 12px; line-height: 1.5; font-weight: 500; }
 .member-name.cosmetic-accent-emerald,
 .sidebar-profile strong > .cosmetic-accent-emerald { color: #92e8ae; }
 .member-name.cosmetic-accent-frost,
