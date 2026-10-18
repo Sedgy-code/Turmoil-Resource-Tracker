@@ -264,6 +264,10 @@ CREATE TABLE IF NOT EXISTS discord_applications (
 );
 CREATE INDEX IF NOT EXISTS discord_applications_discord_idx ON discord_applications(discord_id, created_at DESC);
 ALTER TABLE discord_applications ADD COLUMN IF NOT EXISTS agreed BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE dew_weekly_earnings DROP CONSTRAINT IF EXISTS dew_weekly_earnings_reason_check;
+ALTER TABLE dew_weekly_earnings DROP CONSTRAINT IF EXISTS dew_weekly_earnings_check;
+ALTER TABLE dew_weekly_earnings DROP CONSTRAINT IF EXISTS dew_weekly_earnings_reward_check;
+ALTER TABLE dew_weekly_earnings ADD CONSTRAINT dew_weekly_earnings_reward_check CHECK ((reason = 'resources' AND amount = 20) OR (reason = 'snipe' AND amount = 10) OR (reason = 'vote' AND amount = 10));
 CREATE TABLE IF NOT EXISTS clan_day_votes (
   member_id TEXT NOT NULL REFERENCES app_members(id),
   war_week DATE NOT NULL CHECK (EXTRACT(ISODOW FROM war_week) = 1),
@@ -271,6 +275,14 @@ CREATE TABLE IF NOT EXISTS clan_day_votes (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (member_id, war_week)
 );
+WITH awarded AS (
+  INSERT INTO dew_weekly_earnings (member_id, week_start, reason, amount)
+  SELECT v.member_id, v.war_week, 'vote', 10 FROM clan_day_votes v JOIN app_members m ON m.id = v.member_id
+  WHERE m.active = TRUE AND v.days <> ''
+  ON CONFLICT (member_id, week_start, reason) DO NOTHING RETURNING member_id
+)
+INSERT INTO dew_balances (member_id, balance) SELECT member_id, 10 FROM awarded
+ON CONFLICT (member_id) DO UPDATE SET balance = dew_balances.balance + 10;
 CREATE TABLE IF NOT EXISTS member_ascensions (
   member_id TEXT NOT NULL REFERENCES app_members(id),
   week_start DATE NOT NULL CHECK (EXTRACT(ISODOW FROM week_start) = 1),

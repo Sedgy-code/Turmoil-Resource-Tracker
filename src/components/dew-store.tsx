@@ -167,7 +167,7 @@ export function DewStore({ data, notify, refresh }: Props) {
     <div className="planning-stack planning-reward-shop">
       <section className="planning-panel planning-dew-intro">
         <div className="planning-heading">
-          <div><h2>{t("Reward Shop")}</h2><p>{t("Earn up to 30 Clan Points each week. Spend them on a badge, title, name colour and avatar frame.")}</p></div>
+          <div><h2>{t("Reward Shop")}</h2><p>{t("Earn up to 40 Clan Points each week. Spend them on a badge, title, name colour and avatar frame.")}</p></div>
           <div className="planning-dew-balance" aria-label={`${wallet.balance} Clan Points available`}><Coins size={20} aria-hidden="true" /><strong>{numberFormat(wallet.balance)}</strong><span>{t("Clan Points")}</span></div>
         </div>
         <div className="planning-weekly-rewards" aria-label="This week’s Clan Point rewards">
@@ -180,6 +180,11 @@ export function DewStore({ data, notify, refresh }: Props) {
             {wallet.snipeRewardEarned ? <Check size={19} /> : <Sparkles size={19} />}
             <div><strong>{t("Join a snipe")} <span>{t("+10 points")}</span></strong><p>{t(wallet.snipeRewardEarned ? "Done for this week. An admin confirmed you joined." : "Join a snipe this week. An admin confirms who took part.")}</p></div>
             <span className="planning-reward-status">{t(wallet.snipeRewardEarned ? "Earned" : "Pending")}</span>
+          </div>
+          <div className={`planning-weekly-reward${wallet.voteRewardEarned ? " earned" : ""}`}>
+            {wallet.voteRewardEarned ? <Check size={19} /> : <Sparkles size={19} />}
+            <div><strong>{t("Vote for clan days")} <span>{t("+10 points")}</span></strong><p>{t(wallet.voteRewardEarned ? "Done. Thanks for voting!" : "On Days 6 and 7, vote on Home for the days to fight next war.")}</p></div>
+            <span className="planning-reward-status">{t(wallet.voteRewardEarned ? "Earned" : "Pending")}</span>
           </div>
         </div>
         <p className="planning-footnote">{t("Each reward can be earned once a week. Next reset: {date} (Sydney time).", { date: nextRewardReset(wallet.rewardWeek) })}</p>

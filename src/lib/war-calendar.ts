@@ -33,6 +33,11 @@ export function warWeekOf(date: Date): string {
   return weekStart(new Date(date.getTime() - DAY)).toISOString().slice(0, 10);
 }
 
+/** The war after the current one, by the Monday before its Day 1 (on Day 7 that's today). */
+export function nextWarWeek(now = new Date()): string {
+  return new Date(warStart(now).getTime() + 6 * DAY).toISOString().slice(0, 10);
+}
+
 /** Clan Tech Race: one week, Monday 00:00 UTC to Monday 00:00 UTC, with a knock-out every day at 00:00 UTC. */
 export function raceEnd(now = new Date()): Date {
   return new Date(weekStart(now).getTime() + 7 * DAY);

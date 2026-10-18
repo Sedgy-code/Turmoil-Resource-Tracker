@@ -39,6 +39,7 @@ const SECTIONS: { screen: string; fields: { field: GuidedField; label: string; w
   {
     screen: "Tech Tree",
     fields: [
+      { field: "potions", label: "Potions", where: "Tech Tree screen → the red potion number at the top left." },
       { field: "extraMountChancePercent", label: "Extra mount chance %", where: "Tech Tree → tap ⓘ to open Total Bonuses → “Chance to summon an extra mount”." },
       { field: "extraPetSummonPercent", label: "Extra pet summon %", where: "Tech Tree → tap ⓘ to open Total Bonuses → “Chance to summon an extra egg”." },
     ],

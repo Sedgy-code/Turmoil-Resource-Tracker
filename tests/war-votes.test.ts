@@ -47,8 +47,17 @@ test("members vote on Days 6 and 7 until leadership picks the days", async () =>
     // Battle day: votes count per day; days are kept in order and once each.
     const saved = await setVote(kael, [3, 1, 3], db, SUNDAY);
     assert.deepEqual(saved.mine, [1, 3]);
+    // Voting earns 10 Clan Points once per war, not again for changing the vote.
+    const balance = async (member: Member) => Number((await db.query("SELECT balance FROM dew_balances WHERE member_id = $1", [member.id]))[0]?.balance ?? 0);
+    assert.equal(saved.rewarded, true);
+    assert.equal(await balance(kael), 10);
+    assert.deepEqual(await db.query("SELECT week_start::text AS week, reason, amount FROM dew_weekly_earnings WHERE member_id = $1", [kael.id]), [{ week: "2026-10-19", reason: "vote", amount: 10 }]);
+    assert.equal((await setVote(kael, [1, 3, 5], db, MONDAY)).rewarded, false);
+    await setVote(kael, [1, 3], db, MONDAY);
+    assert.equal(await balance(kael), 10);
     await setVote(mira, [1, 2], db, SUNDAY);
-    await setVote(zed, [], db, MONDAY); // looked, but didn't pick any days
+    assert.equal((await setVote(zed, [], db, MONDAY)).rewarded, false); // looked, but didn't pick any days
+    assert.equal(await balance(zed), 0);
     const seen = await getVotes(zed, db, MONDAY);
     assert.deepEqual({ week: seen.week, open: seen.open, counts: seen.counts, voters: seen.voters, mine: seen.mine }, {
       week: "2026-10-19", open: true, counts: [2, 1, 1, 0, 0], voters: 2, mine: [],

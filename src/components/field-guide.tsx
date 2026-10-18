@@ -19,6 +19,7 @@ export const FIELD_PICTURES = {
   hammers: "/guide/hammers.webp",
   eggsPetsTotal: "/guide/eggs-pets.webp",
   mountsToMerge: "/guide/mounts-merge.webp",
+  potions: "/guide/potions.webp",
 } as const;
 export type GuidedField = keyof typeof FIELD_PICTURES;
 

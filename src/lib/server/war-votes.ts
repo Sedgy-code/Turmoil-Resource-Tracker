@@ -1,15 +1,11 @@
-import { warDay, warStart } from "../war-calendar";
+import { nextWarWeek, warDay } from "../war-calendar";
 import type { ClanDayVotes, Member } from "../types";
 import { database, type Database, type SqlConnection } from "./db";
 import { ApiError } from "./errors";
+import { awardWeeklyDew } from "./planning";
 import { clanDays, parseDays, SPENDING_DAYS } from "./war-days";
 
-const DAY = 86_400_000;
-
-/** The war after the current one, by the Monday before its Day 1 (on Day 7 that's today). */
-export function nextWarWeek(now = new Date()): string {
-  return new Date(warStart(now).getTime() + 6 * DAY).toISOString().slice(0, 10);
-}
+export { nextWarWeek };
 
 /**
  * Members vote on Day 6 (battle) and Day 7 (claim) for the days they'd like to fight next war.
@@ -50,18 +46,25 @@ export async function getVotes(actor: Member, db?: Database, now = new Date()): 
   return { week, open: votingOpen(now, picked), picked, counts, voters, mine: byMember.get(actor.id) ?? null };
 }
 
-/** Saves your vote for the next war (the days you'd like the clan to spend on). */
+/**
+ * Saves your vote for the next war (the days you'd like the clan to spend on). Voting for at least
+ * one day earns 10 Clan Points, once per war; `rewarded` says whether this vote earned them.
+ */
 export async function setVote(actor: Member, days: number[], db?: Database, now = new Date()): Promise<ClanDayVotes> {
   const connection = db ?? await database();
-  await requireActive(connection, actor.id);
   const week = nextWarWeek(now);
-  if (!votingOpen(now, await clanDays(connection, week))) {
-    throw new ApiError(409, "Voting for the next war’s clan days is closed.", "VOTING_CLOSED");
-  }
-  await connection.query(
-    `INSERT INTO clan_day_votes (member_id, war_week, days, updated_at) VALUES ($1, $2, $3, NOW())
-     ON CONFLICT (member_id, war_week) DO UPDATE SET days = EXCLUDED.days, updated_at = NOW()`,
-    [actor.id, week, parseDays(days.join(",")).join(",")],
-  );
-  return getVotes(actor, connection, now);
+  const chosen = parseDays(days.join(","));
+  const rewarded = await connection.transaction(async (tx) => {
+    await requireActive(tx, actor.id);
+    if (!votingOpen(now, await clanDays(tx, week))) {
+      throw new ApiError(409, "Voting for the next war’s clan days is closed.", "VOTING_CLOSED");
+    }
+    await tx.query(
+      `INSERT INTO clan_day_votes (member_id, war_week, days, updated_at) VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (member_id, war_week) DO UPDATE SET days = EXCLUDED.days, updated_at = NOW()`,
+      [actor.id, week, chosen.join(",")],
+    );
+    return chosen.length > 0 && await awardWeeklyDew(tx, actor.id, "vote", week);
+  });
+  return { ...await getVotes(actor, connection, now), rewarded };
 }

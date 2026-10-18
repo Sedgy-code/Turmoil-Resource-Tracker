@@ -3,6 +3,7 @@ import { COSMETIC_CATEGORIES, DEW_ITEMS, equippedCosmetics } from "../dew";
 import { currentWeek } from "../resources";
 import type { CosmeticCategory, DewResponse, Member, ResourceEntry, SnipePlan, SnipesResponse, WarActivity, WarRates } from "../types";
 import { estimateWar, WAR_ACTIVITIES } from "../war";
+import { nextWarWeek } from "../war-calendar";
 import { database, lockAdministration, type Database, type SqlConnection } from "./db";
 import { ApiError } from "./errors";
 import { entryFromRow, iso, memberFromRow } from "./mappers";
@@ -226,6 +227,7 @@ async function dewResponse(tx: SqlConnection, actor: Member): Promise<DewRespons
   const balances = await tx.query("SELECT balance FROM dew_balances WHERE member_id = $1", [actor.id]);
   const earnings = await tx.query("SELECT member_id FROM dew_earnings WHERE member_id = $1 AND earned_on = (NOW() AT TIME ZONE 'UTC')::date", [actor.id]);
   const weeklyEarnings = await tx.query("SELECT reason, earned_at FROM dew_weekly_earnings WHERE member_id = $1 AND week_start = $2", [actor.id, rewardWeek]);
+  const voted = await tx.query("SELECT 1 FROM dew_weekly_earnings WHERE member_id = $1 AND week_start = $2 AND reason = 'vote'", [actor.id, nextWarWeek()]);
   const owned = await tx.query("SELECT item_id FROM dew_owned WHERE member_id = $1 ORDER BY purchased_at, item_id", [actor.id]);
   const cosmetics = equippedCosmetics(actor);
   return {
@@ -235,6 +237,7 @@ async function dewResponse(tx: SqlConnection, actor: Member): Promise<DewRespons
     rewardWeek,
     resourceRewardEarned: weeklyEarnings.some((row) => row.reason === "resources"),
     snipeRewardEarned: weeklyEarnings.some((row) => row.reason === "snipe"),
+    voteRewardEarned: voted.length > 0,
     equipped: cosmetics.badge, equippedCosmetics: cosmetics,
     owned: owned.map((row) => String(row.item_id)), items: DEW_ITEMS.map((item) => ({ ...item })),
   };
@@ -248,13 +251,18 @@ export async function getDew(actor: Member, db?: Database): Promise<DewResponse>
   });
 }
 
-export async function awardWeeklyDew(tx: SqlConnection, memberId: string, reason: "resources" | "snipe", week: string): Promise<void> {
+/**
+ * Gives a weekly reward once: 20 for a complete resource save, 10 for a confirmed snipe, 10 for
+ * voting on the next war's clan days (its week is that war's). Returns whether it was given now.
+ */
+export async function awardWeeklyDew(tx: SqlConnection, memberId: string, reason: "resources" | "snipe" | "vote", week: string): Promise<boolean> {
   const amount = reason === "resources" ? 20 : 10;
   const awarded = await tx.query(`INSERT INTO dew_weekly_earnings (member_id, week_start, reason, amount)
     SELECT id, $2::date, $3, $4 FROM app_members WHERE id = $1 AND active = TRUE
     ON CONFLICT (member_id, week_start, reason) DO NOTHING RETURNING member_id`, [memberId, week, reason, amount]);
   if (awarded.length) await tx.query(`INSERT INTO dew_balances (member_id, balance) VALUES ($1, $2)
     ON CONFLICT (member_id) DO UPDATE SET balance = dew_balances.balance + EXCLUDED.balance`, [memberId, amount]);
+  return awarded.length > 0;
 }
 
 /** Call only inside a complete, validated self-bank save; unchanged saves can qualify once a week. */

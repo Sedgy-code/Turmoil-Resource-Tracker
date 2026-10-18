@@ -126,6 +126,8 @@ export interface DewResponse {
   earnedToday: boolean;
   resourceRewardEarned: boolean;
   snipeRewardEarned: boolean;
+  /** Voted for the next war's clan days (10 Clan Points, once per war). */
+  voteRewardEarned: boolean;
   rewardWeek: string;
   equipped: string | null;
   equippedCosmetics: EquippedCosmetics;
@@ -216,6 +218,8 @@ export interface ClanDayVotes {
   voters: number;
   /** Your vote, or null if you haven't voted. */
   mine: number[] | null;
+  /** After voting: whether this vote just earned the 10 Clan Points. */
+  rewarded?: boolean;
 }
 /** The four pillars a member can ascend. */
 export type AscensionPillar = "forge" | "skills" | "mounts" | "pets";

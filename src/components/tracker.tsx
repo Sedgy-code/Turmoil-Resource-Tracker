@@ -165,7 +165,7 @@ const SECTIONS: { section: Section; label: string; short: string; icon: Icon; ta
   { section: "leadership", label: "Leadership", short: "Leadership", icon: ShieldCheck, admin: true, tabs: [{ view: "members", label: "Members" }, { view: "ranking", label: "Ranking" }, { view: "hoarding", label: "Hoarding" }, { view: "settings", label: "Settings" }] },
 ];
 const sectionOf = (view: View) => SECTIONS.find((entry) => entry.tabs.some((tab) => tab.view === view))!;
-/** Resources with a picture guide and war points on the dashboard (potions are tracked only). */
+/** Resources with war points on the dashboard (potions are tracked only). */
 type GuidedResource = Exclude<ResourceKey, "potions">;
 const essentials: {
   key: GuidedResource;
@@ -198,7 +198,7 @@ const RESOURCE_GUIDE: Record<ResourceKey, { help: string; where: string }> = {
   hammers: { help: "The number on the anvil on the Forge screen.", where: "Forge screen → the hammer number on the anvil." },
   eggsPetsTotal: { help: "Open a pet’s Upgrade screen, select all, and use the “Selected” number.", where: "Tap a pet → Upgrade → select all spare eggs/pets → use the “Selected” number." },
   eggshellsTotal: { help: "Top left of the Pets screen.", where: "Pets screen → the eggshell number at the top left." },
-  potions: { help: "Your total potions in the game.", where: "" },
+  potions: { help: "Top left of the Tech Tree screen (the red potion).", where: "Tech Tree screen → the red potion number at the top left." },
 };
 
 const OFFLINE_MESSAGE = "Can’t reach the tracker. Check your internet connection and try again.";
@@ -686,7 +686,7 @@ function TrackerApp({ view }: { view: View }) {
                       : view === "war" ? "Pick activities to estimate the clan’s war points."
                       : view === "warWeek" ? "What scores on each war day, and how much the clan has saved for it."
                         : view === "snipes" ? "Plan events and say when you can join."
-                          : view === "store" ? "Earn Clan Points by saving your resources each week and joining snipes."
+                          : view === "store" ? "Earn Clan Points by saving your resources each week, voting for clan days and joining snipes."
                             : "Saved weekly totals for the clan.")}
               </p>}
             </div>
@@ -1670,6 +1670,7 @@ function ResourceForm({
             icon={<FlaskConical size={15} />}
             badge={potionsNeverAsked ? t("New") : undefined}
             help={t(RESOURCE_GUIDE.potions.help)}
+            guide={!readOnly && <FieldGuide field="potions" hint={t(RESOURCE_GUIDE.potions.where)} />}
             boxes={[{ label: t("Potions"), placeholder: "0", value: values.potions, onChange: (value) => update("potions", value) }]}
           />
         </div>

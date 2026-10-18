@@ -5,7 +5,7 @@ export const INDIRECT_KEYS = [
   "CLAN OVERVIEW", "YOUR CONTRIBUTION", "CLAN ROSTER", "BATTLE PREPARATION", "PLAN TOGETHER", "YOUR CLAN REWARDS", "THE CLAN ARCHIVE",
   "All the clan’s resources in one place.", "Copy your numbers from the game, then press Save.", "Manage who can use the tracker.",
   "Pick activities to estimate the clan’s war points.", "Plan events and say when you can join.",
-  "Earn Clan Points by saving your resources each week and joining snipes.", "Saved weekly totals for the clan.",
+  "Earn Clan Points by saving your resources each week, voting for clan days and joining snipes.", "Saved weekly totals for the clan.",
   "View saved resources", "Update my resources", "Add my resources", "Resources saved", "Not saved yet",
   // Guide page sections
   "Skills screen", "Mounts screen", "Pets screen", "Tech Tree", "Forge screen",
@@ -56,7 +56,7 @@ export const INDIRECT_KEYS = [
   "The number on the anvil on the Forge screen.", "Forge screen → the hammer number on the anvil.",
   "Open a pet’s Upgrade screen, select all, and use the “Selected” number.", "Tap a pet → Upgrade → select all spare eggs/pets → use the “Selected” number.",
   "Top left of the Pets screen.", "Pets screen → the eggshell number at the top left.",
-  "Your total potions in the game.",
+  "Top left of the Tech Tree screen (the red potion).", "Tech Tree screen → the red potion number at the top left.",
   // Levels and chances
   "Skill level", "Mount level", "Egg/pet level", "Extra mount chance %", "Extra pet summon %",
   "Tap ⓘ next to the Summon button on the Skills screen.", "Tap ⓘ next to the Summon button on the Mounts screen.", "Tap ⓘ next to the Summon button on the Pets screen.",

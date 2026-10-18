@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import Link from "next/link";
 import { ArrowRight, Backpack, BarChart3, Check, CheckCircle2, ChevronDown, ChevronsUp, Clock, FlaskConical, Sparkles, Swords, Target, X } from "lucide-react";
 import { ASCENSION_PILLARS, ASCENSIONS_UPDATED, PILLAR_LABELS } from "@/lib/ascension";
+import { announceClanPointsUpdate } from "@/lib/clan-points";
 import { countdown, raceEnd, warDay, warWeekOf, WAR_DAYS } from "@/lib/war-calendar";
 import { currentWeek, numberFormat } from "@/lib/resources";
 import { useT } from "@/lib/i18n";
@@ -169,7 +170,7 @@ export function HomeWeek({ data, notify, between }: { data: DashboardResponse; n
       </div>
     </section>
     {between}
-    <HomeToday now={now} notify={notify} />
+    <HomeToday now={now} notify={notify} memberId={me.id} />
   </div>;
 }
 
@@ -194,7 +195,7 @@ export function HomeArsenal({ minimum, maximum }: { minimum: number | null; maxi
 }
 
 /** What the clan is doing in the war today: spend, hold, fight or claim; on Days 6–7, vote for next war's days. */
-function HomeToday({ now, notify }: { now: Date; notify: (message: string, error?: boolean) => void }) {
+function HomeToday({ now, notify, memberId }: { now: Date; notify: (message: string, error?: boolean) => void; memberId: string }) {
   const t = useT();
   const war = warDay(now);
   const { votes, vote } = useClanDayVotes(war.day >= 6);
@@ -202,9 +203,13 @@ function HomeToday({ now, notify }: { now: Date; notify: (message: string, error
   async function toggleVote(day: number) {
     const mine = votes?.mine ?? [];
     setVoting(true);
-    const problem = await vote(mine.includes(day) ? mine.filter((item) => item !== day) : [...mine, day]);
+    const result = await vote(mine.includes(day) ? mine.filter((item) => item !== day) : [...mine, day]);
     setVoting(false);
-    if (problem) notify(t(problem), true);
+    if (result.error) notify(t(result.error), true);
+    else if (result.rewarded) {
+      notify(t("Thanks for voting! +10 Clan Points."));
+      announceClanPointsUpdate(memberId);
+    }
   }
   // On Day 7 the war is over, so the clan days shown are the next war's (as on War → This Week).
   const clan = useClanDays(warWeekOf(war.day === 7 ? new Date(now.getTime() + DAY) : now));
@@ -240,7 +245,7 @@ function HomeToday({ now, notify }: { now: Date; notify: (message: string, error
     <p className="home-today-main">{main}</p>
     {sub && <p className="home-today-sub">{sub}</p>}
     {votes?.open && <div className="home-vote">
-      <p className="home-vote-title">🗳️ {t("Which days should we fight next war?")}</p>
+      <p className="home-vote-title"><span>🗳️ {t("Which days should we fight next war?")}</span><em className="home-vote-reward">{t("+10 points")}</em></p>
       <div className="home-vote-days" role="group" aria-label={t("Which days should we fight next war?")}>
         {[1, 2, 3, 4, 5].map((day) => <button key={day} aria-pressed={!!votes.mine?.includes(day)} disabled={voting} onClick={() => void toggleVote(day)}>
           <span>{t("Day {day}", { day })}</span><strong>{votes.counts[day - 1]}</strong>

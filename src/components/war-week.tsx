@@ -62,7 +62,7 @@ export function useClanDays(week: string) {
 
 /**
  * Members' votes for the next war's clan days (open on Days 6 and 7 until leadership picks).
- * Only loaded on those days; `vote` saves your days and returns false if it didn't work.
+ * Only loaded on those days; `vote` saves your days and says whether it failed or earned Clan Points.
  */
 export function useClanDayVotes(enabled: boolean) {
   const [votes, setVotes] = useState<ClanDayVotes | null>(null);
@@ -78,12 +78,12 @@ export function useClanDayVotes(enabled: boolean) {
     document.addEventListener("visibilitychange", again);
     return () => { cancelled = true; document.removeEventListener("visibilitychange", again); };
   }, [enabled]);
-  async function vote(days: number[]): Promise<string | null> {
+  async function vote(days: number[]): Promise<{ error: string | null; rewarded: boolean }> {
     const response = await fetch("/api/war-days/votes", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ days }) });
     const result = await response.json().catch(() => ({}));
-    if (!response.ok) return (result as { error?: string }).error || "Please try again.";
+    if (!response.ok) return { error: (result as { error?: string }).error || "Please try again.", rewarded: false };
     setVotes(result as ClanDayVotes);
-    return null;
+    return { error: null, rewarded: !!(result as ClanDayVotes).rewarded };
   }
   return { votes: enabled ? votes : null, vote };
 }

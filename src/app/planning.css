@@ -183,7 +183,7 @@
 .planning-dew-balance { display: flex; align-items: center; gap: 8px; color: #a0d9e2; padding: 13px 15px; background: #182c2b; border: 1px solid #365250; border-radius: 8px; flex-shrink: 0; }
 .planning-dew-balance strong { font-size: 22px; font-family: var(--heading); line-height: 1; }
 .planning-dew-balance > span { font-size: 11px; }
-.planning-weekly-rewards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; padding: 0 24px; }
+.planning-weekly-rewards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; padding: 0 24px; }
 .planning-weekly-reward { display: flex; align-items: flex-start; gap: 12px; padding: 17px; border: 1px solid var(--border); border-radius: 8px; background: #101811; min-width: 0; }
 .planning-weekly-reward > svg { color: var(--gold); flex-shrink: 0; margin-top: 1px; }
 .planning-weekly-reward > div { min-width: 0; flex: 1; }
