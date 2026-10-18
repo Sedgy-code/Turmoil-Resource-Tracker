@@ -1975,7 +1975,7 @@ function MembersManager({
                     <div className="member-actions">
                       <button className="button secondary small-button" onClick={() => setHistoryFor(member)}>
                         <History size={13} />
-                        Strikes & history
+                        Holiday, strikes & history
                       </button>
                       <button
                         className="button secondary small-button"
