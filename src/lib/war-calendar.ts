@@ -57,6 +57,14 @@ export function nextUseDay(resource: ResourceKey, now = new Date()): number | nu
   return WAR_DAYS.find((entry) => entry.day >= day && entry.resources.includes(resource))?.day ?? null;
 }
 
+/** A time on the clan's clock: "Wed 21 Oct, 10:00 UTC", in the member's language. */
+export function utcDateTime(iso: string, language: string): string {
+  const text = new Intl.DateTimeFormat(language, {
+    timeZone: "UTC", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).format(new Date(iso));
+  return `${text} UTC`;
+}
+
 /** "2d 5h", "5h 12m" or "12m". */
 export function countdown(to: Date, now = new Date()): string {
   const minutes = Math.max(0, Math.round((to.getTime() - now.getTime()) / 60_000));

@@ -35,3 +35,14 @@
   .tech-summary { grid-template-columns: 1fr; }
   .tech-sections { grid-template-columns: 1fr; }
 }
+/* Save stays in view while editing; on phones it sits just above the bottom bar. */
+.tech-save-bar { position: sticky; bottom: 10px; z-index: 4; }
+@media (max-width: 800px) { .tech-save-bar { bottom: calc(76px + env(safe-area-inset-bottom)); z-index: 36; } }
+/* New season sits away from Save and asks first, with buttons that say what happens. */
+.tech-new-season { padding: 16px 18px; }
+.tech-new-season h2 { margin: 0 0 6px; font-size: 16px; }
+.tech-new-season p { margin: 0 0 12px; color: var(--muted); font-size: 13.5px; line-height: 1.45; }
+.tech-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.tech-confirm strong { flex: 1 1 100%; font-size: 14px; }
+.app-shell .button.danger { border: 1px solid #e04557; background: #2a0d13; color: #ffb3ba; }
+.app-shell .button.danger:hover:not(:disabled) { background: #3a1119; color: #ffd0d4; }

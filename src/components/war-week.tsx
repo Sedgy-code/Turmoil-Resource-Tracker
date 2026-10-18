@@ -4,12 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Check, CheckCircle2, Clock, Plus } from "lucide-react";
 import { numberFormat } from "@/lib/resources";
-import { WAR_DAYS, countdown, nextWarWeek, warDay, warStart, warWeekOf } from "@/lib/war-calendar";
+import { WAR_DAYS, countdown, nextWarWeek, utcDateTime, warDay, warStart, warWeekOf } from "@/lib/war-calendar";
 import { activityPoints, dayPoints, pillarCounts, rankPairs, twinDays, type DayPair } from "@/lib/clan-day-planner";
 import { PILLAR_ICONS, RESOURCE_ICONS } from "./resource-icons";
 import { PILLAR_LABELS } from "@/lib/ascension";
 import { estimateWar, WAR_ACTIVITIES } from "@/lib/war";
-import { useT } from "@/lib/i18n";
+import { useLanguage, useT, type Translate } from "@/lib/i18n";
 import type { AscensionPillar, AscensionsResponse, ClanDayVotes, ClanDaysResponse, DashboardResponse, WarRates } from "@/lib/types";
 import "./war-week.css";
 
@@ -36,18 +36,20 @@ const SPENDING_DAYS = [1, 2, 3, 4, 5];
 
 /** The clan days leadership picked for one war, and (for admins) a way to change them. */
 export function useClanDays(week: string) {
-  const [state, setState] = useState<{ week: string; days: number[] } | null>(null);
+  const [state, setState] = useState<{ week: string; days: number[]; failed?: boolean } | null>(null);
   const [saving, setSaving] = useState(false);
   useEffect(() => {
     let cancelled = false;
     fetch(`/api/war-days?week=${week}`, { cache: "no-store" })
       .then((response) => response.ok ? response.json() as Promise<ClanDaysResponse> : Promise.reject())
       .then((result) => { if (!cancelled) setState({ week, days: result.days }); })
-      .catch(() => { if (!cancelled) setState({ week, days: [] }); });
+      // Couldn't load: say so, rather than "Leadership hasn't picked the clan days yet".
+      .catch(() => { if (!cancelled) setState({ week, days: [], failed: true }); });
     return () => { cancelled = true; };
   }, [week]);
   const loaded = state?.week === week;
   const days = loaded ? state!.days : [];
+  const failed = loaded && !!state!.failed;
   async function save(next: number[]): Promise<boolean> {
     setState({ week, days: next });
     setSaving(true);
@@ -61,7 +63,29 @@ export function useClanDays(week: string) {
       return false;
     } finally { setSaving(false); }
   }
-  return { days, loaded, saving, save };
+  return { days, loaded, failed, saving, save };
+}
+
+export type TodayTone = "on" | "hold" | "battle" | "claim";
+
+/**
+ * What the clan is doing today, in the same words on Home and on the War page: spend on a clan day,
+ * hold on the other spending days, fight on Day 6, claim on Day 7. `clan` is this war's clan days
+ * (on Day 7, the next war's). A hold day never shows the day's spending tip.
+ */
+export function todayAdvice(day: number, clan: { days: number[]; loaded: boolean; failed: boolean }, t: Translate): { tone: TodayTone | null; badge: string; main: string; sub: string } {
+  if (day === 6) return { tone: "battle", badge: t("Battle"), main: t("Fight the other clans. Spending doesn't score today."), sub: "" };
+  if (day === 7) {
+    const sub = clan.days.length ? t("Next war’s clan days: {days}.", { days: clan.days.map((item) => t("Day {day}", { day: item })).join(", ") }) : "";
+    return { tone: "claim", badge: t("Claim rewards"), main: t("Claim your war rewards. You only have today."), sub };
+  }
+  if (!clan.loaded) return { tone: null, badge: "", main: "…", sub: "" };
+  if (clan.failed) return { tone: null, badge: "", main: t("Couldn’t load the clan days. Check your connection, then open this page again."), sub: "" };
+  if (!clan.days.length) return { tone: null, badge: "", main: t("Leadership hasn’t picked the clan days yet. Check announcements before you spend."), sub: "" };
+  if (clan.days.includes(day)) return { tone: "on", badge: t("Clan day"), main: t("Today is a clan day: spend your resources."), sub: t(WAR_DAYS[day - 1].tip) };
+  const next = clan.days.find((item) => item > day);
+  const sub = next ? t("Next clan day: Day {day}.", { day: next }) : t("No more clan days this war.");
+  return { tone: "hold", badge: t("Hold"), main: t("Today is not a clan day: hold your resources."), sub };
 }
 
 /**
@@ -114,15 +138,17 @@ export function WarWeek({ data, rates, admin = false, notify }: { data: Dashboar
     const next = clan.days.includes(day) ? clan.days.filter((item) => item !== day) : [...clan.days, day].sort((a, b) => a - b);
     if (!(await clan.save(next))) notify?.(t("Please try again."), true);
   }
-  // Today's card takes the colour of the day, as on Home: battle red, clan day gold, hold orange, claim green.
-  const tone = current.day === 6 ? "battle" : current.day === 7 ? "claim"
-    : !clan.loaded || !clan.days.length ? "" : clan.days.includes(current.day) ? "on" : "hold";
+  // Battle day: this war's days can no longer change; the planner below picks the next war's.
+  const lockedToday = current.day === 6;
+  // Today's card says what Home says, in the colour of the day: battle, clan day, hold or claim.
+  const advice = todayAdvice(current.day, clan, t);
   return <div className="war-week">
-    <section className={`panel war-week-now${tone ? ` tone-${tone}` : ""}`}>
+    <section className={`panel war-week-now${advice.tone ? ` tone-${advice.tone}` : ""}`}>
       <div>
         <span className="war-week-kicker">{t("Today")}</span>
         <h2>{t("War Day {day} of 7", { day: current.day })}</h2>
-        <p>{t(WAR_DAYS[current.day - 1].tip)}</p>
+        <p className="war-week-verdict">{advice.main}</p>
+        {advice.sub && <p>{advice.sub}</p>}
       </div>
       <div className="war-week-timer"><Clock size={18} />{current.day < 7 ? t("Day {day} starts in {time}", { day: current.day + 1, time: countdown(current.nextDay, now) }) : t("Next war starts in {time}", { time: countdown(current.weekEnd, now) })}</div>
     </section>
@@ -130,7 +156,7 @@ export function WarWeek({ data, rates, admin = false, notify }: { data: Dashboar
       <h2>{t(planningNext ? "Clan days for the next war" : "Clan days this war")}</h2>
       <div className="war-clan-day-list">{SPENDING_DAYS.map((day) => {
         const chosen = clan.days.includes(day);
-        return admin
+        return admin && !lockedToday
           ? <button key={day} className={`war-clan-day${chosen ? " on" : ""}`} aria-pressed={chosen} disabled={!clan.loaded || clan.saving} onClick={() => void toggle(day)}>
             {chosen ? <Check size={14} /> : <Plus size={14} />}{t("Day {day}", { day })}
             {planningNext && !!votes?.counts[day - 1] && <span className="war-clan-day-votes">{votes.counts[day - 1]}</span>}
@@ -138,10 +164,10 @@ export function WarWeek({ data, rates, admin = false, notify }: { data: Dashboar
           : <span key={day} className={`war-clan-day${chosen ? " on" : ""}`}>{chosen && <Check size={14} />}{t("Day {day}", { day })}</span>;
       })}</div>
       {clan.loaded && <p>{clan.days.length ? t("Only spend on the clan days. Spending on other days earns a black mark.") : t("Leadership hasn’t picked the clan days yet. Check announcements before you spend.")}</p>}
-      {admin && <p className="war-week-note">{t("Tap the days the clan will spend on. Members see them straight away.")}</p>}
+      {admin && <p className="war-week-note">{lockedToday ? t("This war’s clan days are locked on battle day. Pick the next war’s days below.") : t("Tap the days the clan will spend on. Members see them straight away.")}</p>}
       {voted && !votes?.picked.length && <p className="war-week-note war-clan-votes">🗳️ {t("Members’ votes for the next war: {votes}", { votes: voted })}</p>}
     </section>
-    {admin && current.day >= 6 && <ClanDayPlanner data={data} rates={rates} votes={votes} target={planningNext ? clan : nextClan} week={nextWarWeek(now)} notify={notify} />}
+    {admin && current.day >= 6 && <ClanDayPlanner data={data} rates={rates} votes={votes} target={planningNext ? clan : nextClan} week={nextWarWeek(now)} starts={current.weekEnd} now={now} notify={notify} />}
     <p className="war-week-note">{t("Each war day starts at 00:00 UTC. Leadership may ask you to hold resources for a snipe, so check announcements before you spend.")}</p>
     <div className="war-week-grid">
       {WAR_DAYS.map((entry) => {
@@ -175,15 +201,18 @@ const compact = (value: number) => new Intl.NumberFormat("en", { notation: "comp
  * Leadership's helper for picking the next war's two clan days (Day 6 is always fought): every pair
  * of days ranked by the clan's saved resources, with members' votes and who is ascending what.
  */
-function ClanDayPlanner({ data, rates, votes, target, week, notify }: {
+function ClanDayPlanner({ data, rates, votes, target, week, starts, now, notify }: {
   data: DashboardResponse;
   rates: WarRates;
   votes: ClanDayVotes | null;
   target: ReturnType<typeof useClanDays>;
   week: string;
+  /** When the next war starts (00:00 UTC). */
+  starts: Date;
+  now: Date;
   notify?: (message: string, error?: boolean) => void;
 }) {
-  const t = useT();
+  const { t, language } = useLanguage();
   const [ascending, setAscending] = useState<Partial<Record<AscensionPillar, number>>>({});
   useEffect(() => {
     let cancelled = false;
@@ -210,6 +239,7 @@ function ClanDayPlanner({ data, rates, votes, target, week, notify }: {
   }
   return <section className="panel war-planner" aria-labelledby="war-planner-title">
     <h2 id="war-planner-title">🧮 {t("Pick the next war’s clan days")}</h2>
+    <p className="war-planner-starts">{t("Next war starts {date}, in {time}.", { date: utcDateTime(starts.toISOString(), language), time: countdown(starts, now) })}</p>
     <p className="war-week-note">{t("Day 6 is always fought, so the clan needs 2 more days. Both have to be won, so pairs are ranked by their weaker day, then by the stronger one. Resources that score on both days (like hammers) are split between them.")}</p>
     <ol className="war-pairs">{shown.map((pair, index) => {
       const chosen = target.days.length === 2 && target.days[0] === pair.days[0] && target.days[1] === pair.days[1];

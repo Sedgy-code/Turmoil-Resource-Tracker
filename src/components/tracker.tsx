@@ -34,6 +34,8 @@ import { LanguagePicker } from "./language-picker";
 import { FieldGuide, type GuidedField } from "./field-guide";
 import { LanguageProvider, useT, type Translate } from "@/lib/i18n";
 import missingDataStyles from "./missing-data-indicator.module.css";
+import { loginHref } from "@/lib/return-path";
+import { useLeaveGuard } from "./leave-guard";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Fragment,
@@ -42,7 +44,9 @@ import {
   useRef,
   useState,
   type ComponentType,
+  type FocusEvent as ReactFocusEvent,
   type FormEvent,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
 import {
@@ -898,6 +902,10 @@ function TrackerApp({ view }: { view: View }) {
 
 function Login({ configured, error }: { configured: boolean; error: string }) {
   const t = useT();
+  // Signing in comes back to this page (a reminder's link to the resource form, say), not always Home.
+  const pathname = usePathname();
+  const search = useSearchParams().toString();
+  const returnTo = `${pathname}${search ? `?${search}` : ""}`;
   const messages: Record<string, string> = {
     "auth-cancelled":
       "Discord authorization was cancelled. You can try signing in again.",
@@ -952,7 +960,7 @@ function Login({ configured, error }: { configured: boolean; error: string }) {
           )}
           <a
             className={`button discord-button ${!configured ? "disabled" : ""}`}
-            href={configured ? "/api/auth/login" : undefined}
+            href={configured ? loginHref(returnTo) : undefined}
             aria-disabled={!configured}
           >
             <DiscordIcon />
@@ -1378,6 +1386,52 @@ function digitsOnly(value: string, decimal: boolean): string {
   return rest.length ? `${whole}.${rest.join("")}` : whole;
 }
 
+/**
+ * Tapping a filled box selects its number, so typing replaces it instead of gluing on ("400" into
+ * "321" used to give 400321). The tap's own mouseup would put the caret back, so it is skipped once.
+ */
+function selectBox(event: ReactFocusEvent<HTMLInputElement>) {
+  const box = event.currentTarget;
+  box.dataset.justFocused = "1";
+  requestAnimationFrame(() => box.setSelectionRange(0, box.value.length));
+}
+function keepSelection(event: ReactMouseEvent<HTMLInputElement>) {
+  if (event.currentTarget.dataset.justFocused !== "1") return;
+  delete event.currentTarget.dataset.justFocused;
+  event.preventDefault();
+}
+/** Numbers typed into the resource form but not saved yet, kept on this phone. */
+interface FormDraft {
+  /** When the saved entry was last updated: a later save makes this draft out of date. */
+  base: string;
+  values: Record<string, string>;
+  costs: Record<string, string>;
+  planning: Record<string, string>;
+  notes: string;
+}
+function readFormDraft(key: string, base: string): FormDraft | null {
+  try {
+    const draft = JSON.parse(window.localStorage.getItem(key) ?? "null") as FormDraft | null;
+    if (draft && draft.base === base) return draft;
+    if (draft) window.localStorage.removeItem(key);
+  } catch { /* private mode or unreadable: nothing kept */ }
+  return null;
+}
+function writeFormDraft(key: string, draft: FormDraft | null) {
+  try {
+    if (draft) window.localStorage.setItem(key, JSON.stringify(draft));
+    else window.localStorage.removeItem(key);
+  } catch { /* private mode: kept for this visit only */ }
+}
+
+/** The keypad's Next key: on to the next box in the form; after the last box, the keypad closes. */
+function focusNextBox(current: HTMLInputElement) {
+  const boxes = Array.from(current.form?.querySelectorAll<HTMLInputElement>(".entry-row input") ?? []);
+  const next = boxes.at(boxes.indexOf(current) + 1);
+  if (next) next.focus();
+  else current.blur();
+}
+
 /** One line of the resource form: what to enter on the left, small boxes on the right. */
 function EntryRow({ id, label, icon, badge, help, guide, boxes }: {
   id: string;
@@ -1407,10 +1461,18 @@ function EntryRow({ id, label, icon, badge, help, guide, boxes }: {
                 aria-describedby={`help-${id}`}
                 type="text"
                 inputMode={box.decimal ? "decimal" : "numeric"}
+                enterKeyHint="next"
                 autoComplete="off"
                 required
                 placeholder={box.placeholder}
                 value={box.value}
+                onFocus={selectBox}
+                onMouseUp={keepSelection}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter") return;
+                  event.preventDefault();
+                  focusNextBox(event.currentTarget);
+                }}
                 onChange={(event) => box.onChange(digitsOnly(event.target.value, !!box.decimal))}
               />
               {box.suffix && <span className="entry-row-suffix" aria-hidden="true">{box.suffix}</span>}
@@ -1472,47 +1534,51 @@ function ResourceForm({
   const [planningValues, setPlanningValues] = useState(() => draftPlanning(savedPlanning));
   const resourceKeys = RESOURCE_FIELDS.map(({ key }) => key as ResourceKey);
   const potionsNeverAsked = !!entry && !readOnly && Date.parse(entry.updatedAt) < POTIONS_RETURNED;
+  // A member's first save starts with empty boxes, not zeros, so nothing counts as filled until it's typed.
   const draftResources = (resources: ResourceValues) =>
     Object.fromEntries(
-      resourceKeys.map((key) => [key, key === "potions" && potionsNeverAsked ? "" : String(resources[key])]),
+      resourceKeys.map((key) => [key, !entry || (key === "potions" && potionsNeverAsked) ? "" : String(resources[key])]),
     ) as Record<ResourceKey, string>;
+  const draftCosts = (costs: SummoningCosts): Record<keyof SummoningCosts, string> => ({
+    fiveSkills: entry ? String(costs.fiveSkills) : "",
+    mount: entry ? String(costs.mount) : "",
+  });
   const [values, setValues] = useState<Record<ResourceKey, string>>(() =>
     draftResources(savedResources),
   );
-  const [costValues, setCostValues] = useState<
-    Record<keyof SummoningCosts, string>
-  >(() => ({
-    fiveSkills: String(savedCosts.fiveSkills),
-    mount: String(savedCosts.mount),
-  }));
+  const [costValues, setCostValues] = useState<Record<keyof SummoningCosts, string>>(() => draftCosts(savedCosts));
   const [notes, setNotes] = useState(entry?.notes ?? "");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const savedDraft = draftResources(savedResources);
+  const savedCostDraft = draftCosts(savedCosts);
   const dirty =
     resourceKeys.some((key) => values[key] !== savedDraft[key]) ||
-    costValues.fiveSkills !== String(savedCosts.fiveSkills) ||
-    costValues.mount !== String(savedCosts.mount) ||
+    costValues.fiveSkills !== savedCostDraft.fiveSkills ||
+    costValues.mount !== savedCostDraft.mount ||
     planningFields.some(({ key }) => planningValues[key] !== planningText(savedPlanning, key)) ||
     notes !== (entry?.notes ?? "");
+  // Numbers typed but not saved stay on this phone (per member and week), so switching tabs or
+  // closing the app never loses them. A save since then makes the kept numbers out of date.
+  const draftKey = `turmoil-draft:${selected.id}:${week}`;
+  const draftBase = entry?.updatedAt ?? "";
+  const touched = useRef(false);
+  const touch = () => { touched.current = true; };
   useEffect(() => {
-    setValues(draftResources(entry?.resources ?? EMPTY_RESOURCES));
-    const costs = entry?.summoningCosts ?? EMPTY_SUMMONING_COSTS;
-    setCostValues({
-      fiveSkills: String(costs.fiveSkills),
-      mount: String(costs.mount),
-    });
-    setPlanningValues(draftPlanning(entry?.planningDetails ?? EMPTY_PLANNING_DETAILS));
-    setNotes(entry?.notes ?? "");
+    touched.current = false;
+    const kept = readOnly ? null : readFormDraft(draftKey, draftBase);
+    setValues({ ...draftResources(entry?.resources ?? EMPTY_RESOURCES), ...kept?.values });
+    setCostValues({ ...draftCosts(entry?.summoningCosts ?? EMPTY_SUMMONING_COSTS), ...kept?.costs });
+    setPlanningValues({ ...draftPlanning(entry?.planningDetails ?? EMPTY_PLANNING_DETAILS), ...kept?.planning });
+    setNotes(kept?.notes ?? entry?.notes ?? "");
     setFormError("");
+    if (kept) notify(t("Your unsaved numbers are back. Tap Save when you’re ready."));
   }, [selected.id, week, entry]);
   useEffect(() => {
-    const warn = (e: BeforeUnloadEvent) => {
-      if (dirty && !readOnly) e.preventDefault();
-    };
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty, readOnly]);
+    if (readOnly || !touched.current) return;
+    writeFormDraft(draftKey, dirty ? { base: draftBase, values, costs: costValues, planning: planningValues, notes } : null);
+  }, [readOnly, dirty, draftKey, draftBase, values, costValues, planningValues, notes]);
+  useLeaveGuard(dirty && !readOnly, t("Your numbers aren’t saved yet. Leave anyway? They stay on this phone until you save."));
   const enteredNumber = (value: string | undefined) => !value?.trim() ? Number.NaN : Number(value);
   const draftBank = {
     resources: Object.fromEntries(resourceKeys.map((key) => [key, enteredNumber(values[key])])) as ResourceValues,
@@ -1591,6 +1657,8 @@ function ResourceForm({
           notes,
         }),
       });
+      writeFormDraft(draftKey, null);
+      touched.current = false;
       announceClanPointsUpdate(selected.id);
       await refresh();
       notify(
@@ -1604,11 +1672,13 @@ function ResourceForm({
       setSaving(false);
     }
   }
-  const update = (key: ResourceKey, value: string) =>
+  const update = (key: ResourceKey, value: string) => {
+    touch();
     setValues((existing) => ({
       ...existing,
       [key]: value,
     }));
+  };
   return (
     <form className="resource-form" onSubmit={save} noValidate>
       {data.currentUser.role === "ADMIN" && <div className="entry-profile panel">
@@ -1695,12 +1765,12 @@ function ResourceForm({
           {essentials.map(({ key, label, icon: InputIcon }) => {
             const guide = RESOURCE_GUIDE[key];
             const cost = key === "skillTickets"
-              ? { key: "fiveSkills" as const, label: "Skill summon cost (×5)", caption: "Cost ×5", help: "On the blue Summon ×5 button. Between 150 and 200.", where: "Skills screen → the number on the blue “Summon x5” button." }
+              ? { key: "fiveSkills" as const, range: "150–200", label: "Skill summon cost (×5)", caption: "Cost ×5", help: "On the blue Summon ×5 button. Between 150 and 200.", where: "Skills screen → the number on the blue “Summon x5” button." }
               : key === "mountKeys"
-                ? { key: "mount" as const, label: "Mount summon cost (×1)", caption: "Cost ×1", help: "On the blue Summon ×1 button. Between 37.5 and 50.", where: "Mounts screen → the number on the blue “Summon x1” button." }
+                ? { key: "mount" as const, range: "37.5–50", label: "Mount summon cost (×1)", caption: "Cost ×1", help: "On the blue Summon ×1 button. Between 37.5 and 50.", where: "Mounts screen → the number on the blue “Summon x1” button." }
                 : null;
-            const boxes: EntryBox[] = [{ label: t(label), caption: cost ? t("Amount") : undefined, placeholder: "0", value: values[key], onChange: (value) => update(key, value) }];
-            if (cost) boxes.push({ label: t(cost.label), caption: t(cost.caption), decimal: true, value: costValues[cost.key], onChange: (value) => setCostValues((existing) => ({ ...existing, [cost.key]: value })) });
+            const boxes: EntryBox[] = [{ label: t(label), caption: cost ? t("Amount") : undefined, placeholder: t("0 if none"), value: values[key], onChange: (value) => update(key, value) }];
+            if (cost) boxes.push({ label: t(cost.label), caption: t(cost.caption), decimal: true, placeholder: cost.range, value: costValues[cost.key], onChange: (value) => { touch(); setCostValues((existing) => ({ ...existing, [cost.key]: value })); } });
             return (
               <EntryRow
                 key={key}
@@ -1723,7 +1793,7 @@ function ResourceForm({
             badge={potionsNeverAsked ? t("New") : undefined}
             help={t(RESOURCE_GUIDE.potions.help)}
             guide={!readOnly && <FieldGuide field="potions" hint={t(RESOURCE_GUIDE.potions.where)} />}
-            boxes={[{ label: t("Clan Tech Vials"), placeholder: "0", value: values.potions, onChange: (value) => update("potions", value) }]}
+            boxes={[{ label: t("Clan Tech Vials"), placeholder: t("0 if none"), value: values.potions, onChange: (value) => update("potions", value) }]}
           />
         </div>
       </section>
@@ -1740,7 +1810,7 @@ function ResourceForm({
               icon={key === "eggsPetsTotal" ? <EggIcon size={34} /> : <EggshellIcon size={34} />}
               help={t(RESOURCE_GUIDE[key].help)}
               guide={!readOnly && <FieldGuide field={key} hint={t(RESOURCE_GUIDE[key].where)} />}
-              boxes={[{ label: t(key === "eggsPetsTotal" ? "Total eggs/pets" : "Eggshells total"), placeholder: "0", value: values[key], onChange: (value) => update(key, value) }]}
+              boxes={[{ label: t(key === "eggsPetsTotal" ? "Total eggs/pets" : "Eggshells total"), placeholder: t("0 if none"), value: values[key], onChange: (value) => update(key, value) }]}
             />
           ))}
         </div>
@@ -1762,7 +1832,7 @@ function ResourceForm({
                 label={t(label)}
                 help={t(help)}
                 guide={!readOnly && picture && where && <FieldGuide field={picture} hint={t(where)} />}
-                boxes={[{ label: t(label), decimal: isChance(key), placeholder: isChance(key) ? t("Enter 0 if none") : t("e.g. 100"), value: planningValues[key], onChange: (value) => setPlanningValues((old) => ({ ...old, [key]: value })), suffix: isChance(key) ? "%" : undefined }]}
+                boxes={[{ label: t(label), decimal: isChance(key), placeholder: isChance(key) ? t("Enter 0 if none") : t("e.g. 100"), value: planningValues[key], onChange: (value) => { touch(); setPlanningValues((old) => ({ ...old, [key]: value })); }, suffix: isChance(key) ? "%" : undefined }]}
               />
             ))}
           </div>
@@ -1780,7 +1850,7 @@ function ResourceForm({
           placeholder={t("Anything the clan should know? (optional)")}
           rows={3}
           value={notes}
-          onChange={(e) => setNotes(e.target.value)}
+          onChange={(e) => { touch(); setNotes(e.target.value); }}
         />
         <div className="character-count">{notes.length} / 1,000</div>
       </details>
@@ -2071,6 +2141,7 @@ function MembersManager({
                       month: "short",
                       day: "numeric",
                       year: "numeric",
+                      timeZone: "UTC",
                     })}
                   </td>
                   <td>

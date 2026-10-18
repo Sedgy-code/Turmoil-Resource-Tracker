@@ -7,6 +7,7 @@ import { WAR_ACTIVITIES } from "@/lib/war";
 import { ACTIVITY_ICONS } from "./resource-icons";
 import { announceClanPointsUpdate } from "@/lib/clan-points";
 import { useLanguage } from "@/lib/i18n";
+import { countdown, utcDateTime } from "@/lib/war-calendar";
 import type { DashboardResponse, SnipePlan, SnipesResponse, WarActivity } from "@/lib/types";
 import { useSortable } from "./sortable";
 import "./attendance.css";
@@ -32,17 +33,21 @@ function points(minimum: number, maximum: number) {
   return minimum === maximum ? numberFormat(minimum) : `${numberFormat(minimum)}–${numberFormat(maximum)}`;
 }
 
-function localInputDate(iso: string) {
-  const date = new Date(iso);
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+/** A snipe's start as the date-and-time box shows it: in UTC, the clan's clock. */
+function utcInputDate(iso: string) {
+  return new Date(iso).toISOString().slice(0, 16);
+}
+
+/** Reads the date-and-time box as UTC. */
+function fromUtcInput(value: string) {
+  return new Date(value.length === 16 ? `${value}:00Z` : `${value}Z`);
 }
 
 function startingDate() {
   const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  tomorrow.setHours(19, 0, 0, 0);
-  return localInputDate(tomorrow.toISOString());
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+  tomorrow.setUTCHours(10, 0, 0, 0);
+  return utcInputDate(tomorrow.toISOString());
 }
 
 /** Matches the server: attendance confirmed within 8 days of the start still earns Clan Points. */
@@ -52,12 +57,12 @@ type PlanDraft = { title: string; startsAt: string; activities: WarActivity[] };
 
 function PlanForm({ plan, busy, onCancel, onSave }: { plan?: SnipePlan; busy: boolean; onCancel: () => void; onSave: (draft: PlanDraft) => Promise<void> }) {
   const [title, setTitle] = useState(plan?.title || "");
-  const [startsAt, setStartsAt] = useState(plan ? localInputDate(plan.startsAt) : startingDate);
+  const [startsAt, setStartsAt] = useState(plan ? utcInputDate(plan.startsAt) : startingDate);
   const [activities, setActivities] = useState<WarActivity[]>(plan?.activities || ["skillSummons"]);
   const [error, setError] = useState("");
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const date = new Date(startsAt);
+    const date = fromUtcInput(startsAt);
     if (!title.trim() || !Number.isFinite(date.getTime()) || !activities.length) {
       setError("Add a title, date and time, and at least one scoring activity.");
       return;
@@ -71,7 +76,7 @@ function PlanForm({ plan, busy, onCancel, onSave }: { plan?: SnipePlan; busy: bo
   }
   return <form className="planning-form planning-plan-form" onSubmit={submit}>
     <h3>{plan ? "Edit snipe plan" : "Create a snipe plan"}</h3>
-    <div className="planning-form-grid"><label className="planning-field"><span>Snipe title</span><input aria-label="Snipe title" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={120} placeholder="Day 1 · Skills" required /></label><label className="planning-field"><span>Start date and time</span><input aria-label="Start date and time" type="datetime-local" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} required /><small>Shown in each member’s local time.</small></label></div>
+    <div className="planning-form-grid"><label className="planning-field"><span>Snipe title</span><input aria-label="Snipe title" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={120} placeholder="Day 1 · Skills" required /></label><label className="planning-field"><span>Start date and time (UTC)</span><input aria-label="Start date and time (UTC)" type="datetime-local" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} required /><small>Enter it in UTC, the clan’s clock. Members see it in UTC with a countdown.</small></label></div>
     <fieldset className="planning-activities"><legend>Scoring activities</legend>{WAR_ACTIVITIES.map(({ key, label }) => { const Picture = ACTIVITY_ICONS[key]; return <label className="planning-check planning-check-compact" key={key}><input type="checkbox" checked={activities.includes(key)} onChange={() => setActivities((selected) => selected.includes(key) ? selected.filter((activity) => activity !== key) : [...selected, key])} /><Picture size={22} className="planning-check-icon" /><span>{label}</span></label>; })}</fieldset>
     {error && <p className="planning-notice" role="alert">{error}</p>}
     <div className="planning-form-actions"><button type="button" className="planning-button planning-button-subtle" disabled={busy} onClick={onCancel}>Cancel</button><button type="submit" className="planning-button" disabled={busy}>{busy && <LoaderCircle size={15} className="spin" />}{plan ? "Save plan" : "Create snipe"}</button></div>
@@ -248,7 +253,7 @@ export function SnipePlanner({ data, notify }: Props) {
         || plan.participants.find(({ member }) => member.id === memberId)?.member.username
         || "Former clan member";
       return <section className="planning-panel planning-snipe snipe-card" key={plan.id} aria-label={plan.title}>
-        <div className="planning-heading"><div><h2>{plan.title}</h2><p className="planning-date"><CalendarDays size={14} /><time dateTime={plan.startsAt}>{new Date(plan.startsAt).toLocaleString(language, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" })}</time></p></div>{isAdmin && !plan.archived && <div className="planning-inline-actions">{needsAttendance && <span className="planning-chip snipe-needs-attendance">Needs attendance</span>}<button className="planning-button planning-button-subtle" onClick={() => { setEditing(editing === plan.id ? null : plan.id); setCreating(false); }} disabled={busy !== null} aria-expanded={editing === plan.id}><Pencil size={14} />Edit plan</button><button className="planning-button planning-button-subtle" onClick={() => void archive(plan)} disabled={busy !== null}><Archive size={14} />Archive snipe</button></div>}{plan.archived && <div className="planning-inline-actions"><span className="planning-chip">{t("Archived")}</span>{isAdmin && <button className="planning-button planning-button-subtle" onClick={() => void reopen(plan)} disabled={busy !== null}><RotateCcw size={14} />Move back to Open</button>}</div>}</div>
+        <div className="planning-heading"><div><h2>{plan.title}</h2><p className="planning-date"><CalendarDays size={14} /><time dateTime={plan.startsAt}>{utcDateTime(plan.startsAt, language)}</time>{!started && <span className="planning-countdown">{t("in {time}", { time: countdown(new Date(plan.startsAt)) })}</span>}</p></div>{isAdmin && !plan.archived && <div className="planning-inline-actions">{needsAttendance && <span className="planning-chip snipe-needs-attendance">Needs attendance</span>}<button className="planning-button planning-button-subtle" onClick={() => { setEditing(editing === plan.id ? null : plan.id); setCreating(false); }} disabled={busy !== null} aria-expanded={editing === plan.id}><Pencil size={14} />Edit plan</button><button className="planning-button planning-button-subtle" onClick={() => void archive(plan)} disabled={busy !== null}><Archive size={14} />Archive snipe</button></div>}{plan.archived && <div className="planning-inline-actions"><span className="planning-chip">{t("Archived")}</span>{isAdmin && <button className="planning-button planning-button-subtle" onClick={() => void reopen(plan)} disabled={busy !== null}><RotateCcw size={14} />Move back to Open</button>}</div>}</div>
         {editing === plan.id && isAdmin && !plan.archived && <PlanForm key={plan.id} plan={plan} busy={busy !== null} onCancel={() => setEditing(null)} onSave={(draft) => savePlan(draft, plan.id)} />}
         <div className="planning-attendance" aria-label={t("Attendance")}><span className="planning-yes"><Check size={15} />{t("Yes")}: {plan.counts.yes}</span><span className="planning-no"><X size={15} />{t("No")}: {plan.counts.no}</span><span>{t("No answer")}: {plan.counts.unanswered}</span></div>
         {!plan.archived && <details className="planning-response-details"><summary>{t("See who said No or hasn’t answered")}</summary><div className="planning-response-grid"><div><h3>{t("Can’t join")}</h3><p>{unavailable.length ? unavailable.map((member) => member.username).join(", ") : t("Nobody has said No.")}</p></div><div><h3>{t("No answer yet")}</h3><p>{unanswered.length ? unanswered.map((member) => member.username).join(", ") : t("Everyone has answered.")}</p></div></div></details>}

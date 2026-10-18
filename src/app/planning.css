@@ -165,6 +165,8 @@
 .planning-inline-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .planning-heading .planning-date { display: flex; align-items: center; gap: 7px; }
 .planning-date svg { flex-shrink: 0; }
+.planning-date .planning-countdown { color: #dfe7f1; font-weight: 650; }
+.planning-date .planning-countdown::before { content: "·"; margin-inline-end: 7px; color: var(--subtle); }
 .planning-attendance { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 0 24px 18px; color: var(--subtle); font-size: 11px; }
 .planning-attendance > span { display: flex; align-items: center; gap: 4px; }
 .planning-attendance .planning-yes { color: var(--emerald); }

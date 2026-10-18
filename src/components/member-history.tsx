@@ -76,7 +76,7 @@ export function MemberHistoryPanel({ member, onClose, onChanged, notify }: {
       <section className="history-block">
         <h3><Ban size={15} />Strikes <b className={(current.strikes ?? 0) > 0 ? "strike-count has" : "strike-count"}>{current.strikes ?? 0}</b></h3>
         {data?.strikes.map((strike) => <div key={strike.id} className="history-strike">
-          <div><strong>{strike.reason}</strong><small>{new Date(strike.createdAt).toLocaleDateString()} · {strike.createdBy}</small></div>
+          <div><strong>{strike.reason}</strong><small>{new Date(strike.createdAt).toLocaleDateString(undefined, { timeZone: "UTC" })} · {strike.createdBy}</small></div>
           <button className="button subtle small-button" disabled={busy} onClick={() => window.confirm("Remove this strike?") && void act({ action: "remove-strike", strikeId: strike.id }, "Strike removed.")}>Remove</button>
         </div>)}
         <form className="history-form" onSubmit={addStrike}>
@@ -100,7 +100,7 @@ export function MemberHistoryPanel({ member, onClose, onChanged, notify }: {
         {!data ? <LoaderCircle size={20} className="spin" /> : shown.length === 0 ? <p className="history-hint">Nothing yet.</p> : <ol>
           {shown.map((event, index) => <li key={`${event.at}-${index}`} className={`history-${event.kind}`}>
             <span className="history-icon" aria-hidden="true">{ICONS[event.kind] ?? "•"}</span>
-            <div><strong>{event.text}</strong><small>{new Date(event.at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}{event.by ? ` · by ${event.by}` : ""}</small></div>
+            <div><strong>{event.text}</strong><small>{new Date(event.at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })}{event.by ? ` · by ${event.by}` : ""}</small></div>
           </li>)}
         </ol>}
       </section>

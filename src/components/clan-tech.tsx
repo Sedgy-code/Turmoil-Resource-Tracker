@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ExternalLink, LoaderCircle, Minus, Plus, RotateCcw, Save } from "lucide-react";
+import { CheckCircle2, ExternalLink, LoaderCircle, Minus, Plus, RotateCcw, Save } from "lucide-react";
 import { VialIcon } from "./resource-icons";
 import { TECH_NODES, TECH_SECTIONS, nextToFund, progress } from "@/lib/clan-tech";
 import { useT } from "@/lib/i18n";
+import { useLeaveGuard } from "./leave-guard";
 import "./clan-tech.css";
 
 type Data = { levels: Record<string, number>; updatedAt: string | null; canEdit: boolean };
@@ -31,6 +32,9 @@ export function ClanTech({ notify }: { notify: (message: string, error?: boolean
   useEffect(() => { void load(); }, [load]);
   const changed = useMemo(() => Object.fromEntries(TECH_NODES.filter((entry) => (draft[entry.key] ?? 0) !== (data?.levels[entry.key] ?? 0)).map((entry) => [entry.key, draft[entry.key] ?? 0])), [draft, data]);
   const dirty = Object.keys(changed).length > 0;
+  // "New season" asks first, in place, with buttons that say what happens.
+  const [confirmReset, setConfirmReset] = useState(false);
+  useLeaveGuard(dirty, t("Your Clan Tech changes aren’t saved yet. Leave anyway?"));
   async function save(body: unknown, done: string) {
     setSaving(true);
     try { const result = await request<Data>({ method: "PUT", body: JSON.stringify(body) }); setData(result); setDraft(result.levels); notify(t(done)); }
@@ -48,7 +52,7 @@ export function ClanTech({ notify }: { notify: (message: string, error?: boolean
         <div>
           <span>{t("Tree complete")}</span>
           <strong>{Math.round(progress(levels) * 1000) / 10}%</strong>
-          <small>{data.updatedAt ? t("Updated {date}", { date: new Date(data.updatedAt).toLocaleDateString() }) : t("Not filled in yet")}</small>
+          <small>{data.updatedAt ? t("Updated {date}", { date: new Date(data.updatedAt).toLocaleDateString(undefined, { timeZone: "UTC" }) }) : t("Not filled in yet")}</small>
         </div>
       </div>
       <div className="tech-next">
@@ -59,8 +63,6 @@ export function ClanTech({ notify }: { notify: (message: string, error?: boolean
     <p className="war-week-note">{t("Order: war points first, then Clan War damage and health, then tech race boosts, then war rewards. The tree resets each season.")} <a href="https://1vcian.me/fm/#/clan" target="_blank" rel="noreferrer">{t("Plan your own tree")} <ExternalLink size={12} /></a></p>
     {data.canEdit && <div className="tech-admin">
       <span>{t("Copy the levels from the in-game Tech Tree screen, then press Save.")}</span>
-      <button className="button primary" disabled={!dirty || saving} onClick={() => void save({ levels: changed }, "Clan Tech saved.")}>{saving ? <LoaderCircle size={15} className="spin" /> : <Save size={15} />}{t("Save")}</button>
-      <button className="button subtle" disabled={saving} onClick={() => window.confirm(t("Set every node back to 0 for a new season?")) && void save({ reset: true }, "Clan Tech reset for the new season.")}><RotateCcw size={15} />{t("New season")}</button>
     </div>}
     <div className="tech-sections">{TECH_SECTIONS.map((section) => {
       const nodes = TECH_NODES.filter((entry) => entry.section === section);
@@ -81,5 +83,20 @@ export function ClanTech({ notify }: { notify: (message: string, error?: boolean
         })}</ul>
       </section>;
     })}</div>
+    {data.canEdit && <div className="save-bar tech-save-bar">
+      <span className={dirty ? "unsaved" : "saved"}>{dirty ? <><span />{t("Unsaved changes")}</> : <><CheckCircle2 size={16} />{t("All changes saved")}</>}</span>
+      <button className="button primary" disabled={!dirty || saving} onClick={() => void save({ levels: changed }, "Clan Tech saved.")}>{saving ? <LoaderCircle size={15} className="spin" /> : <Save size={15} />}{t("Save")}</button>
+    </div>}
+    {data.canEdit && <section className="panel tech-new-season">
+      <h2>{t("New season")}</h2>
+      <p>{t("Sets every node back to 0. Only use this when a new season starts in the game.")}</p>
+      {confirmReset
+        ? <div className="tech-confirm" role="group" aria-label={t("Set every node back to 0 for a new season?")}>
+          <strong>{t("Set every node back to 0 for a new season?")}</strong>
+          <button className="button danger" disabled={saving} onClick={() => { setConfirmReset(false); void save({ reset: true }, "Clan Tech reset for the new season."); }}><RotateCcw size={15} />{t("Yes, reset to 0")}</button>
+          <button className="button secondary" disabled={saving} onClick={() => setConfirmReset(false)}>{t("Keep the levels")}</button>
+        </div>
+        : <button className="button secondary" disabled={saving || dirty} onClick={() => setConfirmReset(true)}><RotateCcw size={15} />{t("Start a new season")}</button>}
+    </section>}
   </div>;
 }

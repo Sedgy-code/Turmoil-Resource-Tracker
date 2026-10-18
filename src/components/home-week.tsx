@@ -15,7 +15,7 @@ import { FoldButton, useFold } from "./home-fold";
 import { CoinStack } from "./home-icons";
 import { EggIcon, HammerIcon, HorseshoeIcon, PILLAR_ICONS, TicketIcon, VialIcon, type ResourcePicture } from "./resource-icons";
 import { MemberAvatar } from "./member-identity";
-import { useClanDayVotes, useClanDays, useNow } from "./war-week";
+import { todayAdvice, useClanDayVotes, useClanDays, useNow, type TodayTone } from "./war-week";
 import "./home-week.css";
 
 const DAY = 86_400_000;
@@ -81,6 +81,8 @@ export function HomeWeek({ data, notify, between }: { data: DashboardResponse; n
   const [busy, setBusy] = useState(false);
   // The job rows wait for the first answers, so a finished week can start folded without a jump.
   const [ready, setReady] = useState(false);
+  // A job that couldn't load says so, instead of quietly disappearing from the list.
+  const [loadFailed, setLoadFailed] = useState(false);
   const refresh = useCallback(async () => {
     const [dew, snipes, ascensions] = await Promise.all([
       load<DewResponse>("/api/dew"), load<SnipesResponse>("/api/snipes"), load<AscensionsResponse>("/api/ascensions"),
@@ -88,6 +90,7 @@ export function HomeWeek({ data, notify, between }: { data: DashboardResponse; n
     if (dew) setEarned(dew.resourceRewardEarned);
     if (snipes) setPlans(snipes.plans);
     if (ascensions) setAscension(ascensions.mine);
+    setLoadFailed(!dew || !snipes || !ascensions);
     setReady(true);
   }, []);
   useEffect(() => {
@@ -181,6 +184,7 @@ export function HomeWeek({ data, notify, between }: { data: DashboardResponse; n
       </div>
       {/* Under the heading, so it fits beside the ⌄ on a phone. */}
       {allDone && <p className="home-done"><span className="home-done-tick" aria-hidden="true"><Check size={13} strokeWidth={3.4} /></span>{t("All done!")}</p>}
+      {loadFailed && <p className="home-load-failed" role="status">{t("Some of this week’s jobs couldn’t load. Check your connection, then open the Hub again.")}</p>}
       {jobsOpen && <ol className="home-jobs" id="home-jobs-list">
         <li className={`home-job with-side${saved ? " done" : ""}`}>
           <JobMark tone="gold" done={saved}><CoinStack size={24} /></JobMark>
@@ -314,7 +318,7 @@ function needsOf(day: number): Need[] {
   return NEEDS.filter((need) => NEED_RESOURCES[need].some((key) => resources.includes(key)));
 }
 
-type Tone = "on" | "hold" | "battle" | "claim";
+type Tone = TodayTone;
 const TONE_ICONS: Record<Tone, ComponentType<LucideProps>> = { on: Star, hold: Hand, battle: Swords, claim: Gift };
 
 /** What the clan is doing in the war today: spend, hold, fight or claim; on Days 6–7, vote for next war's days. */
@@ -341,30 +345,10 @@ function HomeToday({ now, notify, memberId }: { now: Date; notify: (message: str
   }
   // On Day 7 the war is over, so the clan days shown are the next war's (as on War → This Week).
   const clan = useClanDays(warWeekOf(war.day === 7 ? new Date(now.getTime() + DAY) : now));
-  let badge: { tone: Tone; text: string } | null = null;
-  let main = "";
-  let sub = "";
-  if (war.day <= 5) {
-    if (!clan.loaded) main = "…";
-    else if (!clan.days.length) main = t("Leadership hasn’t picked the clan days yet. Check announcements before you spend.");
-    else if (clan.days.includes(war.day)) {
-      badge = { tone: "on", text: t("Clan day") };
-      main = t("Today is a clan day: spend your resources.");
-      sub = t(WAR_DAYS[war.day - 1].tip);
-    } else {
-      badge = { tone: "hold", text: t("Hold") };
-      main = t("Today is not a clan day: hold your resources.");
-      const next = clan.days.find((day) => day > war.day);
-      sub = next ? t("Next clan day: Day {day}.", { day: next }) : t("No more clan days this war.");
-    }
-  } else if (war.day === 6) {
-    badge = { tone: "battle", text: t("Battle") };
-    main = t("Fight the other clans. Spending doesn't score today.");
-  } else {
-    badge = { tone: "claim", text: t("Claim rewards") };
-    main = t("Claim your war rewards. You only have today.");
-    if (clan.days.length) sub = t("Next war’s clan days: {days}.", { days: clan.days.map((day) => t("Day {day}", { day })).join(", ") });
-  }
+  // The same words as the War page's Today card.
+  const advice = todayAdvice(war.day, clan, t);
+  const badge: { tone: Tone; text: string } | null = advice.tone ? { tone: advice.tone, text: advice.badge } : null;
+  const { main, sub } = advice;
   const BadgeIcon = badge ? TONE_ICONS[badge.tone] : null;
   const todayFold = useFold("today");
   // The vote can only fold once the member has voted; voted for both days before Home opened:

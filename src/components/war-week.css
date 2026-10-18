@@ -3,6 +3,7 @@
 .war-week-now { padding: 18px 20px; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; border-color: #d9a52b66; background: linear-gradient(120deg, #1d1a10, var(--panel)); }
 .war-week-now h2 { margin: 2px 0 4px; font-size: 20px; font-family: var(--heading); }
 .war-week-now p { margin: 0; color: var(--muted); font-size: 13px; }
+.war-week-now .war-week-verdict { margin: 2px 0 3px; color: #f2f5f8; font-size: 16px; font-weight: 750; line-height: 1.35; }
 .war-week-kicker { font-size: 10px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--gold); font-weight: 700; }
 .war-week-timer { display: flex; align-items: center; gap: 8px; padding: 9px 13px; border-radius: 8px; background: #0c120e; border: 1px solid var(--border); font-size: 13px; color: #f0d58a; font-weight: 600; }
 .war-week-note { margin: 0; color: var(--muted); font-size: 12px; }
@@ -41,6 +42,8 @@
 }
 @media (max-width: 800px) {
   .toast { bottom: calc(76px + env(safe-area-inset-bottom)); }
+  /* My Resources: Save floats just above the bottom bar, never underneath it. */
+  .resource-form .save-bar { bottom: calc(76px + env(safe-area-inset-bottom)); z-index: 36; }
 }
 
 /* Clan days: the war days leadership picked for spending. */
@@ -64,6 +67,7 @@ button.war-clan-day:hover, button.war-clan-day:focus-visible { border-color: var
 /* Leadership: pick the next war's clan days */
 .war-planner { display: flex; flex-direction: column; gap: 10px; padding: 16px; }
 .war-planner h2 { margin: 0; font-size: 17px; }
+.war-planner .war-planner-starts { margin: -4px 0 0; color: #dfe7f1; font-size: 14px; font-weight: 650; }
 .war-planner .war-week-note { margin: 0; }
 .war-pairs { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .war-pairs li { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: #0f1612; }

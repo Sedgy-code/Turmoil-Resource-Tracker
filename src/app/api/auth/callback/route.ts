@@ -16,6 +16,7 @@ import {
   cookieOptions,
 } from "@/lib/server/auth";
 import { ApiError, errorResponse } from "@/lib/server/errors";
+import { safeReturnPath } from "@/lib/return-path";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
@@ -29,7 +30,10 @@ export async function GET(request: Request) {
     const discordError = parameters.get("error");
     // prompt=none can come back asking for approval: show Discord's screen once.
     if (discordError && ["consent_required", "interaction_required", "login_required"].includes(discordError)) {
-      const retry = NextResponse.redirect(`${appUrl()}/api/auth/login?consent=1`);
+      // Keep the page the member was heading to.
+      let next = "/";
+      try { if (encryptedState) next = safeReturnPath((JSON.parse(decrypt(encryptedState)) as { next?: unknown }).next); } catch { /* start from Home */ }
+      const retry = NextResponse.redirect(`${appUrl()}/api/auth/login?consent=1${next === "/" ? "" : `&next=${encodeURIComponent(next)}`}`);
       retry.headers.set("Cache-Control", "no-store");
       return retry;
     }
@@ -51,6 +55,7 @@ export async function GET(request: Request) {
       state: string;
       verifier: string;
       issuedAt: number;
+      next?: unknown;
     };
     if (
       typeof pending.state !== "string" ||
@@ -66,7 +71,7 @@ export async function GET(request: Request) {
     const membership = await assertGuildMembership(tokens.access_token);
     const member = await registerDiscordMember(user, undefined, membership);
     const session = await createSession(member, tokens);
-    const response = NextResponse.redirect(`${appUrl()}/`);
+    const response = NextResponse.redirect(`${appUrl()}${safeReturnPath(pending.next)}`);
     response.cookies.set(SESSION_COOKIE, session, sessionCookieOptions());
     response.cookies.set(OAUTH_COOKIE, "", { ...cookieOptions(), maxAge: 0 });
     response.headers.set("Cache-Control", "no-store");

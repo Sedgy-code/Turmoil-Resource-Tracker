@@ -4,11 +4,14 @@ import { appUrl, isDemo, requireConfiguration } from "@/lib/server/config";
 import { encrypt, randomToken } from "@/lib/server/crypto";
 import { OAUTH_COOKIE, cookieOptions } from "@/lib/server/auth";
 import { errorResponse } from "@/lib/server/errors";
+import { safeReturnPath } from "@/lib/return-path";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   try {
-    if (isDemo()) return NextResponse.redirect(`${appUrl()}/`);
+    // After signing in, go back to the page the member's link opened.
+    const next = safeReturnPath(new URL(request.url).searchParams.get("next"));
+    if (isDemo()) return NextResponse.redirect(`${appUrl()}${next}`);
     requireConfiguration();
     const state = randomToken();
     const verifier = randomToken();
@@ -29,7 +32,7 @@ export async function GET(request: Request) {
     const response = NextResponse.redirect(url);
     response.cookies.set(
       OAUTH_COOKIE,
-      encrypt(JSON.stringify({ state, verifier, issuedAt: Date.now() })),
+      encrypt(JSON.stringify({ state, verifier, issuedAt: Date.now(), next })),
       { ...cookieOptions(), maxAge: 600 },
     );
     response.headers.set("Cache-Control", "no-store");

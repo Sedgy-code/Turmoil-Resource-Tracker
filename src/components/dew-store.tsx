@@ -7,7 +7,8 @@ import { announceClanPointsUpdate } from "@/lib/clan-points";
 import { numberFormat } from "@/lib/resources";
 import type { CosmeticCategory, DashboardResponse, DewItem, DewResponse, Member } from "@/lib/types";
 import { MemberAvatar, MemberName, MemberTitle } from "./member-identity";
-import { useT } from "@/lib/i18n";
+import { useLanguage } from "@/lib/i18n";
+import { countdown, utcDateTime } from "@/lib/war-calendar";
 
 type Props = {
   data: DashboardResponse;
@@ -26,13 +27,11 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   return result as T;
 }
 
-function nextRewardReset(week: string): string {
+/** When this week's rewards reset: a week after the reward week starts (00:00 UTC). */
+function nextRewardReset(week: string): Date {
   const nextWeek = new Date(`${week}T00:00:00.000Z`);
   nextWeek.setUTCDate(nextWeek.getUTCDate() + 7);
-  return new Intl.DateTimeFormat("en-AU", {
-    timeZone: "Australia/Sydney", weekday: "long", day: "numeric", month: "short",
-    hour: "numeric", minute: "2-digit", timeZoneName: "short",
-  }).format(nextWeek);
+  return nextWeek;
 }
 
 function RewardPreview({ item, member }: { item: DewItem; member: Member }) {
@@ -44,7 +43,7 @@ function RewardPreview({ item, member }: { item: DewItem; member: Member }) {
 }
 
 export function DewStore({ data, notify, refresh }: Props) {
-  const t = useT();
+  const { t, language } = useLanguage();
   const categoryLabel = (slot: CosmeticCategory) => t(COSMETIC_CATEGORY_LABELS[slot]);
   const [wallet, setWallet] = useState<DewResponse | null>(null);
   const [loadError, setLoadError] = useState("");
@@ -187,7 +186,7 @@ export function DewStore({ data, notify, refresh }: Props) {
             <span className="planning-reward-status">{t(wallet.voteRewardEarned ? "Earned" : "Pending")}</span>
           </div>
         </div>
-        <p className="planning-footnote">{t("Each reward can be earned once a week. Next reset: {date} (Sydney time).", { date: nextRewardReset(wallet.rewardWeek) })}</p>
+        <p className="planning-footnote">{t("Each reward can be earned once a week. Next reset: {date}, in {time}.", { date: utcDateTime(nextRewardReset(wallet.rewardWeek).toISOString(), language), time: countdown(nextRewardReset(wallet.rewardWeek)) })}</p>
       </section>
 
       <section className="planning-panel planning-equipped-profile" aria-label="Your equipped rewards">
