@@ -167,7 +167,7 @@ const SECTIONS: { section: Section; label: string; short: string; icon: Icon; ta
   { section: "leadership", label: "Leadership", short: "Leadership", icon: ShieldCheck, admin: true, tabs: [{ view: "members", label: "Members" }, { view: "ranking", label: "Ranking" }, { view: "hoarding", label: "Hoarding" }, { view: "settings", label: "Settings" }] },
 ];
 const sectionOf = (view: View) => SECTIONS.find((entry) => entry.tabs.some((tab) => tab.view === view))!;
-/** Resources with war points on the dashboard (potions are tracked only). */
+/** Resources with war points on the dashboard (Clan Tech Vials, stored as "potions", are tracked only). */
 type GuidedResource = Exclude<ResourceKey, "potions">;
 const essentials: {
   key: GuidedResource;
@@ -191,8 +191,8 @@ const dashboardResources = [
   { key: "eggsPetsTotal", icon: RainbowEgg, label: "Total eggs/pets", color: "eggs" },
   ...essentials.slice(2),
 ] satisfies typeof essentials;
-/** Potions came back to the form on this date; older saves never asked for them. */
-const POTIONS_RETURNED = Date.parse("2026-10-18T02:30:00Z");
+/** The form asked for red potions by mistake until this time; saves before it never gave Clan Tech Vials. */
+const POTIONS_RETURNED = Date.parse("2026-10-18T04:45:00Z");
 /** Short help under each box, and the caption for its picture of the game screen. */
 const RESOURCE_GUIDE: Record<ResourceKey, { help: string; where: string }> = {
   skillTickets: { help: "Top left of the Skills screen.", where: "Skills screen → the green ticket number at the top left." },
@@ -201,7 +201,7 @@ const RESOURCE_GUIDE: Record<ResourceKey, { help: string; where: string }> = {
   hammers: { help: "The number on the anvil on the Forge screen.", where: "Forge screen → the hammer number on the anvil." },
   eggsPetsTotal: { help: "Open a pet’s Upgrade screen, select all, and use the “Selected” number.", where: "Tap a pet → Upgrade → select all spare eggs/pets → use the “Selected” number." },
   eggshellsTotal: { help: "Top left of the Pets screen.", where: "Pets screen → the eggshell number at the top left." },
-  potions: { help: "Top left of the Tech Tree screen (the red potion).", where: "Tech Tree screen → the red potion number at the top left." },
+  potions: { help: "Tech Tree screen: the green vial, under the red potion.", where: "Tech Tree screen → the green vial number, under the red potion at the top left." },
 };
 
 const OFFLINE_MESSAGE = "Can’t reach the tracker. Check your internet connection and try again.";
@@ -1442,7 +1442,7 @@ function ResourceForm({
   const draftPlanning = (details: PlanningDetails) => Object.fromEntries(planningFields.map(({ key }) => [key, planningText(details, key)])) as Record<PlanningFieldKey, string>;
   const [planningValues, setPlanningValues] = useState(() => draftPlanning(savedPlanning));
   const resourceKeys = RESOURCE_FIELDS.map(({ key }) => key as ResourceKey);
-  const potionsNeverAsked = !!entry && !readOnly && entry.resources.potions === 0 && Date.parse(entry.updatedAt) < POTIONS_RETURNED;
+  const potionsNeverAsked = !!entry && !readOnly && Date.parse(entry.updatedAt) < POTIONS_RETURNED;
   const draftResources = (resources: ResourceValues) =>
     Object.fromEntries(
       resourceKeys.map((key) => [key, key === "potions" && potionsNeverAsked ? "" : String(resources[key])]),
@@ -1689,12 +1689,12 @@ function ResourceForm({
           })}
           <EntryRow
             id="resource-potions"
-            label={t("Potions")}
+            label={t("Clan Tech Vials")}
             icon={<FlaskConical size={15} />}
             badge={potionsNeverAsked ? t("New") : undefined}
             help={t(RESOURCE_GUIDE.potions.help)}
             guide={!readOnly && <FieldGuide field="potions" hint={t(RESOURCE_GUIDE.potions.where)} />}
-            boxes={[{ label: t("Potions"), placeholder: "0", value: values.potions, onChange: (value) => update("potions", value) }]}
+            boxes={[{ label: t("Clan Tech Vials"), placeholder: "0", value: values.potions, onChange: (value) => update("potions", value) }]}
           />
         </div>
       </section>

@@ -13,7 +13,7 @@ export const RESOURCE_FIELDS = [
   { key: "mountKeys", label: "Mount Keys", category: "essentials" },
   { key: "mountsToMerge", label: "Mounts to Merge", category: "essentials" },
   { key: "hammers", label: "Hammers", category: "essentials" },
-  { key: "potions", label: "Potions", category: "essentials" },
+  { key: "potions", label: "Clan Tech Vials", category: "essentials" },
 ] as const;
 export type ResourceKey =
   | "skillTickets"
