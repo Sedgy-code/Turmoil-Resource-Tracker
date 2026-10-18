@@ -13,13 +13,17 @@ const RECENT_RECORDS = 4;
 const NEW_MEMBER_DAYS = 14;
 export const NEVER_SIGNED_IN_PENALTY = 40;
 
-/** How much each part counts towards the score (out of 100). Parts with no data yet are left out. */
+/**
+ * How much each part counts towards the score (out of 100). Parts with no data yet are left out.
+ * Snipes count only a little: not everyone can be online for them, and time zones decide a lot.
+ * Clan Tech Vials and weekly Clan Hub updates count more, as the clan rules ask of everyone.
+ */
 export const RANKING_WEIGHTS: Record<RankingMetric, number> = {
   warPoints: 30,
-  vials: 20,
-  snipes: 20,
-  updates: 15,
+  vials: 30,
+  updates: 20,
   warSpending: 15,
+  snipes: 5,
 };
 
 /** Where a value sits among everyone's (0 = lowest, 1 = highest); ties share the middle. */

@@ -169,7 +169,11 @@ test("the contribution ranking puts the least active members first", async () =>
     assert.equal(ranking.rows.at(-1)?.member.id, star.id);
     assert.equal(ranking.rows.find(({ member }) => member.id === star.id)?.vials, 50);
     assert.equal(ranking.records.wars, 1);
-    assert.equal(ranking.weights.vials, 20);
+    assert.equal(ranking.weights.vials, 30);
+    // Snipes count only a little (availability and time zones), and the parts still add up to 100.
+    const { RANKING_WEIGHTS } = await import("../src/lib/server/ranking");
+    assert.equal(RANKING_WEIGHTS.snipes, 5);
+    assert.equal(Object.values(RANKING_WEIGHTS).reduce((sum, weight) => sum + weight, 0), 100);
     // Members there from the start aren't "new", even though the site is young.
     await db.query("UPDATE app_members SET joined_at = NOW() - INTERVAL '5 days'");
     assert.equal((await contributionRanking(admin, db)).rows.some((row) => row.isNew), false);
