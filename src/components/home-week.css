@@ -1,155 +1,336 @@
-/* Home: this week's jobs and today's war plan. Phone first and compact; side by side on wide screens. */
-.page-heading.home-heading { margin-bottom: 14px; }
-.page-heading.home-heading p { margin-top: 4px; }
-.home-week { display: grid; gap: 12px; margin-bottom: 18px; }
-.home-card { padding: 14px; border: 1px solid var(--border); border-radius: 16px; background: var(--panel); min-width: 0; }
-.home-jobs-card {
-  border-color: #b4974955;
-  background: radial-gradient(ellipse at 0% 0%, #2d93381f, transparent 60%), linear-gradient(135deg, #17221a, #0f1812);
+/* Home: a banner with the clan crest, this week's jobs, the clan's arsenal and today's war plan.
+   Phone first. The colours carry meaning: green glow is your jobs and the clan's progress, gold is
+   Clan Points and the main buttons, red is battle day. */
+:root {
+  --hw-ink: #f2f5f8;
+  --hw-cool: #a9bde6;
+  --hw-glow: #2fe46c;
+  --hw-gold: #f6c95a;
+  --hw-gold-bright: #ffd56b;
+  --hw-gold-line: #e2ad3c;
+  --hw-row-line: #1c3530;
+  --hw-chip-line: #2a4552;
 }
-.home-card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; margin-bottom: 10px; }
-.home-card-head h2 { margin: 0; font-family: var(--heading); font-size: 17px; color: #f1e6c4; }
-.home-done { display: inline-flex; align-items: center; gap: 6px; color: var(--emerald); font-size: 13px; font-weight: 600; }
 
-.home-jobs { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+/* Painted mountains behind "Hi, name", from the clan's own design (they fade out to the left and bottom). */
+.workspace.home-sky { background: url(/home/mountains.webp) right 74px / auto 170px no-repeat; }
+.page-heading.home-heading { margin-bottom: 16px; }
+.page-heading.home-heading h1 { font-size: 31px; font-weight: 800; letter-spacing: -0.6px; line-height: 1.15; background: linear-gradient(180deg, #fff 30%, #c9d3df); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.page-heading.home-heading h1::after {
+  content: "";
+  display: block;
+  width: 46px;
+  height: 4px;
+  margin-top: 10px;
+  border-radius: 4px;
+  background: var(--hw-glow);
+  box-shadow: 0 0 12px #2fe46caa;
+}
+.home-name { background: linear-gradient(180deg, #ffe9a8, #e8ae47); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+.home-week { display: grid; gap: 12px; margin-bottom: 18px; }
+
+/* The banner: brush lettering on the left, the crest among war banners on the right. */
+.home-hero {
+  position: relative;
+  overflow: hidden;
+  border: 1.5px solid #2fe46cb0;
+  border-radius: 18px;
+  background: radial-gradient(85% 75% at 0% 0%, #10301e 0%, transparent 62%), linear-gradient(180deg, #07110d, #050b09);
+  box-shadow: 0 0 20px -6px #2fe46c66, inset 0 0 24px -12px #2fe46c88;
+}
+.home-hero-main { position: relative; }
+.home-hero-art {
+  position: absolute;
+  top: 0;
+  inset-inline-end: 0;
+  width: auto;
+  height: 100%;
+  max-width: 55%;
+  object-fit: cover;
+  object-position: 58% center;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 30%);
+  mask-image: linear-gradient(90deg, transparent, #000 30%);
+}
+[dir="rtl"] .home-hero-art {
+  -webkit-mask-image: linear-gradient(270deg, transparent, #000 30%);
+  mask-image: linear-gradient(270deg, transparent, #000 30%);
+}
+.home-hero-filters { position: absolute; width: 0; height: 0; }
+.home-hero-copy { position: relative; z-index: 1; display: grid; justify-items: start; gap: 7px; padding: 13px 14px 13px 16px; }
+.home-hero-title { max-width: 60%; margin: 0; }
+.home-hero-title img { display: block; width: 176px; max-width: 100%; height: auto; filter: drop-shadow(0 3px 2px #000c) drop-shadow(0 0 16px #2fe46c33); }
+.home-hero-brush {
+  display: grid;
+  font-family: "Knewave", var(--heading);
+  font-size: 30px;
+  /* Knewave has one weight; languages it doesn't cover fall back to a heavy system font. */
+  font-weight: 900;
+  font-synthesis: none;
+  line-height: 0.92;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  transform: rotate(-4deg) skewX(-7deg);
+  transform-origin: left bottom;
+  filter: url(#home-brush) drop-shadow(0 3px 0 #000b);
+}
+/* Room above each line for accents (Á, Ä), which the gradient would otherwise leave out. */
+.home-hero-brush > span { padding-top: 0.16em; margin-top: -0.16em; }
+.home-hero-brush span:first-child { background: linear-gradient(180deg, #8dffa6, #2fd862 55%, #15993c); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.home-hero-brush span + span { margin-inline-start: 0.15em; background: linear-gradient(180deg, #fff 35%, #f5d39f); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.home-hero-copy p { max-width: 57%; margin: 0; color: #dce5f0; font-size: 13px; line-height: 1.38; text-shadow: 0 1px 6px #000; }
+.home-hero-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 44px;
+  margin-top: 2px;
+  padding: 0 16px 0 14px;
+  border-radius: 13px;
+  background: linear-gradient(180deg, #ffd770, #f0ac37);
+  color: #1d1404;
+  font-size: 15px;
+  font-weight: 750;
+  white-space: nowrap;
+  box-shadow: 0 8px 20px -8px #f3b54acc, inset 0 1px 0 #fff3d0, inset 0 -2px 0 #c98a22;
+  --coin-edge: #ffd770;
+}
+.home-hero-cta:active { transform: translateY(1px); }
+.home-hero-progress {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px 10px 16px;
+  border-top: 1px solid #1e3b2c;
+  background: linear-gradient(180deg, #050c0acc, #040908);
+}
+.home-hero-faces { display: flex; flex-shrink: 0; }
+.home-hero-faces .avatar { width: 28px; height: 28px; margin-inline-start: -9px; border: 2px solid #06100c; box-shadow: 0 0 0 1px #2fe46c77; font-size: 9px; }
+.home-hero-faces .avatar:first-child { margin-inline-start: 0; }
+.home-hero-progress p { display: grid; gap: 1px; min-width: 0; margin: 0; line-height: 1.25; }
+.home-hero-progress strong { color: var(--hw-ink); font-size: 13.5px; font-weight: 700; white-space: nowrap; }
+.home-hero-progress small { color: var(--hw-cool); font-size: 12px; }
+.home-hero-progress .home-track { flex: 1; min-width: 48px; }
+.home-track { height: 7px; border-radius: 9px; background: #102a24; box-shadow: inset 0 0 0 1px #1b4637; overflow: hidden; }
+.home-track i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #1fc057, #4cf08a); box-shadow: 0 0 10px #2fe46c99; }
+
+/* Cards */
+.home-card { min-width: 0; padding: 14px; border: 1px solid #22302c; border-radius: 18px; background: linear-gradient(180deg, #0a1311, #060c0b); }
+.home-card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; margin-bottom: 11px; }
+.home-card-head h2 { display: flex; align-items: center; gap: 10px; margin: 0; font-family: var(--heading); font-size: 19px; font-weight: 800; letter-spacing: -0.2px; color: var(--hw-ink); }
+.home-card-head .home-kicker { gap: 9px; font-family: var(--font); font-size: 12.5px; font-weight: 650; letter-spacing: 1.2px; text-transform: uppercase; color: var(--hw-cool); }
+.home-kicker svg { flex-shrink: 0; color: var(--hw-gold); }
+
+/* Your jobs this week */
+.home-jobs-card {
+  padding: 12px;
+  border: 1.5px solid #2fe46cc4;
+  background: radial-gradient(110% 60% at 0% 0%, #0f3420 0%, transparent 60%), linear-gradient(180deg, #071510, #050c0a);
+  box-shadow: 0 0 24px -6px #2fe46c77, inset 0 0 28px -12px #2fe46c99;
+}
+.home-jobs-icon { flex-shrink: 0; color: var(--hw-glow); filter: drop-shadow(0 0 6px #2fe46c88); }
+.home-done { display: inline-flex; align-items: center; gap: 7px; color: #4cf08a; font-size: 15px; font-weight: 750; }
+.home-done-tick { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--hw-glow); color: #03140a; box-shadow: 0 0 10px #2fe46c99; }
+.home-jobs { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; }
 .home-job {
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr);
+  grid-template-columns: 40px minmax(0, 1fr);
   align-items: center;
-  gap: 8px 10px;
+  gap: 10px;
   padding: 10px 11px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: #0f1612;
+  border: 1px solid var(--hw-row-line);
+  border-radius: 15px;
+  background: #040a09d9;
 }
-.home-job-mark {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border: 1px solid #b4974966;
-  border-radius: 50%;
-  background: #1f2b23;
-  color: var(--gold);
-}
-.home-job.done .home-job-mark { border-color: #69d58b77; background: #1b3624; color: var(--emerald); }
-.home-job-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.home-job-text strong { font-size: 15px; color: var(--text); line-height: 1.3; }
-.home-job-text small { font-size: 12.5px; color: var(--muted); line-height: 1.4; overflow-wrap: anywhere; }
-.home-job.with-side { grid-template-columns: 32px minmax(0, 1fr) auto; }
-.home-job-action { grid-column: 1 / -1; justify-content: center; min-height: 44px; font-size: 15px; }
-.home-job-side { display: inline-flex; align-items: center; min-height: 36px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; color: var(--gold); font-size: 13.5px; font-weight: 600; white-space: nowrap; }
-
-/* Yes / No for a snipe, and the ascending chips: big enough for a thumb. */
-.home-choice { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.home-chips { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 5px; }
-.home-choice button,
-.home-chips button {
+.home-job.with-side { grid-template-columns: 40px minmax(0, 1fr) auto; }
+.home-job-mark { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border: 1.5px solid; border-radius: 50%; }
+.home-job-mark.gold { --coin-edge: #6b4a0b; border-color: var(--hw-gold-line); background: radial-gradient(circle at 50% 30%, #4b3709, #1a1305 70%); color: var(--hw-gold); box-shadow: 0 0 14px -2px #e2ad3c66; }
+.home-job-mark.slate { border-color: #4a6273; background: radial-gradient(circle at 50% 30%, #203241, #0b141b 70%); color: #c7d5e8; }
+.home-tick { position: absolute; right: -3px; bottom: -3px; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--hw-glow); color: #03140a; box-shadow: 0 0 0 2px #050c0a; }
+[dir="rtl"] .home-tick { right: auto; left: -3px; }
+.home-job-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.home-job-text > strong { font-size: 15.5px; font-weight: 750; line-height: 1.25; color: var(--hw-ink); }
+.home-job-text small { font-size: 13px; line-height: 1.4; color: var(--hw-cool); overflow-wrap: anywhere; }
+.home-gold { color: var(--hw-gold); font-weight: 800; }
+.home-side-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  border: 1px solid var(--border);
-  background: #18221c;
-  color: var(--text);
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1.5px solid var(--hw-gold-line);
+  border-radius: 999px;
+  background: #e2ad3c14;
+  color: var(--hw-gold-bright);
+  font-size: 13.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 0 14px -4px #e2ad3c88;
 }
-.home-choice button { min-height: 42px; border-radius: 10px; font-size: 15px; }
-.home-chips button { flex: 0 1 auto; min-width: 44px; min-height: 38px; padding: 0 9px; border-radius: 999px; font-size: 13.5px; }
-.home-choice button[aria-pressed="true"],
-.home-chips button[aria-pressed="true"] { border-color: var(--gold); background: #2a2614; color: var(--gold); }
-.home-choice button:disabled { opacity: 0.6; cursor: wait; }
-.home-job.done .home-choice button { min-height: 36px; font-size: 14px; }
-.home-progress { display: grid; gap: 6px; margin-top: 12px; }
-.home-progress span { color: #a1b1a5; font-size: 12.5px; }
-.home-track { height: 6px; border-radius: 9px; background: #2b3d31; overflow: hidden; }
-.home-track i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #3fb950, #8fdc6a); }
+.home-side-button.round { width: 40px; min-height: 40px; padding: 0; }
 
-.home-kicker { display: inline-flex; align-items: center; gap: 7px; font-family: var(--font); font-size: 12px !important; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--subtle) !important; }
-.home-kicker svg { color: var(--gold); }
-.home-badge { padding: 4px 10px; border: 1px solid; border-radius: 999px; font-size: 12.5px; font-weight: 700; white-space: nowrap; }
-.home-badge.on { border-color: #e6bd5977; background: #2a2614; color: var(--gold); }
-.home-badge.hold { border-color: #e8a27c66; background: #2a1d17; color: #f0b08e; }
-.home-badge.battle { border-color: #f08a8a66; background: #2b1717; color: #f5a3a3; }
-.home-badge.claim { border-color: #69d58b77; background: #1b3624; color: var(--emerald); }
-.home-today-main { margin: 0 0 3px; font-size: 15.5px; font-weight: 600; line-height: 1.35; color: var(--text); }
-.home-today-sub { margin: 0; font-size: 13.5px; color: var(--muted); }
-.home-vote { margin-top: 10px; padding: 10px 11px; border: 1px solid #b4974955; border-radius: 12px; background: #141c16; }
-.home-vote-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin: 0 0 8px; font-size: 14px; font-weight: 700; color: var(--text); }
-.home-vote-reward { flex-shrink: 0; padding: 2px 8px; border: 1px solid #e6bd5977; border-radius: 999px; background: #2a2614; color: var(--gold); font-size: 11.5px; font-style: normal; font-weight: 700; white-space: nowrap; }
-.home-vote-days { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; }
+/* Ascending chips and snipe Yes / No: big enough for a thumb, gold when chosen. */
+/* One row in English; longer words wrap to a second, centred row instead of being cut off. */
+.home-chips { grid-column: 1 / -1; display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; }
+.home-chips button,
+.home-choice button,
 .home-vote-days button {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1px;
-  min-width: 0;
-  min-height: 50px;
-  padding: 4px 2px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: #18221c;
-  color: var(--text);
+  border: 1px solid var(--hw-chip-line);
+  background: linear-gradient(180deg, #11222b, #0b171d);
+  color: #d6e1ef;
   font: inherit;
   cursor: pointer;
 }
-.home-vote-days button span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--muted); }
-.home-vote-days button strong { font-size: 16px; }
-.home-vote-days button[aria-pressed="true"] { border-color: var(--gold); background: #2a2614; }
-.home-vote-days button[aria-pressed="true"] span,
-.home-vote-days button[aria-pressed="true"] strong { color: var(--gold); }
+.home-chips button { display: flex; flex: 1 0 auto; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-width: 48px; max-width: calc(50% - 3px); min-height: 52px; padding: 6px 5px; border-radius: 12px; font-size: 12.5px; font-weight: 650; }
+.home-chips button svg { color: #9db7d6; }
+.home-chips button span { white-space: nowrap; }
+.home-choice { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.home-choice button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; border-radius: 12px; font-size: 15px; font-weight: 700; }
+.home-chips button[aria-pressed="true"],
+.home-choice button[aria-pressed="true"],
+.home-vote-days button[aria-pressed="true"] {
+  border-color: #f2bf4b;
+  background: linear-gradient(180deg, #3b2c0a, #1c1505);
+  color: var(--hw-gold-bright);
+  box-shadow: 0 0 0 1px #f2bf4b55, 0 0 16px -2px #f2bf4b88;
+}
+.home-chips button[aria-pressed="true"] svg { color: var(--hw-gold-bright); }
+.home-choice button:disabled { opacity: 0.6; cursor: wait; }
+
+/* The clan's arsenal */
+.home-arsenal { border-color: #5b4c2a99; background: radial-gradient(90% 90% at 100% 0%, #2a210b55, transparent 60%), linear-gradient(180deg, #0b1311, #070c0b); }
+.home-arsenal .live-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid #2fe46c88; border-radius: 999px; background: #0a2415; color: #5cf394; font-size: 11px; font-weight: 700; letter-spacing: 0.6px; }
+.home-arsenal .live-badge i { width: 6px; height: 6px; border-radius: 50%; background: var(--hw-glow); box-shadow: 0 0 6px var(--hw-glow); }
+.home-arsenal-range { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin: 0; font-variant-numeric: tabular-nums; }
+.home-arsenal-range strong { color: #fccf5e; font-family: var(--heading); font-size: 25px; font-weight: 800; letter-spacing: -0.4px; text-shadow: 0 0 18px #f6c95a40; }
+.home-arsenal-range span { color: #8a97a8; font-size: 20px; }
+.home-arsenal-label { color: #8fb0e0; font-size: 14px; }
+.home-arsenal .home-today-foot { margin-top: 2px; }
+
+/* Today in the war: the card takes the colour of the day. */
+.home-today .home-kicker svg { color: var(--hw-cool); }
+.home-today.tone-battle {
+  border: 1.5px solid #d63a4dc4;
+  background: radial-gradient(100% 70% at 0% 0%, #3b0f17aa, transparent 62%), linear-gradient(180deg, #120a0c, #0a0708);
+  box-shadow: 0 0 22px -8px #d63a4d99;
+}
+.home-today.tone-battle .home-kicker svg { color: #ff5a6a; }
+.home-today.tone-on {
+  border: 1.5px solid #e2ad3cb0;
+  background: radial-gradient(100% 70% at 0% 0%, #3a2b0a88, transparent 62%), linear-gradient(180deg, #0f0d07, #090806);
+  box-shadow: 0 0 22px -8px #e2ad3c88;
+}
+.home-today.tone-on .home-kicker svg { color: var(--hw-gold); }
+.home-today.tone-hold { border: 1.5px solid #e8894a99; background: radial-gradient(100% 70% at 0% 0%, #3a1f0d88, transparent 62%), linear-gradient(180deg, #100b08, #0a0806); }
+.home-today.tone-hold .home-kicker svg { color: #f2a06a; }
+.home-today.tone-claim {
+  border: 1.5px solid #2fe46c99;
+  background: radial-gradient(100% 70% at 0% 0%, #0f341f88, transparent 62%), linear-gradient(180deg, #08120d, #060b09);
+  box-shadow: 0 0 22px -8px #2fe46c77;
+}
+.home-today.tone-claim .home-kicker svg { color: var(--hw-glow); }
+.home-badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border: 1.5px solid; border-radius: 999px; font-size: 13px; font-weight: 750; white-space: nowrap; }
+.home-badge.on { border-color: var(--hw-gold-line); background: #2a200a; color: var(--hw-gold-bright); }
+.home-badge.hold { border-color: #e8894a; background: #2a170c; color: #f7b285; }
+.home-badge.battle { border-color: #e04557; background: #2a0d13; color: #ff7d8a; box-shadow: 0 0 12px -2px #e0455788; }
+.home-badge.claim { border-color: var(--hw-glow); background: #0b2716; color: #6cf59a; }
+.home-today-main { margin: 0 0 4px; font-size: 17px; font-weight: 750; line-height: 1.32; color: var(--hw-ink); text-wrap: balance; }
+.home-today-sub { margin: 0; font-size: 14px; color: var(--hw-cool); }
+
+/* Next war: vote for the clan days. Gold, like the other things that earn Clan Points. */
+.home-next-war {
+  border: 1.5px solid #c9952ec0;
+  background: radial-gradient(100% 70% at 0% 0%, #3a2b0a77, transparent 62%), linear-gradient(180deg, #13100a, #0b0906);
+  box-shadow: 0 0 22px -8px #e2ad3c88, inset 0 0 24px -12px #e2ad3c66;
+}
+.home-next-war .home-kicker svg { color: var(--hw-gold); }
+.home-next-war .home-today-main { margin-bottom: 10px; }
+.home-vote-reward { flex-shrink: 0; padding: 2px 9px; border: 1px solid #e6bd5999; border-radius: 999px; background: #2a200a; color: var(--hw-gold-bright); font-size: 12px; font-style: normal; font-weight: 750; white-space: nowrap; }
+.home-vote-days { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.home-vote-days button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; min-width: 0; min-height: 52px; padding: 6px 2px 5px; border-color: #2b4c5b; border-radius: 12px; background: linear-gradient(180deg, #102631, #0a1a21); }
+.home-vote-days button > span:first-child { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: #b9cbe2; }
+.home-vote-days button strong { font-size: 16px; line-height: 1.2; color: var(--hw-ink); }
+/* What each day needs, in the ascending pictures, with a key underneath. */
+.home-vote-needs { display: flex; justify-content: center; gap: 2px; margin: 2px 0 1px; color: #9db7d6; }
+.home-vote-days button[aria-pressed="true"] .home-vote-needs { color: var(--hw-gold-bright); }
+.home-vote-key { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 9px 0 0; color: #b9cbe2; font-size: 12px; }
+.home-vote-key span { display: inline-flex; align-items: center; gap: 5px; }
+.home-vote-key svg { color: #9db7d6; }
+.home-vote-days button[aria-pressed="true"] > span:first-child,
+.home-vote-days button[aria-pressed="true"] strong { color: var(--hw-gold-bright); }
 .home-vote-days button:disabled { opacity: 0.7; cursor: wait; }
-.home-vote small { display: block; margin-top: 6px; color: var(--muted); font-size: 12px; }
+.home-vote-voters { display: block; margin-top: 8px; color: var(--hw-cool); font-size: 12.5px; }
+
 .home-race {
   display: flex;
   align-items: flex-start;
-  gap: 9px;
-  margin: 10px 0 0;
-  padding: 8px 11px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: #0f1612;
-  font-size: 12.5px;
+  gap: 10px;
+  margin: 12px 0 0;
+  padding: 9px 12px;
+  border: 1px solid #1f3330;
+  border-radius: 13px;
+  background: #050b0acc;
+  font-size: 13px;
   line-height: 1.45;
-  color: var(--muted);
+  color: var(--hw-cool);
 }
-.home-race svg { flex-shrink: 0; margin-top: 2px; color: var(--gold); }
-.home-race strong { color: var(--text); }
+.home-race svg { flex-shrink: 0; margin-top: 2px; color: var(--hw-glow); }
+.home-race strong { color: var(--hw-ink); }
 .home-today-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; margin-top: 8px; }
-.home-today-time { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--subtle); }
-.home-link { display: inline-flex; align-items: center; gap: 5px; min-height: 36px; color: var(--gold); font-size: 14px; font-weight: 600; }
+.home-today-time { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--hw-cool); }
+.home-link { display: inline-flex; align-items: center; gap: 5px; min-height: 38px; color: var(--hw-gold-bright); font-size: 14.5px; font-weight: 700; }
+button.home-link { padding: 0; border: 0; background: none; font: inherit; font-size: 14.5px; font-weight: 700; cursor: pointer; }
 
-.home-arsenal-range { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; margin: 0; font-variant-numeric: tabular-nums; }
-.home-arsenal-range strong { color: var(--gold); font-family: var(--heading); font-size: 21px; font-weight: 750; letter-spacing: -0.3px; }
-.home-arsenal-range span { color: var(--muted); }
-.home-arsenal .home-today-foot { margin-top: 2px; }
-button.home-link { padding: 0; border: 0; background: none; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
-.home-more { margin-top: 18px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel); }
+/* Clan totals, folded away under the cards */
+.home-more { margin-top: 18px; border: 1px solid #22302c; border-radius: 16px; background: linear-gradient(180deg, #0a1311, #070c0b); }
 .home-more > summary {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 50px;
+  min-height: 52px;
   padding: 12px 14px;
-  font-weight: 600;
-  color: var(--text);
+  font-weight: 650;
+  color: var(--hw-ink);
   list-style: none;
   cursor: pointer;
 }
 .home-more > summary::-webkit-details-marker { display: none; }
-.home-more > summary > svg:first-child { flex-shrink: 0; color: var(--gold); }
-.home-more-chevron { flex-shrink: 0; margin-left: auto; color: var(--muted); transition: transform 0.2s; }
+.home-more > summary > svg:first-child { flex-shrink: 0; color: var(--hw-gold); }
+.home-more-chevron { flex-shrink: 0; margin-left: auto; color: var(--hw-cool); transition: transform 0.2s; }
 .home-more[open] .home-more-chevron { transform: rotate(180deg); }
-.home-more-body { padding: 4px 16px 16px; min-width: 0; }
+.home-more-body { min-width: 0; padding: 4px 16px 16px; }
 .home-history { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 16px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); color: var(--muted); font-size: 13.5px; }
 
 @media (min-width: 900px) {
   .home-week { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); align-items: start; }
+  .home-hero { grid-column: 1 / -1; }
   .home-jobs-card { grid-row: span 2; }
+  .home-week:has(.home-next-war) .home-jobs-card { grid-row: span 3; }
+  .home-hero-main { min-height: 236px; }
+    .home-hero-title img { width: 260px; }
+  .home-hero-brush { font-size: 42px; }
+  .home-hero-copy { padding: 20px 22px 18px; }
+  .home-hero-copy p { max-width: 440px; font-size: 14.5px; }
+  .home-hero-progress { padding: 11px 22px 13px; }
+  .home-hero-progress .home-track { max-width: 360px; }
+}
+@media (max-width: 800px) {
+  .workspace.home-sky { background-position: right 62px; background-size: auto 122px; }
 }
 @media (max-width: 650px) {
+  .workspace.home-sky .main-content { padding-top: 18px; }
   .home-more-body { padding: 4px 10px 12px; }
+}
+@media (max-width: 380px) {
+    }
+@media (max-width: 370px) {
+  .home-hero-title img { width: 180px; }
+  .home-hero-brush { font-size: 27px; }
+  .home-hero-faces .avatar:nth-child(n + 4) { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-more-chevron { transition: none; }
 }

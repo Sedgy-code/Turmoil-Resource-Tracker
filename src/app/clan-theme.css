@@ -964,18 +964,23 @@ body {
   align-items: center;
   flex-shrink: 0;
   gap: 8px;
-  min-height: 36px;
-  padding: 7px 11px;
-  border: 1px solid #c29c444d;
-  border-radius: 9px;
-  background: #c29c440f;
-  color: #eed08b;
-  font-size: 11px;
+  min-height: 38px;
+  padding: 6px 12px 6px 10px;
+  border: 1px solid #e2ad3ca8;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #2b2209, #141005);
+  box-shadow: 0 0 14px -2px #e2ad3c33, inset 0 1px 0 #ffe7a222;
+  color: #f1e2b6;
+  font-size: 12px;
+  font-weight: 600;
   white-space: nowrap;
 }
-.topbar-clan-points:hover { background: #c29c4421; border-color: #c29c4499; }
+.topbar-clan-points:hover { background: linear-gradient(180deg, #352a0c, #1a1406); border-color: #e2ad3c; }
 .topbar-clan-points:focus-visible { outline: 2px solid #eed08b; outline-offset: 3px; }
-.topbar-clan-points strong { font-size: 15px; font-variant-numeric: tabular-nums; }
+.topbar-clan-points svg { flex-shrink: 0; color: #f6c95a; filter: drop-shadow(0 0 4px #f6c95a66); }
+.topbar-clan-points strong { color: #ffd56b; font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
+/* The signed-in member's picture, ringed in the clan's green. */
+.topbar-actions > .avatar { box-shadow: 0 0 0 2px #0c120e, 0 0 0 3.5px #2fe46c, 0 0 12px #2fe46c66; }
 @media (max-width: 1100px) {
   .topbar-actions .connection, .topbar-actions .demo-pill { display: none; }
 }
@@ -984,8 +989,11 @@ body {
   .topbar .breadcrumb { min-width: 0; }
   .topbar .breadcrumb strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .topbar .topbar-actions { gap: 7px; }
-  .topbar-clan-points { gap: 5px; padding: 6px 8px; min-height: 33px; font-size: 10px; }
-  .topbar-clan-points strong { font-size: 13px; }
+  .topbar-clan-points { gap: 6px; padding: 5px 10px 5px 8px; min-height: 36px; font-size: 11.5px; }
+  .topbar-clan-points strong { font-size: 15px; }
+  /* The page's own title sits right under the bar on phones. */
+  .topbar .breadcrumb strong { display: none; }
+  .topbar-actions > .avatar { width: 32px; height: 32px; }
   .topbar-actions .notification-wrap { display: none; }
 }
 
@@ -1157,11 +1165,14 @@ body {
 .nav-link:active, .bottom-bar a:active { transform: scale(0.98); box-shadow: 0 0 22px #e6bd5988; }
 .section-tabs a { border-radius: 8px 8px 0 0; }
 .section-tabs a.active { text-shadow: 0 0 12px #e6bd5999; background: linear-gradient(180deg, transparent, #d9a52b1f); }
-.bottom-bar a { border-radius: 10px; }
-.bottom-bar a.active { color: var(--gold); text-shadow: 0 0 10px #e6bd5999; background: #d9a52b14; }
+.bottom-bar a { border-radius: 14px; }
+.bottom-bar a.active { color: #ffd56b; text-shadow: 0 0 10px #e6bd5999; background: linear-gradient(180deg, #3b2f0f, #1b160a); box-shadow: inset 0 0 0 1px #e2ad3c55, 0 0 16px #e2ad3c22; }
 .bottom-bar a.active svg { filter: drop-shadow(0 0 7px #e6bd59cc); }
 .table-tabs button.active { text-shadow: 0 0 10px #e6bd5966; }
 @media (prefers-reduced-motion: reduce) {
   .nav-link, .section-tabs a, .bottom-bar a, .table-tabs button { transition: none; }
   .nav-link:active, .bottom-bar a:active { transform: none; }
+}
+@media (max-width: 380px) {
+  .topbar-points-label { display: none; }
 }

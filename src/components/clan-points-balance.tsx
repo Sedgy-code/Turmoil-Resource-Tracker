@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { Coins } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CLAN_POINTS_UPDATED, type ClanPointsUpdate } from "@/lib/clan-points";
 import { numberFormat } from "@/lib/resources";
 import { useT } from "@/lib/i18n";
+import { CrownShield } from "./crown-shield";
 
 export function ClanPointsBalance({ memberId, revision }: { memberId: string; revision?: string | null }) {
   const t = useT();
@@ -66,7 +66,7 @@ export function ClanPointsBalance({ memberId, revision }: { memberId: string; re
   return <Link className="topbar-clan-points" href="/reward-shop"
     aria-label={balance === null ? "Clan Points. Open Reward Shop." : `${numberFormat(balance)} Clan Points. Open Reward Shop.`}
     title={unavailable ? "Unable to refresh your balance. Open Reward Shop to retry." : "Your current Clan Points. Open Reward Shop."}>
-    <Coins size={17} aria-hidden="true" />
+    <CrownShield size={19} />
     <span className="topbar-points-label">{t("Clan Points")}</span>
     <strong aria-live="polite" aria-atomic="true">{balance === null ? "—" : numberFormat(balance)}</strong>
   </Link>;

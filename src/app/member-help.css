@@ -18,9 +18,9 @@
   gap: 7px;
   padding: 0 10px;
   min-height: 38px;
-  border: 1px solid #b4974955;
-  border-radius: 8px;
-  background: #0c1510;
+  border: 1px solid #a8862f88;
+  border-radius: 12px;
+  background: #08110e;
   color: var(--gold);
   position: relative;
 }
@@ -33,8 +33,19 @@
   font-size: 13px;
   font-weight: 600;
   padding: 8px 4px;
+  padding-inline-end: 18px;
   cursor: pointer;
   min-width: 0;
+  max-width: 9em;
+  field-sizing: content;
+  text-overflow: ellipsis;
+}
+/* Sits over the end of the menu, so a tap on it still opens the menu. */
+.language-chevron {
+  position: absolute;
+  inset-inline-end: 9px;
+  color: #c2cad6;
+  pointer-events: none;
 }
 .language-picker select:focus-visible {
   outline: 2px solid var(--gold);
@@ -58,8 +69,13 @@
     padding: 0 7px;
   }
   .topbar-language select {
-    font-size: 12px;
+    font-size: 12.5px;
     padding: 6px 2px;
+    padding-inline-end: 17px;
+    max-width: 7.5em;
+  }
+  .topbar-language .language-chevron {
+    inset-inline-end: 7px;
   }
   .login-language {
     position: static;

@@ -18,6 +18,7 @@
     "@electric-sql/pglite": "0.5.8",
     "@fontsource-variable/dm-sans": "5.3.0",
     "@fontsource-variable/manrope": "5.3.0",
+    "@fontsource/knewave": "5.3.0",
     "lucide-react": "1.52.0",
     "next": "16.3.8",
     "pg": "8.23.1",

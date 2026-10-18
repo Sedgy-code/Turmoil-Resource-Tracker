@@ -17,7 +17,7 @@ import { ClanTech } from "./clan-tech";
 import { MonthlyAwardsPanel } from "./monthly-awards";
 import { LeadershipSettings } from "./leadership-settings";
 import { downloadRows } from "@/lib/csv";
-import { HomeArsenal, HomeMore, HomeWeek } from "./home-week";
+import { HomeArsenal, HomeGreeting, HomeMore, HomeWeek } from "./home-week";
 import { ASCENSIONS_UPDATED, PILLAR_LABELS } from "@/lib/ascension";
 import { useSortable } from "./sortable";
 import { ClanPointsBalance } from "./clan-points-balance";
@@ -46,7 +46,6 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
-  Droplets,
   ArrowRight,
   ArrowUpRight,
   Backpack,
@@ -67,7 +66,7 @@ import {
   History,
   Hammer,
   KeyRound,
-  LayoutDashboard,
+  House,
   LoaderCircle,
   LogOut,
   Menu,
@@ -157,11 +156,11 @@ const VIEW_HREF: Record<View, string> = {
 type Section = "home" | "resources" | "war" | "records" | "store" | "leadership";
 /** The menu: each section opens its first tab; sections with more than one page show tabs. */
 const SECTIONS: { section: Section; label: string; short: string; icon: Icon; tabs: { view: View; label: string }[]; admin?: boolean }[] = [
-  { section: "home", label: "Home", short: "Home", icon: LayoutDashboard, tabs: [{ view: "dashboard", label: "Home" }] },
+  { section: "home", label: "Home", short: "Home", icon: House, tabs: [{ view: "dashboard", label: "Home" }] },
   { section: "resources", label: "My Resources", short: "Resources", icon: Backpack, tabs: [{ view: "resources", label: "My Resources" }] },
   { section: "war", label: "War", short: "War", icon: Swords, tabs: [{ view: "warWeek", label: "This Week" }, { view: "snipes", label: "Snipes" }, { view: "war", label: "Points Calculator" }] },
   { section: "records", label: "Records", short: "Records", icon: Trophy, tabs: [{ view: "warResults", label: "War Results" }, { view: "vials", label: "Vials" }, { view: "tech", label: "Clan Tech" }, { view: "weeks", label: "Weekly History" }] },
-  { section: "store", label: "Reward Shop", short: "Shop", icon: Droplets, tabs: [{ view: "store", label: "Reward Shop" }] },
+  { section: "store", label: "Reward Shop", short: "Shop", icon: Flame, tabs: [{ view: "store", label: "Reward Shop" }] },
   { section: "leadership", label: "Leadership", short: "Leadership", icon: ShieldCheck, admin: true, tabs: [{ view: "members", label: "Members" }, { view: "ranking", label: "Ranking" }, { view: "hoarding", label: "Hoarding" }, { view: "settings", label: "Settings" }] },
 ];
 const sectionOf = (view: View) => SECTIONS.find((entry) => entry.tabs.some((tab) => tab.view === view))!;
@@ -601,7 +600,7 @@ function TrackerApp({ view }: { view: View }) {
           </div>
         </div>
       </aside>
-      <div className="workspace">
+      <div className={`workspace${view === "dashboard" && !pastHome ? " home-sky" : ""}`}>
         <header className="topbar">
           <div className="breadcrumb">
             <button
@@ -668,7 +667,7 @@ function TrackerApp({ view }: { view: View }) {
           <div className={`page-heading${view === "dashboard" && !pastHome ? " home-heading" : ""}`}>
             <div>
               <h1>
-                {view !== "dashboard" ? t(viewNames[view]) : pastHome ? t("Resource Dashboard") : t("Hi, {name}", { name: user.username })}
+                {view !== "dashboard" ? t(viewNames[view]) : pastHome ? t("Resource Dashboard") : <HomeGreeting name={user.username} />}
               </h1>
               {(view !== "dashboard" || pastHome) && <p>
                 {t(view === "dashboard"

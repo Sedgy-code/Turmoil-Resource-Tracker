@@ -1,6 +1,6 @@
 "use client";
 
-import { Languages } from "lucide-react";
+import { ChevronDown, Languages } from "lucide-react";
 import { LANGUAGES, useLanguage, type Language } from "@/lib/i18n";
 
 /** Always labelled in every language, so anyone can find it. */
@@ -19,6 +19,7 @@ export function LanguagePicker({ className = "" }: { className?: string }) {
           <option key={code} value={code} lang={code}>{label}</option>
         ))}
       </select>
+      <ChevronDown className="language-chevron" size={15} aria-hidden="true" />
     </label>
   );
 }

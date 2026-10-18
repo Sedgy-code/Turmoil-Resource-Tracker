@@ -1,18 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowRight, Backpack, BarChart3, Check, CheckCircle2, ChevronDown, ChevronsUp, Clock, FlaskConical, Sparkles, Swords, Target, X } from "lucide-react";
+import { ArrowRight, BarChart3, CalendarDays, Check, ChevronDown, ChevronsUp, Clock, FlaskConical, Gift, Hand, RefreshCw, ShieldCheck, Star, Swords, Target, X, type LucideProps } from "lucide-react";
+import "@fontsource/knewave/400.css";
 import { ASCENSION_PILLARS, ASCENSIONS_UPDATED, PILLAR_LABELS } from "@/lib/ascension";
 import { announceClanPointsUpdate } from "@/lib/clan-points";
 import { countdown, raceEnd, warDay, warWeekOf, WAR_DAYS } from "@/lib/war-calendar";
-import { currentWeek, numberFormat } from "@/lib/resources";
-import { useT } from "@/lib/i18n";
-import type { AscensionPillar, AscensionsResponse, DashboardResponse, DewResponse, SnipePlan, SnipesResponse } from "@/lib/types";
+import { currentWeek, numberFormat, type ResourceKey } from "@/lib/resources";
+import { useLanguage, useT } from "@/lib/i18n";
+import type { AscensionPillar, AscensionsResponse, DashboardResponse, DewResponse, Member, SnipePlan, SnipesResponse } from "@/lib/types";
+import { CrownShield } from "./crown-shield";
+import { CoinStack, ForgeHammer, MountHorse, PetPaw, SkillStar } from "./home-icons";
+import { MemberAvatar } from "./member-identity";
 import { useClanDayVotes, useClanDays, useNow } from "./war-week";
 import "./home-week.css";
 
 const DAY = 86_400_000;
+
+/** Stands in for a value while a translated sentence is split around it. */
+const MARK = "\u0000";
 
 /** JSON from the hub, or null when it can't be loaded (the cards then show what they know). */
 async function load<T>(url: string): Promise<T | null> {
@@ -32,9 +39,36 @@ async function send<T>(url: string, method: string, body: unknown): Promise<T> {
   return result as T;
 }
 
+/** "Hi, {name}" with the name in gold, wherever the language puts it. */
+export function HomeGreeting({ name }: { name: string }) {
+  const t = useT();
+  const text = t("Hi, {name}", { name: MARK });
+  const at = text.indexOf(MARK);
+  if (at < 0) return <>{text} <span className="home-name">{name}</span></>;
+  return <>{text.slice(0, at)}<span className="home-name">{name}</span>{text.slice(at + MARK.length)}</>;
+}
+
+/** A sentence with one number picked out in gold ("You earned 20 Clan Points."). */
+function Gold({ text, value }: { text: string; value: string }) {
+  const at = text.indexOf(value);
+  if (at < 0) return <>{text}</>;
+  return <>{text.slice(0, at)}<strong className="home-gold">{value}</strong>{text.slice(at + value.length)}</>;
+}
+
+const PILLAR_ICONS: Record<AscensionPillar, ComponentType<{ size?: number }>> = { forge: ForgeHammer, skills: SkillStar, mounts: MountHorse, pets: PetPaw };
+
+/** The round picture at the start of each job; a green tick on it once the job is done. */
+function JobMark({ tone, done, children }: { tone: "gold" | "slate"; done: boolean; children: ReactNode }) {
+  return <span className={`home-job-mark ${tone}`} aria-hidden="true">
+    {children}
+    {done && <span className="home-tick"><Check size={11} strokeWidth={3.5} /></span>}
+  </span>;
+}
+
 /**
- * Home, built for phones: the jobs every member has each week (save resources, say whether they're
- * ascending, answer the next snipe), then what to do in the war today. The rest is for the curious.
+ * Home, built for phones: a call to save resources with the clan's progress, the jobs every member has
+ * each week (save resources, say whether they're ascending, answer the next snipe), then what to do in
+ * the war today. The rest is for the curious.
  */
 export function HomeWeek({ data, notify, between }: { data: DashboardResponse; notify: (message: string, error?: boolean) => void; between?: ReactNode }) {
   const t = useT();
@@ -74,8 +108,14 @@ export function HomeWeek({ data, notify, between }: { data: DashboardResponse; n
     : war.day === 7
       ? t("Earn 20 Clan Points. Please save before Day 1 starts, in {time}.", { time: countdown(war.nextDay, now) })
       : t("Earn 20 Clan Points. The week closes in {time}.", { time: countdown(raceEnd(now), now) });
-  const savedThisWeek = data.entries.filter((entry) => currentWeek(new Date(entry.updatedAt)) === week).length;
-  const total = data.stats.totalMembers;
+  const savedEntries = data.entries
+    .filter((entry) => currentWeek(new Date(entry.updatedAt)) === week)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const faces = savedEntries
+    .map((entry) => data.members.find((member) => member.id === entry.memberId))
+    .filter((member): member is Member => !!member)
+    .slice(0, 4);
+  const update = ownEntry ? t("Update my resources") : t("Add my resources");
 
   // Job 2: are you ascending this week, and what? (No is an answer too.)
   const answered = ascension !== undefined && ascension !== null;
@@ -123,55 +163,103 @@ export function HomeWeek({ data, notify, between }: { data: DashboardResponse; n
   const allDone = earned === true && answered && (!snipe || !!answer);
 
   return <div className="home-week">
+    <HomeHero update={update} saved={savedEntries.length} total={data.stats.totalMembers} faces={faces} />
     <section className="home-card home-jobs-card" aria-labelledby="home-jobs-title">
       <div className="home-card-head">
-        <h2 id="home-jobs-title">{t("Your jobs this week")}</h2>
-        {allDone && <span className="home-done"><CheckCircle2 size={15} />{t("All done!")}</span>}
+        <h2 id="home-jobs-title"><ShieldCheck className="home-jobs-icon" size={28} strokeWidth={2.2} aria-hidden="true" />{t("Your jobs this week")}</h2>
+        {allDone && <span className="home-done"><span className="home-done-tick" aria-hidden="true"><Check size={13} strokeWidth={3.4} /></span>{t("All done!")}</span>}
       </div>
       <ol className="home-jobs">
-        <li className={`home-job${saved ? " done with-side" : ""}`}>
-          <span className="home-job-mark" aria-hidden="true">{saved ? <Check size={17} /> : <Backpack size={16} />}</span>
+        <li className={`home-job with-side${saved ? " done" : ""}`}>
+          <JobMark tone="gold" done={saved}><CoinStack size={24} /></JobMark>
           <div className="home-job-text">
             <strong>{saved ? t("Resources saved") : t("Save your resources")}</strong>
-            <small>{saveHint}</small>
+            <small><Gold text={saveHint} value="20" /></small>
           </div>
           {saved
-            ? <Link className="home-job-side" href="/resources">{t("Change")}</Link>
-            : <Link className="button primary home-job-action" href="/resources">{ownEntry ? t("Update my resources") : t("Add my resources")}<ArrowRight size={16} /></Link>}
+            ? <Link className="home-side-button" href="/resources"><RefreshCw size={15} aria-hidden="true" />{t("Change")}</Link>
+            : <Link className="home-side-button round" href="/resources" aria-label={update} title={update}><ArrowRight size={19} aria-hidden="true" /></Link>}
         </li>
         {ascension !== undefined && <li className={`home-job${answered ? " done" : ""}`}>
-          <span className="home-job-mark" aria-hidden="true">{answered ? <Check size={17} /> : <ChevronsUp size={17} />}</span>
+          <JobMark tone="slate" done={answered}><ChevronsUp size={21} /></JobMark>
           <div className="home-job-text">
             <strong>{ascensionTitle}</strong>
             {!answered && <small>{t("Tap what you’re ascending, or No.")}</small>}
           </div>
           <div className="home-chips" role="group" aria-label={t("Are you ascending this week?")}>
-            <button aria-pressed={answered && ascension.length === 0} onClick={() => void ascend([])}>{t("No")}</button>
-            {ASCENSION_PILLARS.map((pillar) => <button key={pillar} aria-pressed={!!ascension?.includes(pillar)} onClick={() => void ascend(togglePillar(pillar))}>
-              {t(PILLAR_LABELS[pillar])}
-            </button>)}
+            <button aria-pressed={answered && ascension.length === 0} onClick={() => void ascend([])}><span>{t("No")}</span></button>
+            {ASCENSION_PILLARS.map((pillar) => {
+              const Icon = PILLAR_ICONS[pillar];
+              return <button key={pillar} aria-pressed={!!ascension?.includes(pillar)} onClick={() => void ascend(togglePillar(pillar))}>
+                <Icon size={19} /><span>{t(PILLAR_LABELS[pillar])}</span>
+              </button>;
+            })}
           </div>
         </li>}
         {snipe && <li className={`home-job${answer ? " done" : ""}`}>
-          <span className="home-job-mark" aria-hidden="true">{answer ? <Check size={17} /> : <Target size={16} />}</span>
+          <JobMark tone="slate" done={!!answer}><Target size={20} /></JobMark>
           <div className="home-job-text">
             <strong>{snipeTitle}</strong>
             <small>{snipe.title} · {t("Starts in {time}", { time: countdown(new Date(snipe.startsAt), now) })}</small>
           </div>
           <div className="home-choice" role="group" aria-label={t("Can you join this snipe?")}>
-            <button aria-pressed={answer === "yes"} disabled={busy} onClick={() => void respond(snipe, "yes")}><Check size={15} />{t("Yes")}</button>
-            <button aria-pressed={answer === "no"} disabled={busy} onClick={() => void respond(snipe, "no")}><X size={15} />{t("No")}</button>
+            <button aria-pressed={answer === "yes"} disabled={busy} onClick={() => void respond(snipe, "yes")}><Check size={16} />{t("Yes")}</button>
+            <button aria-pressed={answer === "no"} disabled={busy} onClick={() => void respond(snipe, "no")}><X size={16} />{t("No")}</button>
           </div>
         </li>}
       </ol>
-      <div className="home-progress">
-        <span>{t("{count} of {total} members saved this week", { count: savedThisWeek, total })}</span>
-        <div className="home-track"><i style={{ width: `${total ? Math.min(100, (savedThisWeek / total) * 100) : 0}%` }} /></div>
-      </div>
     </section>
     {between}
     <HomeToday now={now} notify={notify} memberId={me.id} />
   </div>;
+}
+
+/** The banner at the top of Home: the clan crest, the one thing to do, and how many have done it. */
+function HomeHero({ update, saved, total, faces }: { update: string; saved: number; total: number; faces: Member[] }) {
+  const t = useT();
+  const { language } = useLanguage();
+  // In English the painted lettering from the clan's design; other languages get the brush font,
+  // in two lines: the first word in green, the rest in white.
+  const title = t("Stronger together");
+  const space = title.search(/\s/);
+  const first = space < 0 ? title : title.slice(0, space);
+  const rest = space < 0 ? "" : title.slice(space + 1);
+  return <section className="home-hero" aria-labelledby="home-hero-title">
+    <div className="home-hero-main">
+      <img className="home-hero-art" src="/home/banner-art.webp" alt="" width={367} height={370} decoding="async" />
+      <div className="home-hero-copy">
+        <h2 id="home-hero-title" className="home-hero-title">
+          {language === "en"
+            ? <img src="/home/stronger-together.webp" alt={title} width={364} height={168} />
+            : <span className="home-hero-brush"><span>{first}</span> {rest && <span>{rest}</span>}</span>}
+        </h2>
+        <p>{t("Update your resources so we can plan, build and dominate together.")}</p>
+        <Link className="home-hero-cta" href="/resources"><CoinStack size={22} /><span>{update}</span><ArrowRight size={18} aria-hidden="true" /></Link>
+      </div>
+      {/* Frays the edges of the brush font, like paint dragged across a wall. */}
+      <svg className="home-hero-filters" aria-hidden="true" focusable="false">
+        <filter id="home-brush" x="-15%" y="-25%" width="130%" height="150%" colorInterpolationFilters="sRGB">
+          <feTurbulence type="fractalNoise" baseFrequency="0.03 0.9" numOctaves={2} seed={7} result="grain" />
+          <feDisplacementMap in="SourceGraphic" in2="grain" scale={2.4} xChannelSelector="R" yChannelSelector="G" result="torn" />
+          <feColorMatrix in="grain" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  22 0 0 0 -4.4" result="holes" />
+          <feComposite in="torn" in2="holes" operator="in" result="text" />
+          <feGaussianBlur in="SourceGraphic" stdDeviation="5 0" result="smear" />
+          <feTurbulence type="fractalNoise" baseFrequency="0.008 0.9" numOctaves={1} seed={2} result="lines" />
+          <feColorMatrix in="lines" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 26 0 0 -15.4" result="streakmask" />
+          <feComposite in="smear" in2="streakmask" operator="in" result="rawstreaks" />
+          <feComponentTransfer in="rawstreaks" result="streaks"><feFuncA type="linear" slope={3} intercept={-0.5} /></feComponentTransfer>
+          <feMerge><feMergeNode in="streaks" /><feMergeNode in="text" /></feMerge>
+        </filter>
+      </svg>
+    </div>
+    <div className="home-hero-progress">
+      {faces.length > 0 && <span className="home-hero-faces" aria-hidden="true">{faces.map((member) => <MemberAvatar key={member.id} member={member} small />)}</span>}
+      <p><strong>{t("{count} of {total} members", { count: saved, total })}</strong><small>{t("saved this week")}</small></p>
+      <div className="home-track" role="progressbar" aria-label={t("{count} of {total} members saved this week", { count: saved, total })} aria-valuemin={0} aria-valuemax={total} aria-valuenow={saved}>
+        <i style={{ width: `${total ? Math.min(100, (saved / total) * 100) : 0}%` }} />
+      </div>
+    </div>
+  </section>;
 }
 
 /** Asks the folded clan totals further down Home to open. */
@@ -183,16 +271,30 @@ export function HomeArsenal({ minimum, maximum }: { minimum: number | null; maxi
   const amount = (value: number | null) => value === null ? "--" : numberFormat(Math.round(value));
   return <section className="home-card home-arsenal" aria-labelledby="home-arsenal-title">
     <div className="home-card-head">
-      <h2 id="home-arsenal-title" className="home-kicker"><Sparkles size={15} />{t("The clan’s current arsenal")}</h2>
+      <h2 id="home-arsenal-title" className="home-kicker"><CrownShield size={19} />{t("Clan arsenal")}</h2>
       <span className="live-badge"><i />{t("LIVE TOTALS")}</span>
     </div>
     <p className="home-arsenal-range"><strong>{amount(minimum)}</strong><span aria-hidden="true">–</span><strong>{amount(maximum)}</strong></p>
     <div className="home-today-foot">
-      <span className="home-today-time">{t("Total Potential War Points")}</span>
-      <button type="button" className="home-link" onClick={() => window.dispatchEvent(new Event(OPEN_TOTALS))}>{t("Clan totals")}<ChevronDown size={14} /></button>
+      <span className="home-arsenal-label">{t("Total Potential War Points")}</span>
+      <button type="button" className="home-link" onClick={() => window.dispatchEvent(new Event(OPEN_TOTALS))}>{t("Clan totals")}<ChevronDown size={16} /></button>
     </div>
   </section>;
 }
+
+/** What members spend on the spending days, as the same pictures as the ascending chips. */
+type Need = "hammers" | "skills" | "mounts" | "eggs";
+const NEEDS: readonly Need[] = ["hammers", "skills", "mounts", "eggs"];
+const NEED_ICONS: Record<Need, ComponentType<{ size?: number }>> = { hammers: ForgeHammer, skills: SkillStar, mounts: MountHorse, eggs: PetPaw };
+const NEED_RESOURCES: Record<Need, readonly ResourceKey[]> = { hammers: ["hammers"], skills: ["skillTickets"], mounts: ["mountKeys", "mountsToMerge"], eggs: ["eggsPetsTotal", "eggshellsTotal"] };
+/** The resources that score on a spending day (from the war calendar). */
+function needsOf(day: number): Need[] {
+  const resources = WAR_DAYS[day - 1].resources;
+  return NEEDS.filter((need) => NEED_RESOURCES[need].some((key) => resources.includes(key)));
+}
+
+type Tone = "on" | "hold" | "battle" | "claim";
+const TONE_ICONS: Record<Tone, ComponentType<LucideProps>> = { on: Star, hold: Hand, battle: Swords, claim: Gift };
 
 /** What the clan is doing in the war today: spend, hold, fight or claim; on Days 6–7, vote for next war's days. */
 function HomeToday({ now, notify, memberId }: { now: Date; notify: (message: string, error?: boolean) => void; memberId: string }) {
@@ -218,57 +320,72 @@ function HomeToday({ now, notify, memberId }: { now: Date; notify: (message: str
   }
   // On Day 7 the war is over, so the clan days shown are the next war's (as on War → This Week).
   const clan = useClanDays(warWeekOf(war.day === 7 ? new Date(now.getTime() + DAY) : now));
-  let badge: { tone: "on" | "hold" | "battle" | "claim"; text: string } | null = null;
+  let badge: { tone: Tone; text: string } | null = null;
   let main = "";
   let sub = "";
   if (war.day <= 5) {
     if (!clan.loaded) main = "…";
     else if (!clan.days.length) main = t("Leadership hasn’t picked the clan days yet. Check announcements before you spend.");
     else if (clan.days.includes(war.day)) {
-      badge = { tone: "on", text: `★ ${t("Clan day")}` };
+      badge = { tone: "on", text: t("Clan day") };
       main = t("Today is a clan day: spend your resources.");
       sub = t(WAR_DAYS[war.day - 1].tip);
     } else {
-      badge = { tone: "hold", text: `✋ ${t("Hold")}` };
+      badge = { tone: "hold", text: t("Hold") };
       main = t("Today is not a clan day: hold your resources.");
       const next = clan.days.find((day) => day > war.day);
       sub = next ? t("Next clan day: Day {day}.", { day: next }) : t("No more clan days this war.");
     }
   } else if (war.day === 6) {
-    badge = { tone: "battle", text: `⚔️ ${t("Battle")}` };
+    badge = { tone: "battle", text: t("Battle") };
     main = t("Fight the other clans. Spending doesn't score today.");
   } else {
-    badge = { tone: "claim", text: `🎁 ${t("Claim rewards")}` };
+    badge = { tone: "claim", text: t("Claim rewards") };
     main = t("Claim your war rewards. You only have today.");
     if (clan.days.length) sub = t("Next war’s clan days: {days}.", { days: clan.days.map((day) => t("Day {day}", { day })).join(", ") });
   }
-  return <section className="home-card home-today" aria-labelledby="home-today-title">
-    <div className="home-card-head">
-      <h2 id="home-today-title" className="home-kicker"><Swords size={15} />{t("Today")} · {t("Day {day} of 7", { day: war.day })}</h2>
-      {badge && <span className={`home-badge ${badge.tone}`}>{badge.text}</span>}
-    </div>
-    <p className="home-today-main">{main}</p>
-    {sub && <p className="home-today-sub">{sub}</p>}
-    {votes?.open && <div className="home-vote">
-      <p className="home-vote-title"><span>🗳️ {t("Pick 2 days to win next war (plus Day 6)")}</span><em className="home-vote-reward">{t("+10 points")}</em></p>
+  const BadgeIcon = badge ? TONE_ICONS[badge.tone] : null;
+  const needName = (need: Need) => need === "hammers" ? t("Hammers") : need === "skills" ? t("Skills") : need === "mounts" ? t("Mounts") : t("Eggs and pets");
+  return <>
+    <section className={`home-card home-today${badge ? ` tone-${badge.tone}` : ""}`} aria-labelledby="home-today-title">
+      <div className="home-card-head">
+        <h2 id="home-today-title" className="home-kicker"><Swords size={19} />{t("Today")} · {t("Day {day} of 7", { day: war.day })}</h2>
+        {badge && BadgeIcon && <span className={`home-badge ${badge.tone}`}><BadgeIcon size={14} aria-hidden="true" />{badge.text}</span>}
+      </div>
+      <p className="home-today-main">{main}</p>
+      {sub && <p className="home-today-sub">{sub}</p>}
+      <p className="home-race">
+        <FlaskConical size={16} />
+        <span><strong>{t("Clan Tech Race")}</strong> · {t("Knock-out in {time}", { time: countdown(war.nextDay, now) })}<br />{t("In clan missions, pick Clan Tech Vials first.")}</span>
+      </p>
+      <div className="home-today-foot">
+        {war.day < 7
+          ? <span className="home-today-time"><Clock size={14} />{t("Day {day} starts in {time}", { day: war.day + 1, time: countdown(war.nextDay, now) })}</span>
+          : !votes?.open && <span className="home-today-time"><Clock size={14} />{t("Next war starts in {time}", { time: countdown(war.weekEnd, now) })}</span>}
+        <Link className="home-link" href="/war">{t("See the war plan")}<ArrowRight size={15} /></Link>
+      </div>
+    </section>
+    {/* Its own card, so the vote is clearly about the next war and not today's. */}
+    {votes?.open && <section className="home-card home-next-war" aria-labelledby="home-next-war-title">
+      <div className="home-card-head">
+        <h2 id="home-next-war-title" className="home-kicker"><CalendarDays size={19} />{t("Next war starts in {time}", { time: countdown(war.weekEnd, now) })}</h2>
+        <em className="home-vote-reward">{t("+10 points")}</em>
+      </div>
+      <p className="home-today-main">{t("Pick 2 days to win next war (plus Day 6)")}</p>
       <div className="home-vote-days" role="group" aria-label={t("Pick 2 days to win next war (plus Day 6)")}>
         {[1, 2, 3, 4, 5].map((day) => <button key={day} aria-pressed={!!votes.mine?.includes(day)} disabled={voting} onClick={() => void toggleVote(day)}>
-          <span>{t("Day {day}", { day })}</span><strong>{votes.counts[day - 1]}</strong>
+          <span>{t("Day {day}", { day })}</span>
+          <span className="home-vote-needs">
+            {needsOf(day).map((need) => { const Icon = NEED_ICONS[need]; return <Icon key={need} size={13} />; })}
+            <span className="visually-hidden">{needsOf(day).map(needName).join(", ")}</span>
+          </span>
+          <strong>{votes.counts[day - 1]}</strong>
         </button>)}
       </div>
-      <small>{t("Members voted so far: {count}. Leadership makes the final pick.", { count: votes.voters })}</small>
-    </div>}
-    <p className="home-race">
-      <FlaskConical size={15} />
-      <span><strong>{t("Clan Tech Race")}</strong> · {t("Knock-out in {time}", { time: countdown(war.nextDay, now) })}<br />{t("In clan missions, pick Clan Tech Vials first.")}</span>
-    </p>
-    <div className="home-today-foot">
-      <span className="home-today-time"><Clock size={13} />{war.day < 7
-        ? t("Day {day} starts in {time}", { day: war.day + 1, time: countdown(war.nextDay, now) })
-        : t("Next war starts in {time}", { time: countdown(war.weekEnd, now) })}</span>
-      <Link className="home-link" href="/war">{t("See the war plan")}<ArrowRight size={14} /></Link>
-    </div>
-  </section>;
+      <p className="home-vote-key" aria-hidden="true">{NEEDS.map((need) => { const Icon = NEED_ICONS[need]; return <span key={need}><Icon size={13} />{needName(need)}</span>; })}</p>
+      <small className="home-vote-voters">{t("Members voted so far: {count}. Leadership makes the final pick.", { count: votes.voters })}</small>
+    </section>}
+  </>;
 }
 
 const MORE_KEY = "turmoil-home-totals";
