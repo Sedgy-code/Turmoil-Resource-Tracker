@@ -214,6 +214,8 @@ export interface ClanDayVotes {
   picked: number[];
   /** Votes for Days 1–5 (index 0 = Day 1). */
   counts: number[];
+  /** Members who voted for each pair of days, e.g. { "1,3": 8 }. */
+  pairs: Record<string, number>;
   /** Members who voted for at least one day. */
   voters: number;
   /** Your vote, or null if you haven't voted. */

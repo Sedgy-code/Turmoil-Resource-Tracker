@@ -20,21 +20,26 @@ async function requireActive(connection: SqlConnection, actorId: string): Promis
   if (!rows.length) throw new ApiError(403, "Your tracker account is inactive.", "ACCOUNT_INACTIVE");
 }
 
-/** How many active members voted for each spending day (index 0 = Day 1), and how many voted. */
-export async function voteCounts(connection: SqlConnection, week: string): Promise<{ counts: number[]; voters: number; byMember: Map<string, number[]> }> {
+/**
+ * How many active members voted for each spending day (index 0 = Day 1), for each pair of days
+ * ("1,3"), and how many voted.
+ */
+export async function voteCounts(connection: SqlConnection, week: string): Promise<{ counts: number[]; pairs: Record<string, number>; voters: number; byMember: Map<string, number[]> }> {
   const rows = await connection.query(
     `SELECT v.member_id, v.days FROM clan_day_votes v JOIN app_members m ON m.id = v.member_id
      WHERE v.war_week = $1 AND m.active = TRUE`,
     [week],
   );
   const counts = SPENDING_DAYS.map(() => 0);
+  const pairs: Record<string, number> = {};
   const byMember = new Map<string, number[]>();
   for (const row of rows) {
     const days = parseDays(String(row.days));
     byMember.set(String(row.member_id), days);
     for (const day of days) counts[day - 1]++;
+    days.forEach((a, index) => days.slice(index + 1).forEach((b) => { pairs[`${a},${b}`] = (pairs[`${a},${b}`] ?? 0) + 1; }));
   }
-  return { counts, voters: [...byMember.values()].filter((days) => days.length > 0).length, byMember };
+  return { counts, pairs, voters: [...byMember.values()].filter((days) => days.length > 0).length, byMember };
 }
 
 export async function getVotes(actor: Member, db?: Database, now = new Date()): Promise<ClanDayVotes> {
@@ -42,8 +47,8 @@ export async function getVotes(actor: Member, db?: Database, now = new Date()): 
   await requireActive(connection, actor.id);
   const week = nextWarWeek(now);
   const picked = await clanDays(connection, week);
-  const { counts, voters, byMember } = await voteCounts(connection, week);
-  return { week, open: votingOpen(now, picked), picked, counts, voters, mine: byMember.get(actor.id) ?? null };
+  const { counts, pairs, voters, byMember } = await voteCounts(connection, week);
+  return { week, open: votingOpen(now, picked), picked, counts, pairs, voters, mine: byMember.get(actor.id) ?? null };
 }
 
 /**

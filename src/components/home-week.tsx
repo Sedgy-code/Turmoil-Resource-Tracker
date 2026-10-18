@@ -202,6 +202,11 @@ function HomeToday({ now, notify, memberId }: { now: Date; notify: (message: str
   const [voting, setVoting] = useState(false);
   async function toggleVote(day: number) {
     const mine = votes?.mine ?? [];
+    // Day 6 is always fought, so a vote is the two other days to win.
+    if (!mine.includes(day) && mine.length >= 2) {
+      notify(t("You can pick 2 days. Tap one of yours to swap it."));
+      return;
+    }
     setVoting(true);
     const result = await vote(mine.includes(day) ? mine.filter((item) => item !== day) : [...mine, day]);
     setVoting(false);
@@ -245,8 +250,8 @@ function HomeToday({ now, notify, memberId }: { now: Date; notify: (message: str
     <p className="home-today-main">{main}</p>
     {sub && <p className="home-today-sub">{sub}</p>}
     {votes?.open && <div className="home-vote">
-      <p className="home-vote-title"><span>🗳️ {t("Which days should we fight next war?")}</span><em className="home-vote-reward">{t("+10 points")}</em></p>
-      <div className="home-vote-days" role="group" aria-label={t("Which days should we fight next war?")}>
+      <p className="home-vote-title"><span>🗳️ {t("Pick 2 days to win next war (plus Day 6)")}</span><em className="home-vote-reward">{t("+10 points")}</em></p>
+      <div className="home-vote-days" role="group" aria-label={t("Pick 2 days to win next war (plus Day 6)")}>
         {[1, 2, 3, 4, 5].map((day) => <button key={day} aria-pressed={!!votes.mine?.includes(day)} disabled={voting} onClick={() => void toggleVote(day)}>
           <span>{t("Day {day}", { day })}</span><strong>{votes.counts[day - 1]}</strong>
         </button>)}

@@ -24,6 +24,13 @@ async function addMember(db: Database, username: string, role: Member["role"] = 
   return memberFromRow(rows[0]);
 }
 
+test("a vote is two days at most: Day 6 is always fought", async () => {
+  const { clanDayVoteSchema } = await import("../src/lib/server/validation");
+  assert.deepEqual(clanDayVoteSchema.parse({ days: [1, 3] }).days, [1, 3]);
+  assert.throws(() => clanDayVoteSchema.parse({ days: [1, 3, 5] }));
+  assert.throws(() => clanDayVoteSchema.parse({ days: [6] }));
+});
+
 test("the vote is always for the war after the current one", () => {
   assert.equal(nextWarWeek(THURSDAY), "2026-10-19");
   assert.equal(nextWarWeek(SUNDAY), "2026-10-19");
@@ -52,15 +59,15 @@ test("members vote on Days 6 and 7 until leadership picks the days", async () =>
     assert.equal(saved.rewarded, true);
     assert.equal(await balance(kael), 10);
     assert.deepEqual(await db.query("SELECT week_start::text AS week, reason, amount FROM dew_weekly_earnings WHERE member_id = $1", [kael.id]), [{ week: "2026-10-19", reason: "vote", amount: 10 }]);
-    assert.equal((await setVote(kael, [1, 3, 5], db, MONDAY)).rewarded, false);
+    assert.equal((await setVote(kael, [1, 5], db, MONDAY)).rewarded, false);
     await setVote(kael, [1, 3], db, MONDAY);
     assert.equal(await balance(kael), 10);
     await setVote(mira, [1, 2], db, SUNDAY);
     assert.equal((await setVote(zed, [], db, MONDAY)).rewarded, false); // looked, but didn't pick any days
     assert.equal(await balance(zed), 0);
     const seen = await getVotes(zed, db, MONDAY);
-    assert.deepEqual({ week: seen.week, open: seen.open, counts: seen.counts, voters: seen.voters, mine: seen.mine }, {
-      week: "2026-10-19", open: true, counts: [2, 1, 1, 0, 0], voters: 2, mine: [],
+    assert.deepEqual({ week: seen.week, open: seen.open, counts: seen.counts, pairs: seen.pairs, voters: seen.voters, mine: seen.mine }, {
+      week: "2026-10-19", open: true, counts: [2, 1, 1, 0, 0], pairs: { "1,3": 1, "1,2": 1 }, voters: 2, mine: [],
     });
     // Changing a vote replaces it.
     await setVote(mira, [5], db, MONDAY);

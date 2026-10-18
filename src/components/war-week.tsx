@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Check, CheckCircle2, Clock, Plus } from "lucide-react";
 import { numberFormat } from "@/lib/resources";
-import { WAR_DAYS, countdown, warDay, warStart, warWeekOf } from "@/lib/war-calendar";
+import { WAR_DAYS, countdown, nextWarWeek, warDay, warStart, warWeekOf } from "@/lib/war-calendar";
+import { activityPoints, dayPoints, pillarCounts, rankPairs, type DayPair } from "@/lib/clan-day-planner";
+import { PILLAR_LABELS } from "@/lib/ascension";
+import { estimateWar, WAR_ACTIVITIES } from "@/lib/war";
 import { useT } from "@/lib/i18n";
-import type { ClanDayVotes, ClanDaysResponse, DashboardResponse } from "@/lib/types";
+import type { AscensionPillar, AscensionsResponse, ClanDayVotes, ClanDaysResponse, DashboardResponse, WarRates } from "@/lib/types";
 import "./war-week.css";
 
 const RESOURCE_LABELS = {
@@ -94,7 +97,7 @@ export function voteSummary(counts: number[], dayLabel: (day: number) => string)
     .sort((a, b) => b.count - a.count || a.day - b.day).map((item) => `${dayLabel(item.day)} (${item.count})`).join(", ");
 }
 
-export function WarWeek({ data, admin = false, notify }: { data: DashboardResponse; admin?: boolean; notify?: (message: string, error?: boolean) => void }) {
+export function WarWeek({ data, rates, admin = false, notify }: { data: DashboardResponse; rates: WarRates; admin?: boolean; notify?: (message: string, error?: boolean) => void }) {
   const t = useT();
   const now = useNow();
   const current = warDay(now);
@@ -104,6 +107,8 @@ export function WarWeek({ data, admin = false, notify }: { data: DashboardRespon
   const clan = useClanDays(warWeekOf(planningNext ? new Date(now.getTime() + 86_400_000) : now));
   const { votes } = useClanDayVotes(current.day >= 6);
   const voted = votes ? voteSummary(votes.counts, (day) => t("Day {day}", { day })) : "";
+  // On Day 6 the picker above is still this war; the planner picks for the next one.
+  const nextClan = useClanDays(nextWarWeek(now));
   async function toggle(day: number) {
     const next = clan.days.includes(day) ? clan.days.filter((item) => item !== day) : [...clan.days, day].sort((a, b) => a - b);
     if (!(await clan.save(next))) notify?.(t("Please try again."), true);
@@ -132,6 +137,7 @@ export function WarWeek({ data, admin = false, notify }: { data: DashboardRespon
       {admin && <p className="war-week-note">{t("Tap the days the clan will spend on. Members see them straight away.")}</p>}
       {voted && !votes?.picked.length && <p className="war-week-note war-clan-votes">🗳️ {t("Members’ votes for the next war: {votes}", { votes: voted })}</p>}
     </section>
+    {admin && current.day >= 6 && <ClanDayPlanner data={data} rates={rates} votes={votes} target={planningNext ? clan : nextClan} week={nextWarWeek(now)} notify={notify} />}
     <p className="war-week-note">{t("Each war day starts at 00:00 UTC. Leadership may ask you to hold resources for a snipe, so check announcements before you spend.")}</p>
     <div className="war-week-grid">
       {WAR_DAYS.map((entry) => {
@@ -157,4 +163,67 @@ export function WarWeek({ data, admin = false, notify }: { data: DashboardRespon
     </div>
     <Link className="war-week-link" href="/war-points">{t("Estimate the clan’s war points")} <ArrowRight size={14} /></Link>
   </div>;
+}
+
+const compact = (value: number) => new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(Math.round(value));
+
+/**
+ * Leadership's helper for picking the next war's two clan days (Day 6 is always fought): every pair
+ * of days ranked by the clan's saved resources, with members' votes and who is ascending what.
+ */
+function ClanDayPlanner({ data, rates, votes, target, week, notify }: {
+  data: DashboardResponse;
+  rates: WarRates;
+  votes: ClanDayVotes | null;
+  target: ReturnType<typeof useClanDays>;
+  week: string;
+  notify?: (message: string, error?: boolean) => void;
+}) {
+  const t = useT();
+  const [ascending, setAscending] = useState<Partial<Record<AscensionPillar, number>>>({});
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/ascensions?week=${week}`, { cache: "no-store" })
+      .then((response) => response.ok ? response.json() as Promise<AscensionsResponse> : Promise.reject())
+      .then((result) => { if (!cancelled) setAscending(pillarCounts(result.ascending)); })
+      .catch(() => { /* shown without ascending */ });
+    return () => { cancelled = true; };
+  }, [week]);
+  const points = useMemo(() => {
+    try { return activityPoints(estimateWar(data.entries, rates, WAR_ACTIVITIES.map(({ key }) => key), "current")); }
+    catch { return activityPoints(null); }
+  }, [data.entries, rates]);
+  const pairs = rankPairs(points, votes?.pairs ?? {}, ascending);
+  const mostVoted = pairs.reduce<DayPair | null>((best, pair) => pair.votes > (best?.votes ?? 0) ? pair : best, null);
+  const shown = pairs.slice(0, 4);
+  if (mostVoted && !shown.includes(mostVoted)) shown.push(mostVoted);
+  const strongest = Math.max(1, pairs[0]?.weaker ?? 1);
+  const day = (value: number) => t("Day {day}", { day: value });
+  async function pick(pair: DayPair) {
+    if (await target.save(pair.days)) notify?.(t("Clan days saved."));
+    else notify?.(t("Please try again."), true);
+  }
+  return <section className="panel war-planner" aria-labelledby="war-planner-title">
+    <h2 id="war-planner-title">🧮 {t("Pick the next war’s clan days")}</h2>
+    <p className="war-week-note">{t("Day 6 is always fought, so the clan needs 2 more days. Pairs are ranked by the clan’s saved resources, with shared resources (like hammers) split between the two days.")}</p>
+    <ol className="war-pairs">{shown.map((pair, index) => {
+      const chosen = target.days.length === 2 && target.days[0] === pair.days[0] && target.days[1] === pair.days[1];
+      const boosts = (Object.entries(pair.ascending) as [AscensionPillar, number][]).map(([pillar, count]) => `${t(PILLAR_LABELS[pillar])} ${count}`).join(", ");
+      return <li key={pair.days.join(",")} className={chosen ? "on" : undefined}>
+        <div className="war-pair-head">
+          <strong>{day(pair.days[0])} + {day(pair.days[1])}</strong>
+          {index === 0 && <span className="war-pair-tag">★ {t("Strongest")}</span>}
+          {pair === mostVoted && <span className="war-pair-tag vote">🗳️ {t("Most votes")}</span>}
+          <button className={`button ${chosen ? "primary" : "secondary"} small-button war-pair-pick`} disabled={!target.loaded || target.saving || chosen} onClick={() => void pick(pair)}>{chosen && <Check size={13} />}{chosen ? t("Picked") : t("Pick")}</button>
+        </div>
+        <div className="war-pair-bar" aria-hidden="true"><i style={{ width: `${Math.max(2, (pair.weaker / strongest) * 100)}%` }} /></div>
+        <small>
+          {t("Weaker day: about {points} points", { points: compact(pair.weaker) })} · {t("Votes: {count}", { count: pair.votes })}
+          {boosts && <> · {t("Ascending: {what}", { what: boosts })}</>}
+        </small>
+      </li>;
+    })}</ol>
+    <p className="war-week-note">{t("Each day on its own: {days}", { days: dayPoints(points).map((value, index) => `${day(index + 1)} ${compact(value)}`).join(" · ") })}</p>
+    <p className="war-week-note">{t("Counts hammers, skills, mounts and pets from saved resources. Forge, tech and dungeon points aren’t tracked.")}</p>
+  </section>;
 }

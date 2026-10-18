@@ -785,7 +785,7 @@ function TrackerApp({ view }: { view: View }) {
           ) : data && dataMatches && view === "weeks" ? (
             <Weeks data={data} week={week} selectWeek={selectWeek} notify={notify} refresh={refresh} />
           ) : data && view === "warWeek" ? (
-            <WarWeek data={data} admin={user.role === "ADMIN"} notify={notify} />
+            <WarWeek data={data} rates={warRates} admin={user.role === "ADMIN"} notify={notify} />
           ) : data && view === "war" ? (
             <WarPlanner data={data} notify={notify} refresh={refresh} />
           ) : data && view === "snipes" ? (

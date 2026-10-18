@@ -59,3 +59,20 @@ button.war-clan-day:hover, button.war-clan-day:focus-visible { border-color: var
 /* Members' votes for the next war's clan days */
 .war-clan-day-votes { margin-inline-start: 6px; min-width: 20px; padding: 0 6px; border-radius: 999px; background: #2a2614; color: var(--gold); font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
 .war-clan-votes { color: var(--text) !important; }
+
+/* Leadership: pick the next war's clan days */
+.war-planner { display: flex; flex-direction: column; gap: 10px; padding: 16px; }
+.war-planner h2 { margin: 0; font-size: 17px; }
+.war-planner .war-week-note { margin: 0; }
+.war-pairs { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.war-pairs li { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: #0f1612; }
+.war-pairs li.on { border-color: var(--gold); background: #1d1a10; }
+.war-pair-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.war-pair-head strong { font-size: 15px; }
+.war-pair-pick { margin-inline-start: auto; min-width: 64px; min-height: 32px; justify-content: center; }
+.war-pair-pick:disabled { opacity: 1; }
+.war-pair-tag { padding: 2px 8px; border: 1px solid #e6bd5977; border-radius: 999px; background: #2a2614; color: var(--gold); font-size: 11px; font-weight: 700; white-space: nowrap; }
+.war-pair-tag.vote { border-color: #69d58b66; background: #1b3624; color: var(--emerald); }
+.war-pair-bar { height: 6px; border-radius: 9px; background: #2b3d31; overflow: hidden; }
+.war-pair-bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #b9892a, var(--gold)); }
+.war-pairs small { color: var(--muted); font-size: 12.5px; line-height: 1.45; }
