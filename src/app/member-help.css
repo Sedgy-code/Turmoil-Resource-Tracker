@@ -198,6 +198,29 @@
 .entry-row-text .field-help {
   margin-top: 0;
 }
+/* Rows with a resource picture: the picture beside the name and help, like the game. */
+.entry-row.has-icon .entry-row-text {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: start;
+  column-gap: 11px;
+  row-gap: 3px;
+}
+.entry-row-icon {
+  grid-row: 1 / span 2;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+}
+.entry-row.has-icon .entry-row-text > label,
+.entry-row.has-icon .entry-row-text > .field-help {
+  grid-column: 2;
+}
+.entry-row.has-icon .entry-row-text > label {
+  font-size: 15px;
+  align-self: end;
+}
 .entry-row-boxes {
   display: flex;
   gap: 8px;
@@ -496,20 +519,8 @@
 .arsenal-row .war-point-range strong {
   font-size: clamp(15px, 1.25vw, 18px);
 }
-/* Each resource in its colour from the game, with a soft glow: green skills, gold keys,
-   rainbow eggs, purple mounts, icy hammers. Used by the picture buttons and the cards. */
-.arsenal-tile.green, .arsenal-grid .resource-icon.green { color: #5cf08f; --glow: #2fe46caa; }
-.arsenal-tile.gold, .arsenal-grid .resource-icon.gold { color: #ffd56b; --glow: #f2b33caa; }
-.arsenal-tile.eggs, .arsenal-grid .resource-icon.eggs { color: #e3c2ff; --glow: #b98cffaa; }
-.arsenal-tile.purple, .arsenal-grid .resource-icon.purple { color: #c69bff; --glow: #a26bffaa; }
-.arsenal-tile.ice, .arsenal-grid .resource-icon.ice { color: #6fd8ff; --glow: #3fbfffaa; }
-.arsenal-tile svg,
-.arsenal-grid .resource-icon svg { filter: drop-shadow(0 0 5px var(--glow, transparent)); }
-.arsenal-grid .resource-icon.green,
-.arsenal-grid .resource-icon.gold,
-.arsenal-grid .resource-icon.eggs,
-.arsenal-grid .resource-icon.purple,
-.arsenal-grid .resource-icon.ice { background: #0d1a20; border-color: #2a4552; }
+/* The resource pictures carry their own colours and glow; their boxes are dark slate. */
+.arsenal-grid .resource-icon { width: 40px; height: 40px; border-radius: 12px; background: #0d1a20; border-color: #2a4552; }
 
 /* Phones and tablets: five small picture buttons instead of five wide cards. The tapped one
    opens its card underneath; tapping it again closes it. Wide screens show all five cards. */

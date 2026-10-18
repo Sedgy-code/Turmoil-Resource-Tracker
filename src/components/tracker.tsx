@@ -22,7 +22,7 @@ import { ASCENSIONS_UPDATED, PILLAR_LABELS } from "@/lib/ascension";
 import { useSortable } from "./sortable";
 import { ClanPointsBalance } from "./clan-points-balance";
 import { PullToRefresh } from "./pull-to-refresh";
-import { MountHorse, RainbowEgg } from "./home-icons";
+import { EggIcon, EggshellIcon, HammerIcon, HorseshoeIcon, KeyIcon, TicketIcon, VialIcon } from "./resource-icons";
 import { announceClanPointsUpdate } from "@/lib/clan-points";
 import { MemberAvatar as Avatar, MemberName, MemberTitle } from "./member-identity";
 import { DEFAULT_WAR_RATES, WAR_ACTIVITIES, estimateWar } from "@/lib/war";
@@ -62,13 +62,9 @@ import {
   ChevronsUp,
   CircleHelp,
   CircleAlert,
-  FlaskConical,
   Clipboard,
-  Egg,
   Flame,
   History,
-  Hammer,
-  KeyRound,
   House,
   LoaderCircle,
   LogOut,
@@ -79,7 +75,6 @@ import {
   Trophy,
   Crosshair,
   Swords,
-  Ticket,
   Users,
   X,
 } from "lucide-react";
@@ -176,19 +171,19 @@ const essentials: {
   color: string;
 }[] = [
   // Colours as in the game: green skills, gold keys, purple mounts, icy hammers.
-  { key: "skillTickets", icon: Ticket, label: "Skill Tickets", color: "green" },
-  { key: "mountKeys", icon: KeyRound, label: "Mount Keys", color: "gold" },
+  { key: "skillTickets", icon: TicketIcon, label: "Skill Tickets", color: "green" },
+  { key: "mountKeys", icon: KeyIcon, label: "Mount Keys", color: "gold" },
   {
     key: "mountsToMerge",
-    icon: MountHorse,
+    icon: HorseshoeIcon,
     label: "Mounts to Merge",
     color: "purple",
   },
-  { key: "hammers", icon: Hammer, label: "Hammers", color: "ice" },
+  { key: "hammers", icon: HammerIcon, label: "Hammers", color: "ice" },
 ];
 const dashboardResources = [
   ...essentials.slice(0, 2),
-  { key: "eggsPetsTotal", icon: RainbowEgg, label: "Total eggs/pets", color: "eggs" },
+  { key: "eggsPetsTotal", icon: EggIcon, label: "Total eggs/pets", color: "eggs" },
   ...essentials.slice(2),
 ] satisfies typeof essentials;
 /** The form asked for red potions by mistake until this time; saves before it never gave Clan Tech Vials. */
@@ -613,7 +608,7 @@ function TrackerApp({ view }: { view: View }) {
           </div>
         </div>
       </aside>
-      <div className={`workspace${view === "dashboard" && !pastHome ? " home-sky" : ""}`}>
+      <div className="workspace">
         <header className="topbar">
           <div className="breadcrumb">
             <button
@@ -1018,7 +1013,7 @@ function ClanArsenal({ data, estimate, rates, estimateError, snapshotId }: { dat
     <div className="arsenal-tiles" role="group" aria-label={t("Clan totals")}>
       {dashboardResources.map(({ key, label, icon: TileIcon, color }) => (
         <button key={key} type="button" className={`arsenal-tile ${color}`} aria-pressed={shown === key} aria-label={t(label)} title={t(label)} onClick={() => setShown(shown === key ? null : key)}>
-          <TileIcon size={22} strokeWidth={1.8} aria-hidden="true" />
+          <TileIcon size={32} />
         </button>
       ))}
     </div>
@@ -1034,7 +1029,7 @@ function ClanArsenal({ data, estimate, rates, estimateError, snapshotId }: { dat
         const missingChances = filterPlanningIssues(cardIssues, ["extraMountChancePercent", "extraPetSummonPercent"]).length;
         return (
           <article className={`stat-card arsenal-card arsenal-${key}${shown === key ? " shown" : ""}`} key={key}>
-            <div className="stat-label"><span className={`resource-icon ${color}`}><StatIcon size={19} strokeWidth={1.8} /></span><span>{t(label)}</span></div>
+            <div className="stat-label"><span className={`resource-icon ${color}`}><StatIcon size={26} /></span><span>{t(label)}</span></div>
             <strong className="stat-number">{numberFormat(data.totals[key])}</strong>
             <div className="stat-war-points">
               <span className="war-points-label">{t("Potential clan war points")}</span>
@@ -1202,15 +1197,15 @@ function MemberResources({
               <th className="sticky-member" aria-sort={sortOrder("username")}><button className="column-sort" onClick={() => changeSort("username")}>{t("Member")} {sortIcon("username")}</button></th>
               {RESOURCE_FIELDS.map(({ key, label }) => {
                 const FieldIcon =
-                  key === "eggsPetsTotal" || key === "eggshellsTotal"
-                    ? Egg
-                    : key === "potions" ? FlaskConical
+                  key === "eggsPetsTotal" ? EggIcon
+                    : key === "eggshellsTotal" ? EggshellIcon
+                    : key === "potions" ? VialIcon
                     : (essentials.find((field) => field.key === key)?.icon ??
                       Backpack);
                 return (
                   <th key={key} aria-sort={sortOrder(key)}>
                     <button className="column-sort" onClick={() => changeSort(key)}>
-                      <FieldIcon size={14} aria-hidden="true" />{t(label)}{sortIcon(key)}
+                      <FieldIcon size={18} />{t(label)}{sortIcon(key)}
                     </button>
                   </th>
                 );
@@ -1362,9 +1357,10 @@ function EntryRow({ id, label, icon, badge, help, guide, boxes }: {
   boxes: EntryBox[];
 }) {
   return (
-    <div className={`entry-row${boxes.length > 1 ? " entry-row-pair" : ""}`}>
+    <div className={`entry-row${boxes.length > 1 ? " entry-row-pair" : ""}${icon ? " has-icon" : ""}`}>
       <div className="entry-row-text">
-        <label htmlFor={`field-${id}-0`}>{icon}{label}{badge && <span className="entry-row-badge">{badge}</span>}</label>
+        {icon && <span className="entry-row-icon" aria-hidden="true">{icon}</span>}
+        <label htmlFor={`field-${id}-0`}>{label}{badge && <span className="entry-row-badge">{badge}</span>}</label>
         <small className="field-help" id={`help-${id}`}>{help}</small>
       </div>
       <div className="entry-row-boxes">
@@ -1677,7 +1673,7 @@ function ResourceForm({
                 key={key}
                 id={`resource-${key}`}
                 label={t(label)}
-                icon={<InputIcon size={15} />}
+                icon={<InputIcon size={34} />}
                 help={cost ? `${t(guide.help)} ${t(cost.help)}` : t(guide.help)}
                 guide={!readOnly && <>
                   <FieldGuide field={key} hint={t(guide.where)} label={cost ? t("Where’s the amount?") : undefined} />
@@ -1690,7 +1686,7 @@ function ResourceForm({
           <EntryRow
             id="resource-potions"
             label={t("Clan Tech Vials")}
-            icon={<FlaskConical size={15} />}
+            icon={<VialIcon size={34} />}
             badge={potionsNeverAsked ? t("New") : undefined}
             help={t(RESOURCE_GUIDE.potions.help)}
             guide={!readOnly && <FieldGuide field="potions" hint={t(RESOURCE_GUIDE.potions.where)} />}
@@ -1700,7 +1696,7 @@ function ResourceForm({
       </section>
       <section className="panel form-section">
         <h3>
-          <Egg size={19} />{t("Eggs and pets")}
+          <EggIcon size={24} />{t("Eggs and pets")}
         </h3>
         <div className="entry-list">
           {(["eggsPetsTotal", "eggshellsTotal"] as const).map((key) => (
@@ -1708,6 +1704,7 @@ function ResourceForm({
               key={key}
               id={`resource-${key}`}
               label={t(key === "eggsPetsTotal" ? "Total eggs/pets" : "Eggshells total")}
+              icon={key === "eggsPetsTotal" ? <EggIcon size={34} /> : <EggshellIcon size={34} />}
               help={t(RESOURCE_GUIDE[key].help)}
               guide={!readOnly && <FieldGuide field={key} hint={t(RESOURCE_GUIDE[key].where)} />}
               boxes={[{ label: t(key === "eggsPetsTotal" ? "Total eggs/pets" : "Eggshells total"), placeholder: "0", value: values[key], onChange: (value) => update(key, value) }]}

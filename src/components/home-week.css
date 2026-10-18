@@ -12,20 +12,7 @@
   --hw-chip-line: #2a4552;
 }
 
-/* Painted mountains behind "Hi, name", from the clan's own design (they fade out to the left and bottom). */
-.workspace.home-sky { background: url(/home/mountains.webp) right 74px / auto 170px no-repeat; }
 .page-heading.home-heading { margin-bottom: 16px; }
-.page-heading.home-heading h1 { font-size: 31px; font-weight: 800; letter-spacing: -0.6px; line-height: 1.15; background: linear-gradient(180deg, #fff 30%, #c9d3df); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.page-heading.home-heading h1::after {
-  content: "";
-  display: block;
-  width: 46px;
-  height: 4px;
-  margin-top: 10px;
-  border-radius: 4px;
-  background: var(--hw-glow);
-  box-shadow: 0 0 12px #2fe46caa;
-}
 .home-name { background: linear-gradient(180deg, #ffe9a8, #e8ae47); -webkit-background-clip: text; background-clip: text; color: transparent; }
 
 .home-week { display: grid; gap: 12px; margin-bottom: 18px; }
@@ -230,9 +217,7 @@
 .home-choice button:disabled { opacity: 0.6; cursor: wait; }
 
 /* The clan's arsenal */
-.home-arsenal { border-color: #5b4c2a99; background: radial-gradient(90% 90% at 100% 0%, #2a210b55, transparent 60%), linear-gradient(180deg, #0b1311, #070c0b); }
-.home-arsenal .live-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid #2fe46c88; border-radius: 999px; background: #0a2415; color: #5cf394; font-size: 11px; font-weight: 700; letter-spacing: 0.6px; }
-.home-arsenal .live-badge i { width: 6px; height: 6px; border-radius: 50%; background: var(--hw-glow); box-shadow: 0 0 6px var(--hw-glow); }
+.home-arsenal { border: 1.5px solid #e2ad3c99; background: radial-gradient(90% 90% at 100% 0%, #2a210b77, transparent 60%), linear-gradient(180deg, #0b1311, #070c0b); box-shadow: 0 0 22px -9px #e2ad3c88, inset 0 0 24px -14px #e2ad3c55; }
 .home-arsenal-range { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin: 0; font-variant-numeric: tabular-nums; }
 .home-arsenal-range strong { color: #fccf5e; font-family: var(--heading); font-size: 25px; font-weight: 800; letter-spacing: -0.4px; text-shadow: 0 0 18px #f6c95a40; }
 .home-arsenal-range span { color: #8a97a8; font-size: 20px; }
@@ -314,7 +299,7 @@
 button.home-link { padding: 0; border: 0; background: none; font: inherit; font-size: 14.5px; font-weight: 700; cursor: pointer; }
 
 /* Clan totals, folded away under the cards */
-.home-more { margin-top: 18px; border: 1px solid #22302c; border-radius: 16px; background: linear-gradient(180deg, #0a1311, #070c0b); }
+.home-more { margin-top: 18px; }
 .home-more > summary {
   display: flex;
   align-items: center;
@@ -338,6 +323,8 @@ button.home-link { padding: 0; border: 0; background: none; font: inherit; font-
   .home-hero { grid-column: 1 / -1; }
   .home-jobs-card { grid-row: span 2; }
   .home-week:has(.home-next-war) .home-jobs-card { grid-row: span 3; }
+  /* Folded, it's one line: let the other cards fill in beside it. */
+  .home-week .home-jobs-card.folded { grid-row: auto; }
   .home-hero-main { min-height: 236px; }
     .home-hero-title img { width: 260px; }
   .home-hero-brush { font-size: 42px; }
@@ -345,9 +332,6 @@ button.home-link { padding: 0; border: 0; background: none; font: inherit; font-
   .home-hero-copy p { max-width: 440px; font-size: 14.5px; }
   .home-hero-progress { padding: 11px 22px 13px; }
   .home-hero-progress .home-track { max-width: 360px; }
-}
-@media (max-width: 800px) {
-  .workspace.home-sky { background-position: right 62px; background-size: auto 122px; }
 }
 @media (max-width: 650px) {
   .workspace.home-sky .main-content { padding-top: 18px; }

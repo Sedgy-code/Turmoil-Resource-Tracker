@@ -113,8 +113,11 @@ export function WarWeek({ data, rates, admin = false, notify }: { data: Dashboar
     const next = clan.days.includes(day) ? clan.days.filter((item) => item !== day) : [...clan.days, day].sort((a, b) => a - b);
     if (!(await clan.save(next))) notify?.(t("Please try again."), true);
   }
+  // Today's card takes the colour of the day, as on Home: battle red, clan day gold, hold orange, claim green.
+  const tone = current.day === 6 ? "battle" : current.day === 7 ? "claim"
+    : !clan.loaded || !clan.days.length ? "" : clan.days.includes(current.day) ? "on" : "hold";
   return <div className="war-week">
-    <section className="panel war-week-now">
+    <section className={`panel war-week-now${tone ? ` tone-${tone}` : ""}`}>
       <div>
         <span className="war-week-kicker">{t("Today")}</span>
         <h2>{t("War Day {day} of 7", { day: current.day })}</h2>

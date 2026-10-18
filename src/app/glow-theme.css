@@ -1,0 +1,263 @@
+/* The clan's look on every page, from JBUC10's Home design: glowing cards, gold main buttons,
+   slate chips that turn gold when chosen, cool blue secondary text, and painted mountains behind
+   each page title. Colours carry meaning: green is the clan and its progress, gold is points and
+   the main action, red is battle day.
+   Loaded after the other stylesheets. Rules start with .app-shell so they also win over the
+   pages' own files, whatever order those load in. */
+
+:root {
+  --muted: #a9bad6;
+  --subtle: #8a9dbd;
+  --border: #22363a;
+  --panel: #0a1311;
+  --panel-hover: #11202a;
+  --glow-green: #2fe46c;
+  --chip-line: #2a4552;
+  --chip-bg: linear-gradient(180deg, #11222b, #0b171d);
+  --chosen-line: #f2bf4b;
+  --chosen-bg: linear-gradient(180deg, #3b2c0a, #1c1505);
+  --chosen-glow: 0 0 0 1px #f2bf4b55, 0 0 16px -2px #f2bf4b88;
+  --row-line: #1c3530;
+  --row-bg: #040a09d9;
+}
+
+/* Painted mountains behind the title of every page (they fade out to the left and bottom). */
+.app-shell .workspace {
+  background: url(/home/mountains.webp) right 74px / auto 170px no-repeat;
+}
+@media (max-width: 800px) {
+  .app-shell .workspace {
+    background-position: right 62px;
+    background-size: auto 122px;
+  }
+}
+
+/* Page titles: bright lettering with the clan's green bar underneath. */
+.app-shell .page-heading h1 {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.6px;
+  line-height: 1.15;
+  background: linear-gradient(180deg, #fff 30%, #c9d3df);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.app-shell .page-heading h1::after {
+  content: "";
+  display: block;
+  width: 46px;
+  height: 4px;
+  margin-top: 10px;
+  border-radius: 4px;
+  background: var(--glow-green);
+  box-shadow: 0 0 12px #2fe46caa;
+}
+.app-shell .page-heading p {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+/* Tabs inside a section: slate pills, gold when open. */
+.app-shell .section-tabs {
+  gap: 6px;
+  margin: -6px 0 16px;
+  padding: 4px 2px 8px;
+  border-bottom: 0;
+  scrollbar-width: none;
+}
+.app-shell .section-tabs::-webkit-scrollbar { display: none; }
+.app-shell .section-tabs a {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 8px 15px;
+  border: 1px solid var(--chip-line);
+  border-radius: 999px;
+  background: var(--chip-bg);
+  color: #c4d3e8;
+  font-size: 13.5px;
+  font-weight: 650;
+  text-shadow: none;
+}
+.app-shell .section-tabs a.active {
+  border-color: var(--chosen-line);
+  background: var(--chosen-bg);
+  color: #ffd56b;
+  box-shadow: var(--chosen-glow);
+}
+
+/* Cards: a soft green glow, like the cards on Home. */
+.app-shell .panel,
+.app-shell .planning-panel,
+.app-shell .stat-card,
+.app-shell .rarity-card,
+.app-shell .management-stats article,
+.app-shell .week-card,
+.app-shell .history-block,
+.app-shell .home-more {
+  border: 1.5px solid #2fe46c47;
+  border-radius: 18px;
+  background: radial-gradient(120% 80% at 0% 0%, #0e2a1b99 0%, transparent 55%), linear-gradient(180deg, #0a1412, #060c0b);
+  box-shadow: 0 0 22px -10px #2fe46c66, inset 0 0 26px -16px #2fe46c77;
+}
+.app-shell .stat-card::before { display: none; }
+.app-shell .panel h2,
+.app-shell .panel h3,
+.app-shell .planning-panel h2 { color: #f2f5f8; }
+
+/* Points and rewards glow gold. */
+.app-shell .stat-card.arsenal-total,
+.app-shell .planning-dew-intro,
+.app-shell .war-day-today,
+.app-shell .war-week-now.tone-on {
+  border-color: #e2ad3cb0;
+  background: radial-gradient(100% 70% at 0% 0%, #3a2b0a77, transparent 62%), linear-gradient(180deg, #13100a, #0b0906);
+  box-shadow: 0 0 22px -8px #e2ad3c88, inset 0 0 24px -12px #e2ad3c55;
+}
+/* Today in the war takes the colour of the day, as on Home. */
+.app-shell .war-week-now.tone-battle {
+  border-color: #d63a4dc4;
+  background: radial-gradient(100% 70% at 0% 0%, #3b0f17aa, transparent 62%), linear-gradient(180deg, #120a0c, #0a0708);
+  box-shadow: 0 0 22px -8px #d63a4d99;
+}
+.app-shell .war-week-now.tone-hold {
+  border-color: #e8894a99;
+  background: radial-gradient(100% 70% at 0% 0%, #3a1f0d88, transparent 62%), linear-gradient(180deg, #100b08, #0a0806);
+  box-shadow: 0 0 22px -10px #e8894a77;
+}
+.app-shell .war-week-now.tone-claim {
+  border-color: #2fe46c99;
+  box-shadow: 0 0 22px -8px #2fe46c77, inset 0 0 26px -16px #2fe46c77;
+}
+.app-shell .war-week-now.tone-battle .war-week-kicker { color: #ff7d8a; }
+.app-shell .war-week-now.tone-hold .war-week-kicker { color: #f7b285; }
+.app-shell .war-week-now.tone-claim .war-week-kicker { color: #6cf59a; }
+.app-shell .war-week-timer {
+  border-color: var(--row-line);
+  border-radius: 12px;
+  background: var(--row-bg);
+}
+
+/* Rows inside cards, like the job rows on Home. */
+.app-shell .war-pairs li,
+.app-shell .champion-list li,
+.app-shell .monthly-awards li,
+.app-shell .planning-weekly-reward,
+.app-shell .history-strike,
+.app-shell .planning-store-card {
+  border: 1px solid var(--row-line);
+  border-radius: 15px;
+  background: var(--row-bg);
+}
+.app-shell .war-pairs li.on,
+.app-shell .planning-store-card.equipped {
+  border-color: var(--chosen-line);
+  background: var(--chosen-bg);
+  box-shadow: var(--chosen-glow);
+}
+.app-shell .planning-weekly-reward.earned {
+  border-color: #2fe46c77;
+  background: linear-gradient(180deg, #0b2416, #06120c);
+}
+
+/* Buttons: gold for the main action, slate for the rest, gold text for small links. */
+.app-shell .button,
+.app-shell .planning-button {
+  min-height: 40px;
+  padding: 9px 15px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 650;
+}
+.app-shell .button.primary,
+.app-shell .planning-button:not(.planning-button-subtle) {
+  border: 0;
+  background: linear-gradient(180deg, #ffd770, #f0ac37);
+  color: #1d1404;
+  font-weight: 750;
+  box-shadow: 0 8px 20px -10px #f3b54acc, inset 0 1px 0 #fff3d0, inset 0 -2px 0 #c98a22;
+}
+.app-shell .button.primary:hover,
+.app-shell .planning-button:not(.planning-button-subtle):hover:not(:disabled) {
+  background: linear-gradient(180deg, #ffe08a, #f5b845);
+}
+.app-shell .button.secondary,
+.app-shell .planning-button-subtle {
+  border: 1px solid var(--chip-line);
+  background: var(--chip-bg);
+  color: #d6e1ef;
+}
+.app-shell .button.secondary:hover,
+.app-shell .planning-button-subtle:hover:not(:disabled) {
+  border-color: #3f6678;
+  background: linear-gradient(180deg, #15303b, #0d1d25);
+  color: #fff;
+}
+.app-shell .button.subtle {
+  background: transparent;
+  color: #ffd56b;
+}
+.app-shell .button.subtle:hover {
+  background: #e2ad3c14;
+  color: #ffe08a;
+}
+.app-shell .button.small-button {
+  min-height: 34px;
+  padding: 6px 12px;
+  font-size: 12.5px;
+}
+
+/* Choices (filters, day pickers): slate chips that turn gold when chosen. */
+.app-shell .planning-tabs button,
+.app-shell .war-clan-day {
+  border: 1px solid var(--chip-line);
+  border-radius: 12px;
+  background: var(--chip-bg);
+  color: #d6e1ef;
+  font-size: 13px;
+}
+.app-shell .planning-tabs button[aria-pressed="true"],
+.app-shell .war-clan-day.on,
+.app-shell button.war-clan-day.on:hover {
+  border-color: var(--chosen-line);
+  background: var(--chosen-bg);
+  color: #ffd56b;
+  box-shadow: var(--chosen-glow);
+}
+.app-shell .planning-tabs button:hover:not(:disabled):not([aria-pressed="true"]),
+.app-shell button.war-clan-day:hover:not(.on) {
+  border-color: #3f6678;
+  background: linear-gradient(180deg, #15303b, #0d1d25);
+  color: #fff;
+}
+
+/* Boxes to type in */
+.app-shell .main-content input:not([type="checkbox"]):not([type="radio"]):not([type="date"]),
+.app-shell .main-content select,
+.app-shell .main-content textarea {
+  border-radius: 10px;
+}
+
+/* "Live totals" and similar status pills */
+.app-shell .live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid #2fe46c88;
+  border-radius: 999px;
+  background: #0a2415;
+  color: #5cf394;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+}
+.app-shell .live-badge i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--glow-green);
+  box-shadow: 0 0 6px var(--glow-green);
+}
