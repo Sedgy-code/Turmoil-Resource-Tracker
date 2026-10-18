@@ -11,6 +11,7 @@ import { PILLAR_LABELS } from "@/lib/ascension";
 import { estimateWar, WAR_ACTIVITIES } from "@/lib/war";
 import { useLanguage, useT, type Translate } from "@/lib/i18n";
 import type { AscensionPillar, AscensionsResponse, ClanDayVotes, ClanDaysResponse, DashboardResponse, WarRates } from "@/lib/types";
+import { NextWarVote } from "./next-war-vote";
 import "./war-week.css";
 
 const RESOURCE_LABELS = {
@@ -130,7 +131,7 @@ export function WarWeek({ data, rates, admin = false, notify }: { data: Dashboar
   // On Day 7 (claim rewards) the war is over, so leadership is picking days for the next one.
   const planningNext = current.day === 7;
   const clan = useClanDays(warWeekOf(planningNext ? new Date(now.getTime() + 86_400_000) : now));
-  const { votes } = useClanDayVotes(current.day >= 6);
+  const { votes, vote } = useClanDayVotes(current.day >= 6);
   const voted = votes ? voteSummary(votes.counts, (day) => t("Day {day}", { day })) : "";
   // On Day 6 the picker above is still this war; the planner picks for the next one.
   const nextClan = useClanDays(nextWarWeek(now));
@@ -152,6 +153,8 @@ export function WarWeek({ data, rates, admin = false, notify }: { data: Dashboar
       </div>
       <div className="war-week-timer"><Clock size={18} />{current.day < 7 ? t("Day {day} starts in {time}", { day: current.day + 1, time: countdown(current.nextDay, now) }) : t("Next war starts in {time}", { time: countdown(current.weekEnd, now) })}</div>
     </section>
+    {/* Vote here too, not only on Home: wherever the counts show, so can the buttons. */}
+    {votes?.open && <NextWarVote votes={votes} vote={vote} weekEnd={current.weekEnd} now={now} notify={notify} memberId={data.currentUser.id} />}
     <section className="panel war-clan-days">
       <h2>{t(planningNext ? "Clan days for the next war" : "Clan days this war")}</h2>
       <div className="war-clan-day-list">{SPENDING_DAYS.map((day) => {
@@ -165,7 +168,7 @@ export function WarWeek({ data, rates, admin = false, notify }: { data: Dashboar
       })}</div>
       {clan.loaded && <p>{clan.days.length ? t("Only spend on the clan days. Spending on other days earns a black mark.") : t("Leadership hasn’t picked the clan days yet. Check announcements before you spend.")}</p>}
       {admin && <p className="war-week-note">{lockedToday ? t("This war’s clan days are locked on battle day. Pick the next war’s days below.") : t("Tap the days the clan will spend on. Members see them straight away.")}</p>}
-      {voted && !votes?.picked.length && <p className="war-week-note war-clan-votes">🗳️ {t("Members’ votes for the next war: {votes}", { votes: voted })}</p>}
+      {admin && voted && !votes?.picked.length && <p className="war-week-note war-clan-votes">🗳️ {t("Members’ votes for the next war: {votes}", { votes: voted })}</p>}
     </section>
     {admin && current.day >= 6 && <ClanDayPlanner data={data} rates={rates} votes={votes} target={planningNext ? clan : nextClan} week={nextWarWeek(now)} starts={current.weekEnd} now={now} notify={notify} />}
     <p className="war-week-note">{t("Each war day starts at 00:00 UTC. Leadership may ask you to hold resources for a snipe, so check announcements before you spend.")}</p>

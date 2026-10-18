@@ -9,7 +9,7 @@
   --muted: #a9bad6;
   --subtle: #8a9dbd;
   --border: #22363a;
-  --panel: #0a1311;
+  --panel: #111c19;
   --panel-hover: #11202a;
   --glow-green: #2fe46c;
   --chip-line: #2a4552;
@@ -18,7 +18,7 @@
   --chosen-bg: linear-gradient(180deg, #3b2c0a, #1c1505);
   --chosen-glow: 0 0 0 1px #f2bf4b55, 0 0 16px -2px #f2bf4b88;
   --row-line: #1c3530;
-  --row-bg: #040a09d9;
+  --row-bg: #141d1bd9;
 }
 
 /* Painted mountains behind the title of every page (they fade out to the left and bottom). */
@@ -99,7 +99,7 @@
 .app-shell .home-more {
   border: 1.5px solid #2fe46c47;
   border-radius: 18px;
-  background: radial-gradient(120% 80% at 0% 0%, #0e2a1b99 0%, transparent 55%), linear-gradient(180deg, #0a1412, #060c0b);
+  background: radial-gradient(120% 80% at 0% 0%, #0e2a1b99 0%, transparent 55%), linear-gradient(180deg, #111c19, #0c1513);
   box-shadow: 0 0 22px -10px #2fe46c66, inset 0 0 26px -16px #2fe46c77;
 }
 .app-shell .stat-card::before { display: none; }
@@ -113,13 +113,13 @@
 .app-shell .war-day-today,
 .app-shell .war-week-now.tone-on {
   border-color: #e2ad3cb0;
-  background: radial-gradient(100% 70% at 0% 0%, #3a2b0a77, transparent 62%), linear-gradient(180deg, #13100a, #0b0906);
+  background: radial-gradient(100% 70% at 0% 0%, #3a2b0a77, transparent 62%), linear-gradient(180deg, #1a160e, #13100b);
   box-shadow: 0 0 22px -8px #e2ad3c88, inset 0 0 24px -12px #e2ad3c55;
 }
 /* Today in the war takes the colour of the day, as on Home. */
 .app-shell .war-week-now.tone-battle {
   border-color: #d63a4dc4;
-  background: radial-gradient(100% 70% at 0% 0%, #3b0f17aa, transparent 62%), linear-gradient(180deg, #120a0c, #0a0708);
+  background: radial-gradient(100% 70% at 0% 0%, #3b0f17aa, transparent 62%), linear-gradient(180deg, #1a0f12, #120d0e);
   box-shadow: 0 0 22px -8px #d63a4d99;
 }
 .app-shell .war-week-now.tone-hold {
@@ -270,7 +270,7 @@
   --table-tone: #f2b33c;
   border: 1.5px solid color-mix(in srgb, var(--table-tone) 70%, transparent);
   border-radius: 16px;
-  background: #060b0b;
+  background: #0f1715;
   box-shadow: 0 0 22px -8px color-mix(in srgb, var(--table-tone) 60%, transparent), inset 0 0 22px -12px color-mix(in srgb, var(--table-tone) 45%, transparent);
 }
 .app-shell .table-scroll.tone-teal,
@@ -304,7 +304,7 @@
 .app-shell .planning-table tbody th {
   padding: 10px 14px;
   border-bottom: 1px solid #ffffff0d;
-  background: #060b0b;
+  background: #0f1715;
   color: #eef3f8;
   font-size: 14px;
   font-variant-numeric: tabular-nums;
@@ -312,14 +312,14 @@
 .app-shell .resource-table tbody tr:nth-child(even) td,
 .app-shell .management-table tbody tr:nth-child(even) td,
 .app-shell .planning-table tbody tr:nth-child(even) td,
-.app-shell .planning-table tbody tr:nth-child(even) th { background: #0a100f; }
+.app-shell .planning-table tbody tr:nth-child(even) th { background: #131c1a; }
 .app-shell .resource-table tbody tr:hover td,
 .app-shell .management-table tbody tr:hover td,
 .app-shell .planning-table tbody tr:hover td,
 .app-shell .planning-table tbody tr:hover th { background: #10201f; }
 /* First place: the row glows in the table's colour, as on the cards. */
 .app-shell .resource-table tbody tr:has(.contrib-rank.m1) td {
-  background: color-mix(in srgb, var(--table-tone, #f2b33c) 16%, #070d0c);
+  background: color-mix(in srgb, var(--table-tone, #f2b33c) 16%, #0f1715);
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--table-tone, #f2b33c) 35%, transparent), inset 0 -1px 0 color-mix(in srgb, var(--table-tone, #f2b33c) 35%, transparent);
 }
 .app-shell .resource-table td:has(> .contrib-rank) { width: 52px; padding-top: 12px; text-align: center; }
@@ -332,7 +332,7 @@
 .app-shell .table-footer {
   padding: 12px 18px;
   border-top-color: #ffffff12;
-  background: #060c0b;
+  background: #0c1513;
   color: var(--muted);
   font-size: 12px;
 }
@@ -418,7 +418,7 @@
 .guide-page .guide-card {
   border: 1.5px solid #2fe46c47;
   border-radius: 18px;
-  background: radial-gradient(120% 80% at 0% 0%, #0e2a1b99 0%, transparent 55%), linear-gradient(180deg, #0a1412, #060c0b);
+  background: radial-gradient(120% 80% at 0% 0%, #0e2a1b99 0%, transparent 55%), linear-gradient(180deg, #111c19, #0c1513);
   box-shadow: 0 0 22px -10px #2fe46c66, inset 0 0 26px -16px #2fe46c77;
 }
 .guide-page .button.primary {

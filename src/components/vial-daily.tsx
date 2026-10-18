@@ -15,7 +15,7 @@ type Row = { key: string; member?: Member; name: string; values: (number | null)
  * A clan is knocked out of the race every day, so a member who hasn't donated since the last
  * check is highlighted.
  */
-export function VialDaily({ results, byId }: { results: WarResult[]; byId: Map<string, Member> }) {
+export function VialDaily({ results, byId, admin = false }: { results: WarResult[]; byId: Map<string, Member>; admin?: boolean }) {
   const t = useT();
   const week = currentWeek();
   const uploads = results.filter((result) => result.week === week && result.points.length > 0).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
@@ -53,7 +53,7 @@ export function VialDaily({ results, byId }: { results: WarResult[]; byId: Map<s
     <header>
       <div>
         <h2>{t("Clan Tech Race: donations this week")}</h2>
-        <p>{t("Upload the donation screenshot once a day. Each column shows what members gave since the upload before. Clans are knocked out daily at 00:00 UTC.")}</p>
+        <p>{admin ? t("Upload the donation screenshot once a day. Each column shows what members gave since the upload before. Clans are knocked out daily at 00:00 UTC.") : t("What members donated each day, from the daily screenshot. Clans are knocked out daily at 00:00 UTC.")}</p>
       </div>
       {uploads.length > 1 && <div className="war-card-total"><span>{t("No donation since the last upload")}</span><strong>{quiet}</strong></div>}
     </header>

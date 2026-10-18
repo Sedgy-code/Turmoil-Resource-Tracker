@@ -1,0 +1,36 @@
+/* Easy to tap on a phone: every control at least 44 px, main buttons 48 px (Apple 44 pt, Google
+   48 dp). Loaded after the theme files. */
+@media (max-width: 800px) {
+  /* Top bar */
+  .app-shell .mobile-menu { min-width: 44px; min-height: 44px; }
+  .app-shell .topbar .language-picker select { min-height: 40px; }
+  .app-shell .topbar-clan-points { min-height: 44px; }
+  /* Fold arrows on Home's cards */
+  .app-shell .home-fold { width: 44px; height: 44px; }
+  /* Section tabs, chips and switches */
+  .app-shell .section-tabs a { display: inline-flex; align-items: center; min-height: 44px; }
+  .app-shell .planning-tabs button,
+  .app-shell .table-tabs button,
+  .app-shell .war-clan-day,
+  .app-shell .contrib-options button { min-height: 44px; }
+  /* Buttons */
+  .app-shell .button,
+  .app-shell .planning-button { min-height: 48px; }
+  .app-shell .button.small-button { min-height: 44px; }
+  .app-shell .contrib-more { min-height: 48px; }
+  /* Links and toggles inside cards */
+  .app-shell .home-link,
+  .app-shell .arsenal-planner-link,
+  .app-shell .field-guide-toggle,
+  .app-shell .contrib-sort,
+  .app-shell .column-sort { display: inline-flex; align-items: center; min-height: 44px; }
+  .app-shell .form-note > summary { min-height: 48px; }
+  /* Snipe answers: two big Yes / No buttons across the full width. */
+  .app-shell .planning-rsvp .planning-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%; }
+  .app-shell .planning-rsvp .planning-tabs button { justify-content: center; min-height: 48px; font-size: 15px; }
+  .app-shell .home-choice button { min-height: 44px; }
+}
+/* Section tabs wrap onto a second line on a phone instead of hiding the last one off the edge. */
+@media (max-width: 800px) {
+  .app-shell .section-tabs { flex-wrap: wrap; overflow: visible; }
+}

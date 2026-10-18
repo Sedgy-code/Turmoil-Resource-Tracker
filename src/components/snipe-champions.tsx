@@ -41,8 +41,8 @@ export function SnipeChampions({ members }: { members: Member[] }) {
               <span className="champion-count">{t("{count} snipes", { count: data?.snipes.recent[id] ?? 0 })}</span>
             </li>;
           })}
-        </ol> : <p className="recognition-empty">{t("No confirmed snipe attendance yet. Admins tick who took part on the Snipe Plans page.")}</p>}
-        <Link className="text-link recognition-link" href="/snipes">{t("Snipe Plans")} <ArrowRight size={13} /></Link>
+        </ol> : <p className="recognition-empty">{t("No confirmed snipe attendance yet.")}</p>}
+        <Link className="text-link recognition-link" href="/snipes">{t("Snipes")} <ArrowRight size={13} /></Link>
         </div>}
       </section>
       <section className={`panel recognition-panel latest-war${warFold.open ? "" : " folded"}`}>
@@ -65,7 +65,7 @@ export function SnipeChampions({ members }: { members: Member[] }) {
               </li>;
             })}
           </ol>}
-        </> : <p className="recognition-empty">{t("No war results yet. An admin can add them from the end-of-war screenshots.")}</p>}
+        </> : <p className="recognition-empty">{t("No war results yet.")}</p>}
         <Link className="text-link recognition-link" href="/war-results">{t("War Results")} <ArrowRight size={13} /></Link>
         </div>}
       </section>

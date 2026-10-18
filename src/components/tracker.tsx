@@ -128,17 +128,17 @@ type Icon = ComponentType<{
   strokeWidth?: number;
 }>;
 const viewNames = {
-  dashboard: "Dashboard",
+  dashboard: "Home",
   resources: "My Resources",
   members: "Manage Members",
   weeks: "Weekly History",
-  war: "Estimated War Points",
-  warWeek: "War Week",
-  snipes: "Snipe Plans",
+  war: "Points Calculator",
+  warWeek: "This Week",
+  snipes: "Snipes",
   store: "Reward Shop",
   hoarding: "Hoarding Watch",
   warResults: "War Results",
-  vials: "Vial Donations",
+  vials: "Vials",
   ranking: "Contribution Ranking",
   settings: "Settings",
   tech: "Clan Tech",
@@ -588,7 +588,7 @@ function TrackerApp({ view }: { view: View }) {
           <div className="game-card">
             <Swords size={22} />
             <div>
-              <strong>Forge Masters</strong>
+              <strong>Forge Master</strong>
             </div>
           </div>
           <button className="nav-link help-link" onClick={() => setHelp(true)}>
@@ -750,7 +750,7 @@ function TrackerApp({ view }: { view: View }) {
               <h2>{t("Admin access required")}</h2>
               <p>{t("Only clan admins can manage the member roster.")}</p>
               <Link href="/" className="button primary">
-                {t("Back to dashboard")}
+                {t("Home")}
               </Link>
             </section>
           ) : !dataMatches && loading ? (
@@ -1213,7 +1213,7 @@ function MemberResources({
           <ChevronsUp size={20} strokeWidth={2.6} aria-hidden="true" />{t("Ascending")}<span>{ascending.size}</span>
         </button>
       </div>
-      {incompleteMembers.length > 0 && <p className={missingDataStyles.legend}><CircleAlert size={13} aria-hidden="true" />{view === "cards" ? t("Amber numbers show what a member still needs to add.") : t("Amber boxes show numbers a member still needs to add.")}</p>}
+      {incompleteMembers.length > 0 && <p className={missingDataStyles.legend}><CircleAlert size={13} aria-hidden="true" />{view === "cards" ? t("Dashed boxes show what a member still needs to add.") : t("Dashed boxes show numbers a member still needs to add.")}</p>}
       {view === "cards" ? (members.length ? <ContributionCards
         members={members}
         everyone={data.members}
@@ -1374,8 +1374,23 @@ interface EntryBox {
   decimal?: boolean;
   placeholder?: string;
   value: string;
+  /** The saved number: shown under the box once it's changed, so the old one stays in view. */
+  saved?: string;
   onChange: (value: string) => void;
   suffix?: string;
+}
+
+/** Under a changed box: the saved number, or a warning when the new one is ten times bigger (an extra digit?). */
+function SavedHint({ box }: { box: EntryBox }) {
+  const t = useT();
+  if (box.saved === undefined || box.saved === "" || box.value === box.saved) return null;
+  const saved = Number(box.saved);
+  const now = Number(box.value);
+  const shown = box.decimal ? box.saved : numberFormat(saved);
+  const jump = saved > 0 && now >= saved * 10 && now >= 100;
+  return <small className={`entry-row-was${jump ? " jump" : ""}`} role={jump ? "status" : undefined}>
+    {jump ? t("Ten times the saved {value}. Check for an extra digit.", { value: shown }) : t("Saved: {value}", { value: shown })}
+  </small>;
 }
 
 /** Keeps only digits (and one decimal point where allowed), so letters and commas can't be typed. */
@@ -1477,6 +1492,7 @@ function EntryRow({ id, label, icon, badge, help, guide, boxes }: {
               />
               {box.suffix && <span className="entry-row-suffix" aria-hidden="true">{box.suffix}</span>}
             </div>
+            <SavedHint box={box} />
           </div>
         ))}
       </div>
@@ -1769,8 +1785,8 @@ function ResourceForm({
               : key === "mountKeys"
                 ? { key: "mount" as const, range: "37.5–50", label: "Mount summon cost (×1)", caption: "Cost ×1", help: "On the blue Summon ×1 button. Between 37.5 and 50.", where: "Mounts screen → the number on the blue “Summon x1” button." }
                 : null;
-            const boxes: EntryBox[] = [{ label: t(label), caption: cost ? t("Amount") : undefined, placeholder: t("0 if none"), value: values[key], onChange: (value) => update(key, value) }];
-            if (cost) boxes.push({ label: t(cost.label), caption: t(cost.caption), decimal: true, placeholder: cost.range, value: costValues[cost.key], onChange: (value) => { touch(); setCostValues((existing) => ({ ...existing, [cost.key]: value })); } });
+            const boxes: EntryBox[] = [{ label: t(label), caption: cost ? t("Amount") : undefined, placeholder: t("0 if none"), value: values[key], saved: savedDraft[key], onChange: (value) => update(key, value) }];
+            if (cost) boxes.push({ label: t(cost.label), caption: t(cost.caption), decimal: true, placeholder: cost.range, value: costValues[cost.key], saved: savedCostDraft[cost.key], onChange: (value) => { touch(); setCostValues((existing) => ({ ...existing, [cost.key]: value })); } });
             return (
               <EntryRow
                 key={key}
@@ -1793,7 +1809,7 @@ function ResourceForm({
             badge={potionsNeverAsked ? t("New") : undefined}
             help={t(RESOURCE_GUIDE.potions.help)}
             guide={!readOnly && <FieldGuide field="potions" hint={t(RESOURCE_GUIDE.potions.where)} />}
-            boxes={[{ label: t("Clan Tech Vials"), placeholder: t("0 if none"), value: values.potions, onChange: (value) => update("potions", value) }]}
+            boxes={[{ label: t("Clan Tech Vials"), placeholder: t("0 if none"), value: values.potions, saved: savedDraft.potions, onChange: (value) => update("potions", value) }]}
           />
         </div>
       </section>
@@ -1810,7 +1826,7 @@ function ResourceForm({
               icon={key === "eggsPetsTotal" ? <EggIcon size={34} /> : <EggshellIcon size={34} />}
               help={t(RESOURCE_GUIDE[key].help)}
               guide={!readOnly && <FieldGuide field={key} hint={t(RESOURCE_GUIDE[key].where)} />}
-              boxes={[{ label: t(key === "eggsPetsTotal" ? "Total eggs/pets" : "Eggshells total"), placeholder: t("0 if none"), value: values[key], onChange: (value) => update(key, value) }]}
+              boxes={[{ label: t(key === "eggsPetsTotal" ? "Total eggs/pets" : "Eggshells total"), placeholder: t("0 if none"), value: values[key], saved: savedDraft[key], onChange: (value) => update(key, value) }]}
             />
           ))}
         </div>
@@ -1832,7 +1848,7 @@ function ResourceForm({
                 label={t(label)}
                 help={t(help)}
                 guide={!readOnly && picture && where && <FieldGuide field={picture} hint={t(where)} />}
-                boxes={[{ label: t(label), decimal: isChance(key), placeholder: isChance(key) ? t("Enter 0 if none") : t("e.g. 100"), value: planningValues[key], onChange: (value) => { touch(); setPlanningValues((old) => ({ ...old, [key]: value })); }, suffix: isChance(key) ? "%" : undefined }]}
+                boxes={[{ label: t(label), decimal: isChance(key), placeholder: isChance(key) ? t("Enter 0 if none") : t("e.g. 100"), value: planningValues[key], saved: planningText(savedPlanning, key), onChange: (value) => { touch(); setPlanningValues((old) => ({ ...old, [key]: value })); }, suffix: isChance(key) ? "%" : undefined }]}
               />
             ))}
           </div>

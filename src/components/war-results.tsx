@@ -88,11 +88,11 @@ export function WarResults({ kind = "war", members, admin, notify }: { kind?: Re
         <span className="war-bar-label">{formatWeek(result.week)}</span>
       </div>)}</div>
     </section>}
-    {kind === "vials" && results && <VialDaily results={results} byId={byId} />}
+    {kind === "vials" && results && <VialDaily results={results} byId={byId} admin={admin} />}
     {kind === "war" && <WarDaily members={members} admin={admin} notify={notify} />}
     {error && <div className="error-banner" role="alert">{t(error)}<button onClick={() => void load()}>{t("Retry")}</button></div>}
     {!results ? <section className="panel war-empty"><LoaderCircle size={22} className="spin" /></section>
-      : !results.length ? <section className="panel war-empty"><Trophy size={30} /><p>{t(words.empty)}</p></section>
+      : !results.length ? <section className="panel war-empty"><Trophy size={30} /><p>{admin ? t(words.empty) : kind === "vials" ? t("No vial donations yet.") : t("No war results yet.")}</p></section>
         : results.map((result, index) => {
           if (admin && editing === result.id) return <RecordEditor key={result.id} kind={kind} members={members} existing={result} notify={notify}
             onClose={() => setEditing(null)} onSaved={() => { setEditing(null); refresh(); }} />;

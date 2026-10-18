@@ -9,7 +9,7 @@
   margin-top: 5px;
   color: #edce88;
   font: inherit;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.5;
   text-align: left;
   cursor: pointer;
@@ -44,11 +44,11 @@
   overscroll-behavior: contain;
 }
 .heading { display: block; color: #efce89; font-size: 12px; }
-.popup p { margin: 5px 0 10px; color: #a6b6ac; font-size: 10px; }
+.popup p { margin: 5px 0 10px; color: #a6b6ac; font-size: 12px; }
 .popup ul { margin: 0; padding: 0; list-style: none; }
 .popup li + li { margin-top: 9px; padding-top: 9px; border-top: 1px solid #ffffff14; }
 .popup li strong { display: block; font-size: 11px; }
-.popup li span { display: block; margin-top: 2px; color: #c3b98f; font-size: 10px; }
+.popup li span { display: block; margin-top: 2px; color: #c3b98f; font-size: 12px; }
 tr.incompleteRow > td { background: #29281a; }
 tr.incompleteRow > td:first-child { box-shadow: inset 3px 0 #cba454; }
 tr.incompleteRow:hover > td { background: #302e1e; }
@@ -60,7 +60,7 @@ tr.incompleteRow:hover > td { background: #302e1e; }
   padding: 10px 20px;
   border-bottom: 1px solid #cba45422;
   color: #d9c28a;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.5;
 }
 .legend svg { flex-shrink: 0; }

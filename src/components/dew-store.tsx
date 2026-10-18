@@ -49,6 +49,8 @@ export function DewStore({ data, notify, refresh }: Props) {
   const [loadError, setLoadError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [category, setCategory] = useState<CosmeticCategory | "all">("all");
+  // Spending points asks first, in the card itself, so a stray tap never buys anything.
+  const [confirming, setConfirming] = useState<string | null>(null);
   const loading = useRef<AbortController | null>(null);
   const mutationPending = useRef(false);
   const requestGeneration = useRef(0);
@@ -153,8 +155,14 @@ export function DewStore({ data, notify, refresh }: Props) {
           <button className={`planning-button${equipped ? " planning-button-subtle" : ""}`} onClick={() => void equip(item, equipped)} disabled={busy !== null}>
             {busy === item.id && <LoaderCircle size={15} className="spin" />}{equipped ? t("Remove") : t("Equip")}
           </button>
+        ) : confirming === item.id ? (
+          <div className="dew-confirm" role="group" aria-label={t("Spend {count} points on {name}?", { count: numberFormat(item.cost), name: item.name })}>
+            <strong>{t("Spend {count} points on {name}?", { count: numberFormat(item.cost), name: item.name })}</strong>
+            <button className="planning-button" onClick={() => { setConfirming(null); void purchase(item); }} disabled={busy !== null}>{t("Yes, unlock")}</button>
+            <button className="planning-button planning-button-subtle" onClick={() => setConfirming(null)} disabled={busy !== null}>{t("Cancel")}</button>
+          </div>
         ) : (
-          <button className="planning-button" onClick={() => void purchase(item)} disabled={busy !== null || !affordable}>
+          <button className="planning-button" onClick={() => setConfirming(item.id)} disabled={busy !== null || !affordable}>
             {busy === item.id && <LoaderCircle size={15} className="spin" />}{affordable ? t("Unlock for {count} points", { count: numberFormat(item.cost) }) : t("{count} more points needed", { count: numberFormat(item.cost - wallet.balance) })}
           </button>
         )}

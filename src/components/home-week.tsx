@@ -2,19 +2,19 @@
 
 import { useCallback, useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowRight, BarChart3, CalendarDays, Check, ChevronDown, ChevronsUp, Clock, Gift, Hand, RefreshCw, ShieldCheck, Star, Swords, Target, X, type LucideProps } from "lucide-react";
+import { ArrowRight, BarChart3, Check, ChevronDown, ChevronsUp, Clock, Gift, Hand, RefreshCw, ShieldCheck, Star, Swords, Target, X, type LucideProps } from "lucide-react";
 import "@fontsource/knewave/400.css";
 import { ASCENSION_PILLARS, ASCENSIONS_UPDATED, PILLAR_LABELS } from "@/lib/ascension";
-import { announceClanPointsUpdate } from "@/lib/clan-points";
-import { countdown, raceEnd, warDay, warWeekOf, WAR_DAYS } from "@/lib/war-calendar";
-import { currentWeek, numberFormat, type ResourceKey } from "@/lib/resources";
+import { countdown, raceEnd, warDay, warWeekOf } from "@/lib/war-calendar";
+import { currentWeek, numberFormat } from "@/lib/resources";
 import { useLanguage, useT } from "@/lib/i18n";
 import type { AscensionPillar, AscensionsResponse, DashboardResponse, DewResponse, Member, SnipePlan, SnipesResponse } from "@/lib/types";
 import { CrownShield } from "./crown-shield";
 import { FoldButton, useFold } from "./home-fold";
 import { CoinStack } from "./home-icons";
-import { EggIcon, HammerIcon, HorseshoeIcon, PILLAR_ICONS, TicketIcon, VialIcon, type ResourcePicture } from "./resource-icons";
+import { PILLAR_ICONS, VialIcon } from "./resource-icons";
 import { MemberAvatar } from "./member-identity";
+import { NextWarVote } from "./next-war-vote";
 import { todayAdvice, useClanDayVotes, useClanDays, useNow, type TodayTone } from "./war-week";
 import "./home-week.css";
 
@@ -176,6 +176,8 @@ export function HomeWeek({ data, notify, between }: { data: DashboardResponse; n
   const jobsOpen = ready && jobsFold.open;
 
   return <div className="home-week">
+    {/* "Spend or hold?" comes first: the one answer members open the Hub for most days. */}
+    <HomeToday now={now} notify={notify} memberId={me.id} />
     <HomeHero update={update} saved={savedEntries.length} total={data.stats.totalMembers} faces={faces} mine={saved} week={week} />
     <section className={`home-card home-jobs-card${jobsOpen ? "" : " folded"}`} aria-labelledby="home-jobs-title">
       <div className="home-card-head">
@@ -226,7 +228,6 @@ export function HomeWeek({ data, notify, between }: { data: DashboardResponse; n
       </ol>}
     </section>
     {between}
-    <HomeToday now={now} notify={notify} memberId={me.id} />
   </div>;
 }
 
@@ -234,8 +235,8 @@ export function HomeWeek({ data, notify, between }: { data: DashboardResponse; n
 function HomeHero({ update, saved, total, faces, mine, week }: { update: string; saved: number; total: number; faces: Member[]; mine: boolean; week: string }) {
   const t = useT();
   const { language } = useLanguage();
-  // Folds down to the progress line once this member has saved this week.
-  const fold = useFold(`hero:${week}`, { canFold: mine });
+  // Shrinks to the progress line once this member has saved this week (they can open it again).
+  const fold = useFold(`hero:${week}`, { canFold: mine, folded: mine });
   // In English the painted lettering from the clan's design; other languages get the brush font,
   // in two lines: the first word in green, the rest in white.
   const title = t("Stronger together");
@@ -307,16 +308,6 @@ export function HomeArsenal({ minimum, maximum }: { minimum: number | null; maxi
   </section>;
 }
 
-/** What members spend on the spending days, as the same pictures as the ascending chips. */
-type Need = "hammers" | "skills" | "mounts" | "eggs";
-const NEEDS: readonly Need[] = ["hammers", "skills", "mounts", "eggs"];
-const NEED_ICONS: Record<Need, ResourcePicture> = { hammers: HammerIcon, skills: TicketIcon, mounts: HorseshoeIcon, eggs: EggIcon };
-const NEED_RESOURCES: Record<Need, readonly ResourceKey[]> = { hammers: ["hammers"], skills: ["skillTickets"], mounts: ["mountKeys", "mountsToMerge"], eggs: ["eggsPetsTotal", "eggshellsTotal"] };
-/** The resources that score on a spending day (from the war calendar). */
-function needsOf(day: number): Need[] {
-  const resources = WAR_DAYS[day - 1].resources;
-  return NEEDS.filter((need) => NEED_RESOURCES[need].some((key) => resources.includes(key)));
-}
 
 type Tone = TodayTone;
 const TONE_ICONS: Record<Tone, ComponentType<LucideProps>> = { on: Star, hold: Hand, battle: Swords, claim: Gift };
@@ -326,23 +317,6 @@ function HomeToday({ now, notify, memberId }: { now: Date; notify: (message: str
   const t = useT();
   const war = warDay(now);
   const { votes, vote } = useClanDayVotes(war.day >= 6);
-  const [voting, setVoting] = useState(false);
-  async function toggleVote(day: number) {
-    const mine = votes?.mine ?? [];
-    // Day 6 is always fought, so a vote is the two other days to win.
-    if (!mine.includes(day) && mine.length >= 2) {
-      notify(t("You can pick 2 days. Tap one of yours to swap it."));
-      return;
-    }
-    setVoting(true);
-    const result = await vote(mine.includes(day) ? mine.filter((item) => item !== day) : [...mine, day]);
-    setVoting(false);
-    if (result.error) notify(t(result.error), true);
-    else if (result.rewarded) {
-      notify(t("Thanks for voting! +10 Clan Points."));
-      announceClanPointsUpdate(memberId);
-    }
-  }
   // On Day 7 the war is over, so the clan days shown are the next war's (as on War → This Week).
   const clan = useClanDays(warWeekOf(war.day === 7 ? new Date(now.getTime() + DAY) : now));
   // The same words as the War page's Today card.
@@ -351,13 +325,6 @@ function HomeToday({ now, notify, memberId }: { now: Date; notify: (message: str
   const { main, sub } = advice;
   const BadgeIcon = badge ? TONE_ICONS[badge.tone] : null;
   const todayFold = useFold("today");
-  // The vote can only fold once the member has voted; voted for both days before Home opened:
-  // start folded, with the days they picked underneath.
-  const mine = votes?.mine ?? [];
-  const [votedOnArrival, setVotedOnArrival] = useState<boolean | null>(null);
-  if (votes && votedOnArrival === null) setVotedOnArrival(mine.length >= 2);
-  const voteFold = useFold(`vote:${votes?.week ?? ""}`, { canFold: mine.length > 0, folded: votedOnArrival === true });
-  const needName = (need: Need) => need === "hammers" ? t("Hammers") : need === "skills" ? t("Skills") : need === "mounts" ? t("Mounts") : t("Eggs and pets");
   return <>
     <section className={`home-card home-today${badge ? ` tone-${badge.tone}` : ""}${todayFold.open ? "" : " folded"}`} aria-labelledby="home-today-title">
       <div className="home-card-head">
@@ -383,31 +350,7 @@ function HomeToday({ now, notify, memberId }: { now: Date; notify: (message: str
       </div>}
     </section>
     {/* Its own card, so the vote is clearly about the next war and not today's. */}
-    {votes?.open && <section className={`home-card home-next-war${voteFold.open ? "" : " folded"}`} aria-labelledby="home-next-war-title">
-      <div className="home-card-head">
-        <h2 id="home-next-war-title" className="home-kicker"><CalendarDays size={19} />{t("Next war starts in {time}", { time: countdown(war.weekEnd, now) })}</h2>
-        {/* Before voting: the reward. After voting: the ⌄ to fold it away. */}
-        {voteFold.canFold
-          ? <FoldButton open={voteFold.open} onClick={voteFold.toggle} label={t("Pick 2 days to win next war (plus Day 6)")} controls="home-next-war-body" />
-          : <em className="home-vote-reward">{t("+10 points")}</em>}
-      </div>
-      {!voteFold.open && <p className="home-fold-summary">{t("Your vote: {days}", { days: mine.map((day) => t("Day {day}", { day })).join(" + ") })}</p>}
-      {voteFold.open && <div id="home-next-war-body">
-      <p className="home-today-main">{t("Pick 2 days to win next war (plus Day 6)")}</p>
-      <div className="home-vote-days" role="group" aria-label={t("Pick 2 days to win next war (plus Day 6)")}>
-        {[1, 2, 3, 4, 5].map((day) => <button key={day} aria-pressed={!!votes.mine?.includes(day)} disabled={voting} onClick={() => void toggleVote(day)}>
-          <span>{t("Day {day}", { day })}</span>
-          <span className="home-vote-needs">
-            {needsOf(day).map((need) => { const Icon = NEED_ICONS[need]; return <Icon key={need} size={16} />; })}
-            <span className="visually-hidden">{needsOf(day).map(needName).join(", ")}</span>
-          </span>
-          <strong>{votes.counts[day - 1]}</strong>
-        </button>)}
-      </div>
-      <p className="home-vote-key" aria-hidden="true">{NEEDS.map((need) => { const Icon = NEED_ICONS[need]; return <span key={need}><Icon size={17} />{needName(need)}</span>; })}</p>
-      <small className="home-vote-voters">{t("Members voted so far: {count}. Leadership makes the final pick.", { count: votes.voters })}</small>
-      </div>}
-    </section>}
+    {votes?.open && <NextWarVote votes={votes} vote={vote} weekEnd={war.weekEnd} now={now} notify={notify} memberId={memberId} />}
   </>;
 }
 

@@ -56,7 +56,7 @@ export function WarDaily({ members, admin, notify }: { members: Member[]; admin:
     <header>
       <div>
         <h2>{t("Daily war points")}</h2>
-        <p>{t("Upload the clan war screenshot before each war day ends (00:00 UTC). Points on clan days count; points on other days earn a black mark.")}</p>
+        <p>{admin ? t("Upload the clan war screenshot before each war day ends (00:00 UTC). Points on clan days count; points on other days earn a black mark.") : t("Each war day’s points, from the clan war screenshot. Points on clan days count; points on other days earn a black mark.")}</p>
       </div>
       {weeks.length > 1 && <select className="war-daily-week" aria-label={t("Week of {date}", { date: formatWeek(report.week) })} value={report.week} onChange={(event) => setWeek(event.target.value)}>
         {weeks.map((item) => <option key={item} value={item}>{t("Week of {date}", { date: formatWeek(item) })}</option>)}

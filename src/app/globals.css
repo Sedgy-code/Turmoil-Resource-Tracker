@@ -259,7 +259,7 @@ img {
   overflow: hidden;
 }
 .sidebar-profile span:not(.avatar) {
-  font-size: 10px;
+  font-size: 12px;
   color: #818b75;
   display: block;
   margin-top: 5px;
@@ -321,7 +321,7 @@ img {
 .connection {
   display: flex;
   gap: 7px;
-  font-size: 10px;
+  font-size: 12px;
   color: #97a28a;
   align-items: center;
 }
@@ -632,7 +632,7 @@ h1 {
 }
 .hero-participation strong {
   display: block;
-  font-size: 10px;
+  font-size: 12px;
   color: #d3c6b2;
   font-weight: 500;
 }
@@ -673,7 +673,7 @@ h1 {
 }
 .section-heading p,
 .table-section-heading p {
-  font-size: 10px;
+  font-size: 12px;
   color: #818b72;
   margin-top: 6px;
 }
@@ -703,7 +703,7 @@ h1 {
   gap: 4px;
 }
 .section-actions .button {
-  font-size: 10px;
+  font-size: 12px;
   min-height: 33px;
   padding: 7px 12px;
 }
@@ -724,7 +724,7 @@ h1 {
   display: flex;
   align-items: center;
   gap: 9px;
-  font-size: 10px;
+  font-size: 12px;
   color: #b1b9a4;
   white-space: nowrap;
 }
@@ -921,7 +921,7 @@ h1 {
   min-width: 210px;
 }
 .search-input input {
-  font-size: 10px;
+  font-size: 12px;
   outline: none;
   border: 0;
   background: none;
@@ -948,7 +948,7 @@ h1 {
   display: flex;
   gap: 7px;
   align-items: center;
-  font-size: 10px;
+  font-size: 12px;
   white-space: nowrap;
   padding: 12px 0;
   background: transparent;
@@ -1110,7 +1110,7 @@ h1 {
   gap: 4px;
   background: none;
   color: #d8ad7e;
-  font-size: 10px;
+  font-size: 12px;
   padding: 0;
 }
 .text-link:hover {
@@ -1304,7 +1304,7 @@ h1 {
   font-size: 15px;
 }
 .entry-profile p {
-  font-size: 10px;
+  font-size: 12px;
   color: #8f9e7c;
   margin-top: 5px;
 }
@@ -1335,7 +1335,7 @@ h1 {
   margin-left: auto;
 }
 .member-select > span {
-  font-size: 10px;
+  font-size: 12px;
   color: #8d9a7d;
 }
 .member-select select {
@@ -1356,7 +1356,7 @@ h1 {
   background: #1b2515;
   border-radius: 6px;
   padding: 12px 15px;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.7;
   margin-bottom: 27px;
 }
@@ -1391,7 +1391,7 @@ h1 {
   display: flex;
   gap: 6px;
   align-items: center;
-  font-size: 10px;
+  font-size: 12px;
   color: #a5b291;
   white-space: nowrap;
   margin-bottom: 9px;
@@ -1428,7 +1428,7 @@ h1 {
   gap: 18px;
 }
 .form-section-subtitle {
-  font-size: 10px;
+  font-size: 12px;
   color: #879975;
   margin-top: -13px;
   margin-bottom: 20px;
@@ -1439,7 +1439,7 @@ h1 {
   gap: 18px 16px;
 }
 .rarity-inputs label > span {
-  font-size: 10px;
+  font-size: 12px;
   margin-bottom: 8px;
   gap: 5px;
 }
@@ -1537,7 +1537,7 @@ h1 {
   margin-left: 6px;
 }
 .management-stats span {
-  font-size: 10px;
+  font-size: 12px;
   color: #9aad85;
   margin-left: 6px;
 }
@@ -1550,7 +1550,7 @@ h1 {
 }
 .management-table td {
   padding: 18px 20px;
-  font-size: 10px;
+  font-size: 12px;
 }
 .management-table .table-member strong {
   font-size: 12px;
@@ -1669,7 +1669,7 @@ h1 {
 }
 .week-card p {
   color: #8ea475;
-  font-size: 10px;
+  font-size: 12px;
 }
 .week-card-stats {
   margin-top: 19px;
@@ -1710,7 +1710,7 @@ h1 {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  font-size: 10px;
+  font-size: 12px;
   color: #81996a;
   padding: 27px 15px;
   line-height: 1.7;
@@ -1908,7 +1908,7 @@ h1 {
   margin-top: 16px;
 }
 .login-card .login-config {
-  font-size: 10px;
+  font-size: 12px;
   color: #8a9d75;
   margin-bottom: 0;
 }
@@ -1966,7 +1966,7 @@ h1 {
     font-size: 13px;
   }
   .rarity-heading p {
-    font-size: 10px;
+    font-size: 12px;
   }
   .rarity-values {
     padding: 15px 20px 20px;
@@ -2124,7 +2124,7 @@ h1 {
     font-size: 24px;
   }
   .page-heading p {
-    font-size: 10px;
+    font-size: 12px;
   }
   .week-picker {
     gap: 7px;
@@ -2141,7 +2141,7 @@ h1 {
     font-size: 27px;
   }
   .hero p {
-    font-size: 10px;
+    font-size: 12px;
   }
   .forge-art {
     right: -79px;
@@ -2353,7 +2353,7 @@ h1 {
     font-size: 11px;
   }
   .week-picker {
-    font-size: 10px;
+    font-size: 12px;
     padding: 7px 5px;
   }
   .hero {
@@ -2441,7 +2441,7 @@ h1 {
     display: none;
   }
   .breadcrumb {
-    font-size: 10px;
+    font-size: 12px;
   }
   .topbar-actions > .avatar {
     width: 28px;
@@ -2466,7 +2466,7 @@ h1 {
     font-size: 27px;
   }
   .page-heading p {
-    font-size: 10px;
+    font-size: 12px;
     line-height: 1.6;
     margin-top: 8px;
   }
@@ -2508,12 +2508,12 @@ h1 {
     letter-spacing: -0.9px;
   }
   .hero p {
-    font-size: 10px;
+    font-size: 12px;
     line-height: 1.8;
     margin-bottom: 17px;
   }
   .hero .button {
-    font-size: 10px;
+    font-size: 12px;
     padding: 9px 12px;
     min-height: 35px;
   }
@@ -2596,7 +2596,7 @@ h1 {
   .stat-label {
     flex-direction: row;
     gap: 10px;
-    font-size: 10px;
+    font-size: 12px;
   }
   .resource-icon {
     width: 30px;
@@ -2716,7 +2716,7 @@ h1 {
     padding-left: 16px;
   }
   .table-member strong {
-    font-size: 10px;
+    font-size: 12px;
   }
   .table-member > div > span {
     font-size: 7px;
@@ -2736,7 +2736,7 @@ h1 {
   .toast {
     bottom: 15px;
     padding: 10px 9px 10px 12px;
-    font-size: 10px;
+    font-size: 12px;
     gap: 7px;
     min-width: 250px;
   }
@@ -2798,7 +2798,7 @@ h1 {
     grid-column: 1/-1;
   }
   .essential-inputs label > span {
-    font-size: 10px;
+    font-size: 12px;
   }
   .form-section {
     padding: 20px 18px;
@@ -2827,7 +2827,7 @@ h1 {
     font-size: 12px;
   }
   .form-section textarea::placeholder {
-    font-size: 10px;
+    font-size: 12px;
   }
   .save-bar {
     padding: 14px;
@@ -2842,7 +2842,7 @@ h1 {
     gap: 5px;
   }
   .save-bar .button {
-    font-size: 10px;
+    font-size: 12px;
     padding: 9px 12px;
     gap: 6px;
   }
@@ -2897,7 +2897,7 @@ h1 {
     margin-bottom: 8px;
   }
   .archive-intro p {
-    font-size: 10px;
+    font-size: 12px;
     line-height: 1.8;
   }
   .weeks-grid {
@@ -2914,11 +2914,11 @@ h1 {
     font-size: 11px;
   }
   .week-card-stats {
-    font-size: 10px;
+    font-size: 12px;
     gap: 15px;
   }
   .week-card-actions .button {
-    font-size: 10px;
+    font-size: 12px;
     padding: 8px 12px;
   }
   .selected-label {
@@ -2949,7 +2949,7 @@ h1 {
     font-size: 11px;
   }
   .guide-row p {
-    font-size: 10px;
+    font-size: 12px;
   }
   .guide-row strong {
     font-size: 11px;
@@ -3031,11 +3031,11 @@ h1 {
     font-size: 11px;
   }
   .section-heading p {
-    font-size: 10px;
+    font-size: 12px;
   }
   .section-actions .button {
     min-height: 40px;
-    font-size: 10px;
+    font-size: 12px;
   }
   .stat-label {
     font-size: 11px;
@@ -3059,7 +3059,7 @@ h1 {
     padding-right: 0;
   }
   .rarity-values .rarity-name {
-    font-size: 10px;
+    font-size: 12px;
     gap: 5px;
   }
   .rarity-values .rarity-name > i {
@@ -3070,10 +3070,10 @@ h1 {
     font-size: 20px;
   }
   .rarity-heading p {
-    font-size: 10px;
+    font-size: 12px;
   }
   .table-section-heading p {
-    font-size: 10px;
+    font-size: 12px;
   }
   .table-tabs > button {
     font-size: 11px;
@@ -3092,7 +3092,7 @@ h1 {
     min-width: 185px;
   }
   .entry-notice {
-    font-size: 10px;
+    font-size: 12px;
   }
   .essential-inputs label > span,
   .rarity-inputs label > span {
@@ -3107,14 +3107,14 @@ h1 {
   }
   .resource-form .section-heading .button {
     min-height: 40px;
-    font-size: 10px;
+    font-size: 12px;
   }
   .save-bar .button {
     min-height: 44px;
     font-size: 11px;
   }
   .save-bar > span {
-    font-size: 10px;
+    font-size: 12px;
   }
   .member-select > span {
     font-size: 11px;
@@ -3137,7 +3137,7 @@ h1 {
     font-size: 11px;
   }
   .login-security {
-    font-size: 10px;
+    font-size: 12px;
   }
   .login-card .login-config {
     font-size: 11px;
@@ -3192,7 +3192,7 @@ th[aria-sort="descending"] .column-sort { color: var(--gold); }
 .history-context { padding: 16px 24px; color: var(--muted); font-size: 11px; line-height: 1.8; }
 .history-table { min-width: 720px; }
 .history-table td { font-size: 12px; }
-.history-capture { display: block; color: var(--muted); font-size: 10px; margin-top: 5px; }
+.history-capture { display: block; color: var(--muted); font-size: 12px; margin-top: 5px; }
 .movement-up { color: #87df9c; font-variant-numeric: tabular-nums; }
 .movement-down { color: #f19a91; font-variant-numeric: tabular-nums; }
 .bank-history { margin-bottom: 24px; }

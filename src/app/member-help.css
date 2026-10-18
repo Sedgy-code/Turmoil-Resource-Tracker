@@ -237,7 +237,7 @@
 }
 .entry-row-caption {
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 12.5px;
   text-align: end;
 }
 .entry-row-field {
@@ -611,7 +611,7 @@
 }
 .arsenal-more > summary::after {
   content: "▾";
-  font-size: 10px;
+  font-size: 12px;
 }
 .arsenal-more[open] > summary::after {
   content: "▴";
@@ -650,7 +650,7 @@
   gap: 4px;
   margin-top: 3px;
   color: #f0c560 !important;
-  font-size: 10.5px;
+  font-size: 12.5px;
   line-height: 1.4;
   white-space: normal;
   max-width: 190px;
@@ -667,7 +667,7 @@
   gap: 4px;
   margin-top: 3px;
   color: #8fdc6a !important;
-  font-size: 10.5px;
+  font-size: 12.5px;
   line-height: 1.4;
   white-space: normal;
   max-width: 190px;
@@ -684,7 +684,7 @@
   margin-inline-start: 6px;
   padding: 1px 6px;
   border-radius: 99px;
-  font-size: 10.5px;
+  font-size: 12.5px;
   font-weight: 800;
   line-height: 1.5;
   vertical-align: 1px;
@@ -732,7 +732,7 @@
   border-radius: 999px;
   background: #2a2614;
   color: var(--gold);
-  font-size: 10.5px;
+  font-size: 12.5px;
   font-weight: 700;
 }
 .form-section-head {
@@ -826,3 +826,7 @@
     font-size: 12px;
   }
 }
+
+/* Under a changed box: the saved number, or a dashed warning when the new one looks like an extra digit. */
+.entry-row-was { display: block; margin-top: 5px; color: var(--muted); font-size: 12px; line-height: 1.35; text-align: end; }
+.entry-row-was.jump { padding: 5px 8px; border: 1.5px dashed #c9d4e3; border-radius: 8px; color: #f2f5f8; font-weight: 600; text-align: start; }
