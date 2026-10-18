@@ -496,37 +496,56 @@
 .arsenal-row .war-point-range strong {
   font-size: clamp(15px, 1.25vw, 18px);
 }
-.arsenal-swipe-hint {
+/* Phones and tablets: five small picture buttons instead of five wide cards. The tapped one
+   opens its card underneath; tapping it again closes it. Wide screens show all five cards. */
+.arsenal-tiles,
+.arsenal-tap-hint {
   display: none;
 }
 @media (max-width: 1100px) {
-  .arsenal-grid.arsenal-row {
+  .arsenal-tiles {
     display: grid;
-    grid-template-columns: none;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(210px, 46%);
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    padding-bottom: 6px;
-    -webkit-overflow-scrolling: touch;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 8px;
+    max-width: 420px;
+    margin: 0 auto 10px;
   }
-  .arsenal-row .arsenal-card {
-    scroll-snap-align: start;
+  .arsenal-tile {
+    display: grid;
+    place-items: center;
+    min-height: 54px;
+    padding: 0;
+    border: 1px solid #2a4552;
+    border-radius: 14px;
+    background: linear-gradient(180deg, #11222b, #0b171d);
+    cursor: pointer;
   }
-  .arsenal-swipe-hint {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    justify-content: flex-end;
-    color: var(--muted);
-    font-size: 11px;
+  .arsenal-tile.amber,
+  .arsenal-tile.gold { color: #edce7e; }
+  .arsenal-tile.blue { color: #8eb6d0; }
+  .arsenal-tile.purple { color: #c3a8dc; }
+  .arsenal-tile.orange { color: #e9b665; }
+  .arsenal-tile[aria-pressed="true"] {
+    border-color: #f2bf4b;
+    background: linear-gradient(180deg, #3b2c0a, #1c1505);
+    color: #ffd56b;
+    box-shadow: 0 0 0 1px #f2bf4b55, 0 0 16px -2px #f2bf4b88;
+  }
+  .arsenal-tap-hint {
+    display: block;
     margin: 0 0 6px;
+    color: var(--muted);
+    font-size: 12.5px;
+    text-align: center;
+  }
+  .arsenal-grid.arsenal-row {
+    display: block;
+  }
+  .arsenal-grid.arsenal-row .arsenal-card:not(.shown) {
+    display: none;
   }
 }
 @media (max-width: 650px) {
-  .arsenal-grid.arsenal-row {
-    grid-auto-columns: 78%;
-  }
   .arsenal-total {
     grid-template-columns: minmax(0, 1fr);
   }

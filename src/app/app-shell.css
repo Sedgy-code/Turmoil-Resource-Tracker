@@ -82,3 +82,40 @@ body::before {
     padding-right: 10px;
   }
 }
+
+/* Pull down to refresh (home-screen app only, see pull-to-refresh.tsx): a gold loading icon that
+   follows the finger from under the top edge, and spins while the page loads again. */
+html.home-screen-app,
+html.home-screen-app body {
+  overscroll-behavior-y: none;
+}
+.pull-refresh {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 8px);
+  left: 50%;
+  z-index: 130;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1.5px solid #e2ad3c99;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 30%, #2f250b, #120e05);
+  color: #f6c95a;
+  box-shadow: 0 6px 18px #000b, 0 0 12px #e2ad3c33;
+  pointer-events: none;
+}
+.pull-refresh.ready {
+  border-color: #ffd56b;
+  color: #ffd56b;
+  box-shadow: 0 6px 18px #000b, 0 0 18px #ffd56b77;
+}
+.pull-refresh.refreshing svg {
+  animation: pull-refresh-spin 0.8s linear infinite;
+}
+@keyframes pull-refresh-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pull-refresh.refreshing svg { animation-duration: 2.4s; }
+}

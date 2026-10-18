@@ -21,6 +21,7 @@ import { HomeArsenal, HomeGreeting, HomeMore, HomeWeek } from "./home-week";
 import { ASCENSIONS_UPDATED, PILLAR_LABELS } from "@/lib/ascension";
 import { useSortable } from "./sortable";
 import { ClanPointsBalance } from "./clan-points-balance";
+import { PullToRefresh } from "./pull-to-refresh";
 import { announceClanPointsUpdate } from "@/lib/clan-points";
 import { MemberAvatar as Avatar, MemberName, MemberTitle } from "./member-identity";
 import { DEFAULT_WAR_RATES, WAR_ACTIVITIES, estimateWar } from "@/lib/war";
@@ -33,6 +34,7 @@ import { LanguageProvider, useT, type Translate } from "@/lib/i18n";
 import missingDataStyles from "./missing-data-indicator.module.css";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
+  Fragment,
   useCallback,
   useEffect,
   useRef,
@@ -384,6 +386,14 @@ function TrackerApp({ view }: { view: View }) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+  // Pull down to refresh (home-screen app): reload the week's numbers, then remount the page so its
+  // own lists (snipes, votes, war results…) load again, and update the Clan Points pill.
+  const [pageKey, setPageKey] = useState(0);
+  const pullRefresh = useCallback(async () => {
+    await Promise.allSettled([refresh(), checkSession()]);
+    setPageKey((key) => key + 1);
+    if (sessionUserId) announceClanPointsUpdate(sessionUserId);
+  }, [refresh, checkSession, sessionUserId]);
   useEffect(() => {
     const renew = () => {
       if (document.visibilityState === "visible") {
@@ -525,6 +535,7 @@ function TrackerApp({ view }: { view: View }) {
   return (
     <RecognitionProvider enabled={!!sessionUserId}>
     <div className="app-shell">
+      <PullToRefresh onRefresh={pullRefresh} />
       {mobileOpen && (
         <button
           className="sidebar-scrim"
@@ -727,6 +738,7 @@ function TrackerApp({ view }: { view: View }) {
               <button onClick={refresh}>{t("Retry")}</button>
             </div>
           )}
+          <Fragment key={pageKey}>
           {denied ? (
             <section className="empty-state">
               <ShieldCheck size={32} />
@@ -792,6 +804,7 @@ function TrackerApp({ view }: { view: View }) {
           ) : data && view === "store" ? (
             <DewStore data={data} notify={notify} refresh={refresh} />
           ) : null}
+          </Fragment>
           <footer className="page-footer">
             <span>
               <Flame size={13} />
@@ -983,6 +996,8 @@ function ClanArsenal({ data, estimate, rates, estimateError, snapshotId }: { dat
   const mixedHistory = !live && chanceEntries > 0 && chanceEntries < data.entries.length;
   const incompleteMembers = memberPlanningIssues(data);
   const membersMissingCosts = filterPlanningIssues(incompleteMembers, ["fiveSkills", "mount"]);
+  // Phones and tablets show a row of small picture buttons; tapping one opens that resource's card.
+  const [shown, setShown] = useState<ResourceKey | null>(null);
   return (
     <>
       <article className="stat-card arsenal-summary arsenal-total">
@@ -998,7 +1013,14 @@ function ClanArsenal({ data, estimate, rates, estimateError, snapshotId }: { dat
           <Link className="arsenal-planner-link" href={`/war-points${data.live === false ? `?week=${data.week}${snapshotId ? `&snapshot=${encodeURIComponent(snapshotId)}` : ""}` : ""}`}>{t("View war calculator")} <ArrowRight size={14} /></Link>
         </div>
       </article>
-    <p className="arsenal-swipe-hint">{t("Swipe to see all five")} <ArrowRight size={13} /></p>
+    <div className="arsenal-tiles" role="group" aria-label={t("Clan totals")}>
+      {dashboardResources.map(({ key, label, icon: TileIcon, color }) => (
+        <button key={key} type="button" className={`arsenal-tile ${color}`} aria-pressed={shown === key} aria-label={t(label)} title={t(label)} onClick={() => setShown(shown === key ? null : key)}>
+          <TileIcon size={22} strokeWidth={1.8} aria-hidden="true" />
+        </button>
+      ))}
+    </div>
+    {!shown && <p className="arsenal-tap-hint">{t("Tap an icon to see the clan’s totals.")}</p>}
     <div className="stat-grid arsenal-grid arsenal-row">
       {dashboardResources.map(({ key, label, icon: StatIcon, color }) => {
         const cardPoints = key === "skillTickets" ? points("skillSummons")
@@ -1009,7 +1031,7 @@ function ClanArsenal({ data, estimate, rates, estimateError, snapshotId }: { dat
         const missingCosts = filterPlanningIssues(cardIssues, ["fiveSkills", "mount"]).length;
         const missingChances = filterPlanningIssues(cardIssues, ["extraMountChancePercent", "extraPetSummonPercent"]).length;
         return (
-          <article className={`stat-card arsenal-card arsenal-${key}`} key={key}>
+          <article className={`stat-card arsenal-card arsenal-${key}${shown === key ? " shown" : ""}`} key={key}>
             <div className="stat-label"><span className={`resource-icon ${color}`}><StatIcon size={19} strokeWidth={1.8} /></span><span>{t(label)}</span></div>
             <strong className="stat-number">{numberFormat(data.totals[key])}</strong>
             <div className="stat-war-points">
