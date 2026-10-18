@@ -16,17 +16,33 @@ const walk = (dir) => {
 walk(join(root, "src"));
 
 const keys = new Set();
-const literal = /\bt\(\s*"((?:[^"\\]|\\.)*)"/g;
-const ternary = /\bt\(\s*[^()"]*?\?\s*"((?:[^"\\]|\\.)*)"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
+/**
+ * Every quoted text in the first argument of each t( ... ) call, including both sides of a
+ * condition such as t(answer === "yes" ? "On the list." : "Saved."), but not the values being
+ * compared ("yes") or anything inside a nested call.
+ */
+function firstArgument(text, from) {
+  let depth = 1;
+  let index = from;
+  for (; index < text.length && depth > 0; index++) {
+    const character = text[index];
+    if (character === "(" || character === "[" || character === "{") depth++;
+    else if (character === ")" || character === "]" || character === "}") depth--;
+    else if (character === "," && depth === 1) break;
+    else if (character === '"' || character === "'" || character === "`") {
+      for (index++; index < text.length && text[index] !== character; index++) if (text[index] === "\\") index++;
+    }
+  }
+  return text.slice(from, index);
+}
 for (const file of files) {
   const text = readFileSync(file, "utf8");
-  for (const match of text.matchAll(literal)) keys.add(JSON.parse(`"${match[1]}"`));
-  for (const match of text.matchAll(ternary)) { keys.add(JSON.parse(`"${match[1]}"`)); keys.add(JSON.parse(`"${match[2]}"`)); }
-  // Multi-branch t(a ? "x" : b ? "y" : "z") blocks: collect every quoted string inside t( ... )
-  for (const block of text.matchAll(/\bt\((\s*[a-zA-Z.!=<>&|\s]+\?[\s\S]*?)\)\}/g)) {
-    for (const m of block[1].matchAll(/"((?:[^"\\]|\\.)*)"/g)) {
-      const value = JSON.parse(`"${m[1]}"`);
-      if (/[A-Za-z]{2}/.test(value) && !/^(dashboard|resources|members|war|snipes|store|weeks|yes|no|history|ADMIN|all|submitted|pending|mine|clan|member)$/.test(value)) keys.add(value);
+  for (const call of text.matchAll(/\bt\(/g)) {
+    const argument = firstArgument(text, call.index + call[0].length);
+    for (const m of argument.matchAll(/((?:[!=]==?|\?\?)\s*)?"((?:[^"\\]|\\.)*)"/g)) {
+      if (m[1]) continue; // a value being compared, not text to show
+      const value = JSON.parse(`"${m[2]}"`);
+      if (/[A-Za-z]{2}|[^\x00-\x7F]/.test(value)) keys.add(value);
     }
   }
 }
