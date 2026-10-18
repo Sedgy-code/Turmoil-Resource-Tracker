@@ -22,7 +22,8 @@ import { ASCENSIONS_UPDATED, PILLAR_LABELS } from "@/lib/ascension";
 import { useSortable } from "./sortable";
 import { ClanPointsBalance } from "./clan-points-balance";
 import { PullToRefresh } from "./pull-to-refresh";
-import { EggIcon, EggshellIcon, HammerIcon, HorseshoeIcon, KeyIcon, TicketIcon, VialIcon } from "./resource-icons";
+import { ContributionCards } from "./contribution-cards";
+import { EggIcon, EggshellIcon, HammerIcon, HorseshoeIcon, KeyIcon, RESOURCE_ICONS, TicketIcon, VialIcon } from "./resource-icons";
 import { announceClanPointsUpdate } from "@/lib/clan-points";
 import { MemberAvatar as Avatar, MemberName, MemberTitle } from "./member-identity";
 import { DEFAULT_WAR_RATES, WAR_ACTIVITIES, estimateWar } from "@/lib/war";
@@ -67,14 +68,17 @@ import {
   History,
   House,
   LoaderCircle,
+  LayoutGrid,
   LogOut,
   Menu,
   Search,
+  SlidersHorizontal,
   ShieldCheck,
   Sparkles,
   Trophy,
   Crosshair,
   Swords,
+  Table2,
   Users,
   X,
 } from "lucide-react";
@@ -1076,6 +1080,9 @@ const CELL_ISSUES: Partial<Record<ResourceKey, PlanningIssueKey[]>> = {
   eggshellsTotal: ["extraPetSummonPercent"],
 };
 
+/** Remembers, on this device, whether Member contributions shows cards or the full table. */
+const CONTRIBUTION_VIEW_KEY = "turmoil-contributions-view";
+
 /** Who is ascending in a clan week (memberId → what), for the member table. */
 function useAscending(week: string): Map<string, AscensionPillar[]> {
   const [state, setState] = useState<{ week: string; members: Map<string, AscensionPillar[]> } | null>(null);
@@ -1108,6 +1115,16 @@ function MemberResources({
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("all");
   const ascending = useAscending(week);
+  // Cards (one per resource) or the full table; each device remembers its choice.
+  const [view, setView] = useState<"cards" | "table">(() => {
+    try { return window.localStorage.getItem(CONTRIBUTION_VIEW_KEY) === "table" ? "table" : "cards"; } catch { return "cards"; }
+  });
+  const [options, setOptions] = useState(false);
+  const chooseView = (next: "cards" | "table") => {
+    setView(next);
+    try { window.localStorage.setItem(CONTRIBUTION_VIEW_KEY, next); } catch { /* private mode: this visit only */ }
+  };
+  const clearFilters = () => { setSearch(""); setTab("all"); };
   type ContributionSort = "username" | "updatedAt" | "snipes" | "war" | ResourceKey;
   const { data: recognitionData } = useRecognition();
   const snipeCount = (memberId: string) => recognitionData?.snipes.recent[memberId] ?? 0;
@@ -1139,8 +1156,8 @@ function MemberResources({
       return comparison * (sort.direction === "asc" ? 1 : -1);
     });
   return (
-    <section className="member-resources panel">
-      <div className="table-section-heading">
+    <section className={`member-resources panel view-${view}`}>
+      <div className="table-section-heading contrib-heading">
         <div>
           <h2>
             {t("Member contributions")}{" "}
@@ -1148,60 +1165,75 @@ function MemberResources({
           </h2>
           <p>{t("What each member has saved.")}</p>
         </div>
-        <label className="search-input">
-          <Search size={16} />
-          <input
-            placeholder={t("Search members…")}
-            aria-label={t("Search members…")}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <kbd>⌕</kbd>
-        </label>
+        <div className="contrib-tools">
+          <label className="search-input">
+            <Search size={16} />
+            <input
+              placeholder={t("Search members…")}
+              aria-label={t("Search members…")}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            className={`contrib-options-toggle${options ? " open" : ""}`}
+            aria-expanded={options}
+            aria-label={t("View options")}
+            title={t("View options")}
+            onClick={() => setOptions(!options)}
+          >
+            <SlidersHorizontal size={20} aria-hidden="true" />
+          </button>
+        </div>
       </div>
-      <div className="table-tabs">
-        <button
-          className={tab === "all" ? "active" : ""}
-          onClick={() => setTab("all")}
-        >
-          {t("All members")}<span>{data.stats.totalMembers}</span>
+      {options && <div className="contrib-options" role="group" aria-label={t("View options")}>
+        <button type="button" aria-pressed={view === "cards"} onClick={() => chooseView("cards")}><LayoutGrid size={16} aria-hidden="true" />{t("Cards")}</button>
+        <button type="button" aria-pressed={view === "table"} onClick={() => chooseView("table")}><Table2 size={16} aria-hidden="true" />{t("Table")}</button>
+      </div>}
+      <div className="table-tabs contrib-status">
+        <button className={`all${tab === "all" ? " active" : ""}`} aria-pressed={tab === "all"} onClick={() => setTab("all")}>
+          <Users size={18} aria-hidden="true" />{t("All members")}<span>{data.stats.totalMembers}</span>
         </button>
-        <button
-          className={tab === "submitted" ? "active" : ""}
-          onClick={() => setTab("submitted")}
-        >
-          {t("Updated")}<span>{data.stats.submittedMembers}</span>
+        <button className={`updated${tab === "submitted" ? " active" : ""}`} aria-pressed={tab === "submitted"} onClick={() => setTab("submitted")}>
+          <i aria-hidden="true" />{t("Updated")}<span>{data.stats.submittedMembers}</span>
         </button>
-        <button
-          className={tab === "pending" ? "active" : ""}
-          onClick={() => setTab("pending")}
-        >
-          {t("Pending")}<span>{data.stats.pendingMembers}</span>
+        <button className={`pending${tab === "pending" ? " active" : ""}`} aria-pressed={tab === "pending"} onClick={() => setTab("pending")}>
+          <i aria-hidden="true" />{t("Pending")}<span>{data.stats.pendingMembers}</span>
         </button>
-        <button
-          className={tab === "ascending" ? "active" : ""}
-          onClick={() => setTab("ascending")}
-        >
-          <ChevronsUp size={13} aria-hidden="true" />{t("Ascending")}<span>{ascending.size}</span>
+        <button className={`ascending${tab === "ascending" ? " active" : ""}`} aria-pressed={tab === "ascending"} onClick={() => setTab("ascending")}>
+          <ChevronsUp size={20} strokeWidth={2.6} aria-hidden="true" />{t("Ascending")}<span>{ascending.size}</span>
         </button>
-        <span className="table-scroll-hint">
-          {t("Scroll sideways to see all resources")}
-          <ArrowRight size={13} />
-        </span>
       </div>
-      {incompleteMembers.length > 0 && <p className={missingDataStyles.legend}><CircleAlert size={13} aria-hidden="true" />{t("Amber boxes show numbers a member still needs to add.")}</p>}
+      {incompleteMembers.length > 0 && <p className={missingDataStyles.legend}><CircleAlert size={13} aria-hidden="true" />{view === "cards" ? t("Amber numbers show what a member still needs to add.") : t("Amber boxes show numbers a member still needs to add.")}</p>}
+      {view === "cards" ? (members.length ? <ContributionCards
+        members={members}
+        everyone={data.members}
+        meId={data.currentUser.id}
+        amount={(memberId, key) => entries.get(memberId)?.resources[key]}
+        missing={(memberId, key) => incompleteByMember.get(memberId)?.issues.filter((issue) => CELL_ISSUES[key]?.includes(issue.key)).map((issue) => t(issue.label)).join(", ") ?? ""}
+        warPoints={warPoints}
+        updatedAt={(memberId) => { const entry = entries.get(memberId); return entry ? new Date(entry.updatedAt).getTime() : undefined; }}
+        updated={(memberId) => <Freshness date={entries.get(memberId)?.updatedAt ?? null} />}
+        ascending={ascending}
+        editHref={admin ? (memberId) => `/resources?week=${week}&member=${memberId}${snapshotId ? `&snapshot=${encodeURIComponent(snapshotId)}` : ""}` : undefined}
+        filtered={search.trim() !== "" || tab !== "all"}
+      /> : <div className="table-empty">
+        <Search size={22} />
+        <p>{t("No members match this view.")}</p>
+        <button className="text-link" onClick={clearFilters}>{t("Clear filters")}</button>
+      </div>) : <>
+      <p className="table-scroll-hint">
+        {t("Scroll sideways to see all resources")}
+        <ArrowRight size={13} />
+      </p>
       <div className="table-scroll">
         <table className="resource-table">
           <thead>
             <tr>
               <th className="sticky-member" aria-sort={sortOrder("username")}><button className="column-sort" onClick={() => changeSort("username")}>{t("Member")} {sortIcon("username")}</button></th>
               {RESOURCE_FIELDS.map(({ key, label }) => {
-                const FieldIcon =
-                  key === "eggsPetsTotal" ? EggIcon
-                    : key === "eggshellsTotal" ? EggshellIcon
-                    : key === "potions" ? VialIcon
-                    : (essentials.find((field) => field.key === key)?.icon ??
-                      Backpack);
+                const FieldIcon = RESOURCE_ICONS[key];
                 return (
                   <th key={key} aria-sort={sortOrder(key)}>
                     <button className="column-sort" onClick={() => changeSort(key)}>
@@ -1312,6 +1344,7 @@ function MemberResources({
           </div>
         )}
       </div>
+      </>}
       <div className="table-footer">
         <span>
           {t("Showing {count} of {total} members", { count: members.length, total: data.members.length })}

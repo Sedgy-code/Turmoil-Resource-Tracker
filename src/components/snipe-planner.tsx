@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { Archive, CalendarDays, Check, Crosshair, LoaderCircle, Pencil, Plus, RefreshCw, RotateCcw, X } from "lucide-react";
 import { numberFormat } from "@/lib/resources";
 import { WAR_ACTIVITIES } from "@/lib/war";
+import { ACTIVITY_ICONS } from "./resource-icons";
 import { announceClanPointsUpdate } from "@/lib/clan-points";
 import { useLanguage } from "@/lib/i18n";
 import type { DashboardResponse, SnipePlan, SnipesResponse, WarActivity } from "@/lib/types";
@@ -71,7 +72,7 @@ function PlanForm({ plan, busy, onCancel, onSave }: { plan?: SnipePlan; busy: bo
   return <form className="planning-form planning-plan-form" onSubmit={submit}>
     <h3>{plan ? "Edit snipe plan" : "Create a snipe plan"}</h3>
     <div className="planning-form-grid"><label className="planning-field"><span>Snipe title</span><input aria-label="Snipe title" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={120} placeholder="Day 1 · Skills" required /></label><label className="planning-field"><span>Start date and time</span><input aria-label="Start date and time" type="datetime-local" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} required /><small>Shown in each member’s local time.</small></label></div>
-    <fieldset className="planning-activities"><legend>Scoring activities</legend>{WAR_ACTIVITIES.map(({ key, label }) => <label className="planning-check planning-check-compact" key={key}><input type="checkbox" checked={activities.includes(key)} onChange={() => setActivities((selected) => selected.includes(key) ? selected.filter((activity) => activity !== key) : [...selected, key])} /><span>{label}</span></label>)}</fieldset>
+    <fieldset className="planning-activities"><legend>Scoring activities</legend>{WAR_ACTIVITIES.map(({ key, label }) => { const Picture = ACTIVITY_ICONS[key]; return <label className="planning-check planning-check-compact" key={key}><input type="checkbox" checked={activities.includes(key)} onChange={() => setActivities((selected) => selected.includes(key) ? selected.filter((activity) => activity !== key) : [...selected, key])} /><Picture size={22} className="planning-check-icon" /><span>{label}</span></label>; })}</fieldset>
     {error && <p className="planning-notice" role="alert">{error}</p>}
     <div className="planning-form-actions"><button type="button" className="planning-button planning-button-subtle" disabled={busy} onClick={onCancel}>Cancel</button><button type="submit" className="planning-button" disabled={busy}>{busy && <LoaderCircle size={15} className="spin" />}{plan ? "Save plan" : "Create snipe"}</button></div>
   </form>;
@@ -85,7 +86,7 @@ function ParticipantsTable({ plan, activityLabels }: { plan: SnipePlan; activity
   };
   for (const activity of activityLabels) getters[activity.key] = ({ estimate }) => estimate.rows.find((row) => row.activity === activity.key)?.minimum ?? 0;
   const { sorted, header } = useSortable(plan.participants, getters, { key: "total", direction: "desc" });
-  return <div className="planning-table-wrap"><table className="planning-table planning-participants"><caption className="planning-sr-only">{plan.title} participating members and war point estimates</caption><thead><tr>{header("member", t("Member"))}{activityLabels.map((activity) => header(activity.key, t(activity.label)))}{header("total", t("Total points"))}</tr></thead><tbody>{sorted.map(({ member, estimate }) => <tr key={member.id}><th scope="row">{member.username}</th>{activityLabels.map((activity) => { const row = estimate.rows.find((row) => row.activity === activity.key); return <td key={activity.key}>{row ? points(row.minimum, row.maximum) : "0"}</td>; })}<td className="planning-gold">{points(estimate.minimum, estimate.maximum)}</td></tr>)}{plan.participants.length === 0 && <tr><td colSpan={activityLabels.length + 2} className="planning-table-empty">{t("Members who answer Yes will appear here.")}</td></tr>}</tbody></table></div>;
+  return <div className="planning-table-wrap"><table className="planning-table planning-participants"><caption className="planning-sr-only">{plan.title} participating members and war point estimates</caption><thead><tr>{header("member", t("Member"))}{activityLabels.map((activity) => { const Picture = ACTIVITY_ICONS[activity.key]; return header(activity.key, t(activity.label), { icon: <Picture size={18} /> }); })}{header("total", t("Total points"))}</tr></thead><tbody>{sorted.map(({ member, estimate }) => <tr key={member.id}><th scope="row">{member.username}</th>{activityLabels.map((activity) => { const row = estimate.rows.find((row) => row.activity === activity.key); return <td key={activity.key}>{row ? points(row.minimum, row.maximum) : "0"}</td>; })}<td className="planning-gold">{points(estimate.minimum, estimate.maximum)}</td></tr>)}{plan.participants.length === 0 && <tr><td colSpan={activityLabels.length + 2} className="planning-table-empty">{t("Members who answer Yes will appear here.")}</td></tr>}</tbody></table></div>;
 }
 
 export function SnipePlanner({ data, notify }: Props) {
@@ -277,7 +278,7 @@ export function SnipePlanner({ data, notify }: Props) {
             })}</ul>
           </div>}
         </section>
-        <div className="planning-activity-chips" aria-label={t("Include activities")}>{activityLabels.map((activity) => <span className="planning-chip" key={activity.key}>{t(activity.label)}</span>)}</div>
+        <div className="planning-activity-chips" aria-label={t("Include activities")}>{activityLabels.map((activity) => { const Picture = ACTIVITY_ICONS[activity.key]; return <span className="planning-chip planning-activity-chip" key={activity.key}><Picture size={18} />{t(activity.label)}</span>; })}</div>
         <ParticipantsTable plan={plan} activityLabels={activityLabels} />
         <div className="planning-total"><div><span>{t("{count} said Yes", { count: numberFormat(plan.counts.yes) })}</span><small>{t("Estimated snipe points")}</small></div><strong>{points(plan.estimate.minimum, plan.estimate.maximum)}</strong></div>
         {plan.estimate.missingCosts > 0 && <p className="planning-notice">{t("Some members who said Yes are missing summon costs, so part of their resources is left out.")}</p>}

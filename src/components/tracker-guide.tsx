@@ -7,6 +7,8 @@ import { ArrowRight, Check, LogIn, Save } from "lucide-react";
 import { ClanBrand } from "./clan-brand";
 import { LanguagePicker } from "./language-picker";
 import { FIELD_PICTURES, type GuidedField } from "./field-guide";
+import { RESOURCE_ICONS } from "./resource-icons";
+import type { ResourceKey } from "@/lib/resources";
 import { LANGUAGES, LanguageProvider, useLanguage, type Language } from "@/lib/i18n";
 
 /** The 13 boxes on My Resources, grouped by the game screen they come from. */
@@ -92,7 +94,7 @@ function GuideContent() {
               number += 1;
               return (
                 <article className="guide-card" key={field}>
-                  <h3><span className="guide-number">{number}</span>{t(label)}</h3>
+                  <h3><span className="guide-number">{number}</span>{field in RESOURCE_ICONS && (() => { const Picture = RESOURCE_ICONS[field as ResourceKey]; return <Picture size={24} />; })()}{t(label)}</h3>
                   <p>{t(where)}</p>
                   {/* eslint-disable-next-line @next/next/no-img-element -- small static screenshots */}
                   <img src={FIELD_PICTURES[field]} alt={t(where)} loading="lazy" decoding="async" />

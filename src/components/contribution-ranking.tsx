@@ -7,6 +7,7 @@ import { numberFormat } from "@/lib/resources";
 import { useT } from "@/lib/i18n";
 import type { ContributionRankingResponse, ContributionRow, RankingMetric } from "@/lib/types";
 import { MemberAvatar, MemberName } from "./member-identity";
+import { RankBadge } from "./contribution-cards";
 import { useSortable } from "./sortable";
 import "./hoarding-watch.css";
 
@@ -88,7 +89,7 @@ export function ContributionRanking() {
           {header("hoarding", t("Hoarding"))}{header("days", t("Days in clan"))}{header("saved", t("Last saved"))}
         </tr></thead>
         <tbody>{sorted.map((row) => <tr key={row.member.id}>
-          <td>{row.rank}</td>
+          <td><RankBadge rank={row.rank} /></td>
           <td><div className="table-member"><MemberAvatar member={row.member} small /><div><strong><MemberName member={row.member} /></strong>{row.isNew && <span className="rank-new">{t("New")}</span>}{row.member.neverSignedIn && <span className="rank-never">{t("Never signed in")}</span>}{!!row.member.strikes && <span className="rank-never">⚠️ {t("{count} strikes", { count: row.member.strikes })}</span>}</div></div></td>
           <td><span className={`rank-score ${scoreClass(row.score)}`}>{row.score}</span>{row.penalty > 0 && <small className="rank-penalty">−{row.penalty}</small>}</td>
           <td>{amount(row.warPoints)}{row.warPoints !== null && <small className="rank-sub">{t("{count} of {total} wars", { count: row.warsPlayed, total: data.records.wars })}</small>}</td>

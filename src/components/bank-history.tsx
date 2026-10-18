@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown, CalendarDays, LoaderCircle } from "lucide-react";
 import { RESOURCE_FIELDS, currentWeek, formatWeek, numberFormat, type ResourceKey } from "@/lib/resources";
+import { RESOURCE_ICONS } from "./resource-icons";
 import type { BankHistoryResponse, BankHistorySnapshot } from "@/lib/types";
 
 type Props = {
@@ -87,7 +88,7 @@ export function BankHistory({ admin, notify, refresh }: Props) {
       <p className="history-context">{view === "member" ? <>Comparing {source === "live" ? "the live bank" : `week of ${formatWeek(selected?.week ?? currentWeek())}`} with {previous ? `week of ${formatWeek(previous.week)}` : "no earlier saved snapshot"}.{selectedSnapshot && <> Captured {new Date(selectedSnapshot.capturedAt).toLocaleString("en-AU", { timeZone: "Australia/Sydney" })} Sydney time.</>}</> : "Each movement compares a bank with the next earlier saved snapshot. These are inventory changes, not points spent or earned."}</p>
       <div className="table-scroll"><table className="resource-table history-table"><thead><tr>
         <th aria-sort={sortOrder("name")}><button className="column-sort" onClick={() => changeSort("name")}>{view === "clan" ? "Week" : "Member"}{sortIcon("name")}</button></th>
-        <th aria-sort={sortOrder("value")}><button className="column-sort" onClick={() => changeSort("value")}>{selectedResourceLabel}{sortIcon("value")}</button></th>
+        <th aria-sort={sortOrder("value")}><button className="column-sort" onClick={() => changeSort("value")}>{(() => { const Picture = RESOURCE_ICONS[resource]; return <Picture size={18} />; })()}{selectedResourceLabel}{sortIcon("value")}</button></th>
         <th aria-sort={sortOrder("previous")}><button className="column-sort" onClick={() => changeSort("previous")}>Previous snapshot{sortIcon("previous")}</button></th>
         <th aria-sort={sortOrder("movement")}><button className="column-sort" onClick={() => changeSort("movement")}>Movement{sortIcon("movement")}</button></th>
         {view === "clan" && <th>Saved dashboard</th>}

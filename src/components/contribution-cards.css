@@ -1,0 +1,247 @@
+/* Member contributions (JBUC10's design): groups to pick, a search with view options, and one
+   glowing card per resource in that resource's colour. Rules start with .member-resources where
+   they replace the older table styles. */
+
+/* Heading: title on top, then the search with the view-options button beside it. */
+.member-resources .contrib-heading { flex-wrap: wrap; align-items: flex-end; }
+.member-resources .contrib-heading h2 { font-size: 19px; font-weight: 800; letter-spacing: -0.2px; }
+.member-resources .contrib-heading p { margin-top: 4px; color: var(--muted); font-size: 13px; }
+.contrib-tools { display: flex; align-items: center; gap: 8px; flex: 1 1 300px; max-width: 480px; }
+.member-resources .contrib-tools .search-input { flex: 1; }
+.contrib-options-toggle {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 48px;
+  height: 44px;
+  border: 1.5px solid #e2ad3c99;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #2b2209, #141005);
+  color: #ffd56b;
+  box-shadow: 0 0 14px -4px #e2ad3c88;
+  cursor: pointer;
+}
+.contrib-options-toggle.open { border-color: #ffd56b; box-shadow: 0 0 0 1px #ffd56b55, 0 0 18px -2px #e2ad3c; }
+.contrib-options { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 21px 12px; }
+.contrib-options button,
+.member-resources .contrib-status button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--chip-line);
+  border-radius: 14px;
+  background: var(--chip-bg);
+  color: #d6e1ef;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+.contrib-options button { min-height: 40px; padding: 0 14px; font-size: 13.5px; }
+.contrib-options button[aria-pressed="true"],
+.member-resources .contrib-status button.active {
+  border-color: var(--chosen-line);
+  background: var(--chosen-bg);
+  color: #ffd56b;
+  box-shadow: var(--chosen-glow);
+}
+
+/* Groups: everyone, updated, pending, ascending. */
+.member-resources .contrib-status {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  min-height: 0;
+  padding: 0 21px 14px;
+  border-bottom: 0;
+}
+.member-resources .contrib-status button {
+  align-self: auto;
+  min-height: 48px;
+  margin: 0;
+  padding: 6px 10px 6px 12px;
+  border-bottom-width: 1px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.member-resources .contrib-status button span {
+  margin-left: auto;
+  min-width: 30px;
+  padding: 3px 7px;
+  border-radius: 8px;
+  background: #ffffff12;
+  color: #eef3f8;
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
+}
+.member-resources .contrib-status button.active span { background: #ffd56b; color: #2a1d02; }
+.member-resources .contrib-status button > i { flex-shrink: 0; width: 10px; height: 10px; border-radius: 50%; }
+.member-resources .contrib-status .updated > i { background: #2fe46c; box-shadow: 0 0 7px #2fe46c; }
+.member-resources .contrib-status .pending > i { background: #ffc53d; box-shadow: 0 0 7px #ffc53d; }
+.member-resources .contrib-status .all > svg { color: #ffd56b; filter: drop-shadow(0 0 4px #ffcf4d88); }
+.member-resources .contrib-status .ascending > svg { flex-shrink: 0; color: #6cf59a; filter: drop-shadow(0 0 4px #2fe46c88); }
+.member-resources.view-table .table-scroll-hint { justify-content: flex-end; margin: 0 21px 8px; font-size: 12px; color: var(--muted); }
+
+/* The cards */
+.contrib-boards { display: grid; gap: 14px; padding: 2px 21px 16px; }
+.contrib-board {
+  --tone: #3ee67a;
+  min-width: 0;
+  overflow: hidden;
+  border: 1.5px solid color-mix(in srgb, var(--tone) 70%, transparent);
+  border-radius: 16px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tone) 9%, #060b0b), #050909 72%);
+  box-shadow: 0 0 22px -8px color-mix(in srgb, var(--tone) 60%, transparent), inset 0 0 22px -12px color-mix(in srgb, var(--tone) 45%, transparent);
+}
+.contrib-board.tone-green { --tone: #3ee67a; }
+.contrib-board.tone-gold { --tone: #f2b33c; }
+.contrib-board.tone-violet { --tone: #a070ff; }
+.contrib-board.tone-ice { --tone: #3fbfff; }
+.contrib-board.tone-teal { --tone: #2fe4a8; }
+.contrib-board.tone-pink { --tone: #e84fd0; }
+.contrib-board.tone-peach { --tone: #f0a878; }
+
+.contrib-head,
+.contrib-row {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+.contrib-head {
+  min-height: 48px;
+  padding: 6px 12px 6px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--tone) 45%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tone) 30%, transparent), color-mix(in srgb, var(--tone) 8%, transparent));
+  color: #eef3f8;
+  font-size: 13px;
+  font-weight: 700;
+}
+.contrib-head > span:first-child { text-align: center; }
+.contrib-sort {
+  display: inline-flex;
+  align-items: center;
+  justify-self: end;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.contrib-sort strong { font-size: 13.5px; font-weight: 750; }
+.contrib-sort > svg:last-child:not(.res-icon) { color: var(--tone); }
+.contrib-rows { margin: 0; padding: 4px 0 6px; list-style: none; }
+.contrib-row {
+  min-height: 36px;
+  padding: 3px 12px 3px 8px;
+  font-size: 14px;
+}
+.contrib-row:nth-child(even) { background: #ffffff05; }
+.contrib-row.top {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--tone) 24%, transparent), color-mix(in srgb, var(--tone) 6%, transparent));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--tone) 35%, transparent), inset 0 -1px 0 color-mix(in srgb, var(--tone) 35%, transparent);
+}
+.contrib-row.me { background: #ffd56b12; box-shadow: inset 3px 0 0 #ffd56b; }
+.contrib-gap { padding: 0 0 2px; color: var(--muted); line-height: 1; text-align: center; }
+.contrib-member { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.contrib-member .avatar { flex-shrink: 0; width: 24px; height: 24px; font-size: 8px; }
+.contrib-name { min-width: 0; overflow: hidden; color: #eef3f8; font-weight: 600; }
+.contrib-name .member-name { display: flex; align-items: center; min-width: 0; }
+.contrib-name .member-name > :not(.member-name-text) { flex-shrink: 0; }
+.contrib-name .member-name-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+a.contrib-name:hover .member-name-text,
+a.contrib-name:focus-visible .member-name-text { text-decoration: underline; text-underline-offset: 3px; }
+.contrib-member .you-badge { flex-shrink: 0; padding: 1px 5px; font-size: 10px; }
+.contrib-ascending { flex-shrink: 0; color: #6cf59a; }
+.contrib-value {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 78px;
+  padding-left: 10px;
+  border-left: 1px solid #ffffff14;
+  color: #f2f5f8;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.contrib-value.missing { color: #f0c560; }
+.contrib-value.war { color: #ffd56b; }
+
+/* Places: gold with a crown, blue, bronze, then plain numbers. */
+.contrib-rank { justify-self: center; min-width: 26px; color: var(--muted); font-size: 13px; font-weight: 700; text-align: center; }
+.contrib-rank.none { color: #4c5d6e; }
+.contrib-rank.medal {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  min-width: 30px;
+  height: 21px;
+  padding: 0 6px;
+  border-radius: 7px;
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 800;
+  text-shadow: 0 1px 0 #0006;
+}
+.contrib-rank.m1 { background: linear-gradient(180deg, #ffe58a, #e3a227); color: #3a2505; text-shadow: none; box-shadow: inset 0 1px 0 #fff8, 0 0 10px -2px #ffcf4d; }
+.contrib-rank.m2 { background: linear-gradient(180deg, #8fd0ff, #2f74d6); box-shadow: inset 0 1px 0 #fff6, 0 0 10px -2px #4fa8ff; }
+.contrib-rank.m3 { background: linear-gradient(180deg, #ffb27a, #c85f26); box-shadow: inset 0 1px 0 #fff6, 0 0 10px -2px #ff8a4d; }
+.contrib-crown { position: absolute; top: -8px; left: 50%; width: 16px; height: 9px; margin-left: -8px; fill: #ffd56b; filter: drop-shadow(0 0 3px #ffcf4d); }
+.contrib-row.top { padding-top: 7px; }
+
+.contrib-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 42px;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--tone) 30%, transparent);
+  background: transparent;
+  color: var(--tone);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.contrib-more svg { transition: transform 0.2s; }
+.contrib-more.open svg { transform: rotate(180deg); }
+
+.contrib-head > span:nth-child(2) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Last war points and last updated: two numbers per member, each heading a picture over its name. */
+.contrib-activity .contrib-head,
+.contrib-activity .contrib-row { grid-template-columns: 34px minmax(0, 1fr) 92px 86px; }
+.contrib-sort.stacked { flex-direction: column; justify-content: center; justify-self: stretch; gap: 2px; min-height: 44px; text-align: center; }
+.contrib-sort.stacked > span { display: inline-flex; align-items: center; justify-content: center; gap: 3px; }
+.contrib-sort.stacked strong { font-size: 11.5px; line-height: 1.15; white-space: normal; }
+.contrib-sort.stacked.on strong { color: #ffd56b; }
+.contrib-sort.stacked > svg:first-child { flex-shrink: 0; color: #ffd56b; }
+.contrib-sort.stacked > span > svg { flex-shrink: 0; color: var(--tone); }
+.contrib-activity .contrib-value { min-width: 0; }
+.contrib-updated { display: flex; justify-content: flex-end; font-size: 12.5px; white-space: nowrap; }
+
+@media (min-width: 900px) {
+  .contrib-boards { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); align-items: start; }
+}
+@media (max-width: 650px) {
+  .contrib-tools { flex-basis: 100%; max-width: none; }
+  .contrib-options { padding: 0 12px 12px; }
+  .member-resources .contrib-status { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 0 12px 12px; }
+  .contrib-boards { padding: 2px 10px 14px; }
+  .contrib-head, .contrib-row { grid-template-columns: 36px minmax(0, 1fr) auto; gap: 6px; }
+  .contrib-head { padding-right: 10px; }
+  .contrib-row { padding-right: 10px; }
+  .contrib-activity .contrib-head,
+  .contrib-activity .contrib-row { grid-template-columns: 28px minmax(0, 1fr) 80px 72px; gap: 6px; }
+  .contrib-value { min-width: 64px; padding-left: 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .contrib-more svg { transition: none; }
+}

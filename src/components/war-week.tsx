@@ -6,6 +6,7 @@ import { ArrowRight, Check, CheckCircle2, Clock, Plus } from "lucide-react";
 import { numberFormat } from "@/lib/resources";
 import { WAR_DAYS, countdown, nextWarWeek, warDay, warStart, warWeekOf } from "@/lib/war-calendar";
 import { activityPoints, dayPoints, pillarCounts, rankPairs, twinDays, type DayPair } from "@/lib/clan-day-planner";
+import { PILLAR_ICONS, RESOURCE_ICONS } from "./resource-icons";
 import { PILLAR_LABELS } from "@/lib/ascension";
 import { estimateWar, WAR_ACTIVITIES } from "@/lib/war";
 import { useT } from "@/lib/i18n";
@@ -159,7 +160,7 @@ export function WarWeek({ data, rates, admin = false, notify }: { data: Dashboar
           <ul className="war-day-activities">{entry.activities.map((activity) => <li key={activity}>{t(activity)}</li>)}</ul>
           {entry.resources.length > 0 && <dl className="war-day-clan">
             <dt>{t("Clan has")}</dt>
-            {entry.resources.map((key) => <dd key={key}><span>{t(RESOURCE_LABELS[key as keyof typeof RESOURCE_LABELS])}</span><b>{numberFormat(data.totals[key] ?? 0)}</b></dd>)}
+            {entry.resources.map((key) => { const Picture = RESOURCE_ICONS[key]; return <dd key={key}><span><Picture size={18} />{t(RESOURCE_LABELS[key as keyof typeof RESOURCE_LABELS])}</span><b>{numberFormat(data.totals[key] ?? 0)}</b></dd>; })}
           </dl>}
         </article>;
       })}
@@ -212,7 +213,7 @@ function ClanDayPlanner({ data, rates, votes, target, week, notify }: {
     <p className="war-week-note">{t("Day 6 is always fought, so the clan needs 2 more days. Both have to be won, so pairs are ranked by their weaker day, then by the stronger one. Resources that score on both days (like hammers) are split between them.")}</p>
     <ol className="war-pairs">{shown.map((pair, index) => {
       const chosen = target.days.length === 2 && target.days[0] === pair.days[0] && target.days[1] === pair.days[1];
-      const boosts = (Object.entries(pair.ascending) as [AscensionPillar, number][]).map(([pillar, count]) => `${t(PILLAR_LABELS[pillar])} ${count}`).join(", ");
+      const boosts = Object.entries(pair.ascending) as [AscensionPillar, number][];
       return <li key={pair.days.join(",")} className={chosen ? "on" : undefined}>
         <div className="war-pair-head">
           <div className="war-pair-title">
@@ -232,7 +233,7 @@ function ClanDayPlanner({ data, rates, votes, target, week, notify }: {
         </dl>
         <small>
           {t("Votes: {count}", { count: pair.votes })}
-          {boosts && <> · {t("Ascending: {what}", { what: boosts })}</>}
+          {boosts.length > 0 && <> · <span className="war-pair-ascending">{t("Ascending")}:{boosts.map(([pillar, count]) => { const Picture = PILLAR_ICONS[pillar]; return <span key={pillar} title={t(PILLAR_LABELS[pillar])}><Picture size={16} />{count}</span>; })}</span></>}
         </small>
       </li>;
     })}</ol>

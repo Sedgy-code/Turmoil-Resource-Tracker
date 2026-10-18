@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowRight, BarChart3, CalendarDays, Check, ChevronDown, ChevronsUp, Clock, FlaskConical, Gift, Hand, RefreshCw, ShieldCheck, Star, Swords, Target, X, type LucideProps } from "lucide-react";
+import { ArrowRight, BarChart3, CalendarDays, Check, ChevronDown, ChevronsUp, Clock, Gift, Hand, RefreshCw, ShieldCheck, Star, Swords, Target, X, type LucideProps } from "lucide-react";
 import "@fontsource/knewave/400.css";
 import { ASCENSION_PILLARS, ASCENSIONS_UPDATED, PILLAR_LABELS } from "@/lib/ascension";
 import { announceClanPointsUpdate } from "@/lib/clan-points";
@@ -12,7 +12,8 @@ import { useLanguage, useT } from "@/lib/i18n";
 import type { AscensionPillar, AscensionsResponse, DashboardResponse, DewResponse, Member, SnipePlan, SnipesResponse } from "@/lib/types";
 import { CrownShield } from "./crown-shield";
 import { FoldButton, useFold } from "./home-fold";
-import { CoinStack, ForgeHammer, MountHorse, PetPaw, SkillStar } from "./home-icons";
+import { CoinStack } from "./home-icons";
+import { EggIcon, HammerIcon, HorseshoeIcon, PILLAR_ICONS, TicketIcon, VialIcon, type ResourcePicture } from "./resource-icons";
 import { MemberAvatar } from "./member-identity";
 import { useClanDayVotes, useClanDays, useNow } from "./war-week";
 import "./home-week.css";
@@ -56,7 +57,6 @@ function Gold({ text, value }: { text: string; value: string }) {
   return <>{text.slice(0, at)}<strong className="home-gold">{value}</strong>{text.slice(at + value.length)}</>;
 }
 
-const PILLAR_ICONS: Record<AscensionPillar, ComponentType<{ size?: number }>> = { forge: ForgeHammer, skills: SkillStar, mounts: MountHorse, pets: PetPaw };
 
 /** The round picture at the start of each job; a green tick on it once the job is done. */
 function JobMark({ tone, done, children }: { tone: "gold" | "slate"; done: boolean; children: ReactNode }) {
@@ -203,7 +203,7 @@ export function HomeWeek({ data, notify, between }: { data: DashboardResponse; n
             {ASCENSION_PILLARS.map((pillar) => {
               const Icon = PILLAR_ICONS[pillar];
               return <button key={pillar} aria-pressed={!!ascension?.includes(pillar)} onClick={() => void ascend(togglePillar(pillar))}>
-                <Icon size={19} /><span>{t(PILLAR_LABELS[pillar])}</span>
+                <Icon size={24} /><span>{t(PILLAR_LABELS[pillar])}</span>
               </button>;
             })}
           </div>
@@ -306,7 +306,7 @@ export function HomeArsenal({ minimum, maximum }: { minimum: number | null; maxi
 /** What members spend on the spending days, as the same pictures as the ascending chips. */
 type Need = "hammers" | "skills" | "mounts" | "eggs";
 const NEEDS: readonly Need[] = ["hammers", "skills", "mounts", "eggs"];
-const NEED_ICONS: Record<Need, ComponentType<{ size?: number }>> = { hammers: ForgeHammer, skills: SkillStar, mounts: MountHorse, eggs: PetPaw };
+const NEED_ICONS: Record<Need, ResourcePicture> = { hammers: HammerIcon, skills: TicketIcon, mounts: HorseshoeIcon, eggs: EggIcon };
 const NEED_RESOURCES: Record<Need, readonly ResourceKey[]> = { hammers: ["hammers"], skills: ["skillTickets"], mounts: ["mountKeys", "mountsToMerge"], eggs: ["eggsPetsTotal", "eggshellsTotal"] };
 /** The resources that score on a spending day (from the war calendar). */
 function needsOf(day: number): Need[] {
@@ -387,7 +387,7 @@ function HomeToday({ now, notify, memberId }: { now: Date; notify: (message: str
       <p className="home-today-main">{main}</p>
       {sub && <p className="home-today-sub">{sub}</p>}
       <p className="home-race">
-        <FlaskConical size={16} />
+        <VialIcon size={22} />
         <span><strong>{t("Clan Tech Race")}</strong> · {t("Knock-out in {time}", { time: countdown(war.nextDay, now) })}<br />{t("In clan missions, pick Clan Tech Vials first.")}</span>
       </p>
       <div className="home-today-foot">
@@ -414,13 +414,13 @@ function HomeToday({ now, notify, memberId }: { now: Date; notify: (message: str
         {[1, 2, 3, 4, 5].map((day) => <button key={day} aria-pressed={!!votes.mine?.includes(day)} disabled={voting} onClick={() => void toggleVote(day)}>
           <span>{t("Day {day}", { day })}</span>
           <span className="home-vote-needs">
-            {needsOf(day).map((need) => { const Icon = NEED_ICONS[need]; return <Icon key={need} size={13} />; })}
+            {needsOf(day).map((need) => { const Icon = NEED_ICONS[need]; return <Icon key={need} size={16} />; })}
             <span className="visually-hidden">{needsOf(day).map(needName).join(", ")}</span>
           </span>
           <strong>{votes.counts[day - 1]}</strong>
         </button>)}
       </div>
-      <p className="home-vote-key" aria-hidden="true">{NEEDS.map((need) => { const Icon = NEED_ICONS[need]; return <span key={need}><Icon size={13} />{needName(need)}</span>; })}</p>
+      <p className="home-vote-key" aria-hidden="true">{NEEDS.map((need) => { const Icon = NEED_ICONS[need]; return <span key={need}><Icon size={17} />{needName(need)}</span>; })}</p>
       <small className="home-vote-voters">{t("Members voted so far: {count}. Leadership makes the final pick.", { count: votes.voters })}</small>
       </div>}
     </section>}

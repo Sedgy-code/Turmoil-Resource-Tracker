@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ExternalLink, FlaskConical, LoaderCircle, Minus, Plus, RotateCcw, Save } from "lucide-react";
+import { ExternalLink, LoaderCircle, Minus, Plus, RotateCcw, Save } from "lucide-react";
+import { VialIcon } from "./resource-icons";
 import { TECH_NODES, TECH_SECTIONS, nextToFund, progress } from "@/lib/clan-tech";
 import { useT } from "@/lib/i18n";
 import "./clan-tech.css";
@@ -43,7 +44,7 @@ export function ClanTech({ notify }: { notify: (message: string, error?: boolean
   return <div className="tech-page">
     <section className="panel tech-summary">
       <div className="tech-overall">
-        <FlaskConical size={22} />
+        <VialIcon size={30} />
         <div>
           <span>{t("Tree complete")}</span>
           <strong>{Math.round(progress(levels) * 1000) / 10}%</strong>

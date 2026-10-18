@@ -1,6 +1,8 @@
 "use client";
 
-import { useId, type ReactNode } from "react";
+import { useId, type ComponentType, type ReactNode } from "react";
+import type { ResourceKey } from "@/lib/resources";
+import type { AscensionPillar, WarActivity } from "@/lib/types";
 
 /*
  * Glossy, glowing pictures for the clan's resources (from JBUC10's design), in the game's colours:
@@ -202,3 +204,36 @@ export function EggshellIcon({ size, className }: Props) {
     </Art>
   );
 }
+
+/* One picture per thing, used everywhere on the site so each resource always looks the same. */
+export type ResourcePicture = ComponentType<Props>;
+
+/** The resources members save. */
+export const RESOURCE_ICONS: Record<ResourceKey, ResourcePicture> = {
+  skillTickets: TicketIcon,
+  mountKeys: KeyIcon,
+  mountsToMerge: HorseshoeIcon,
+  hammers: HammerIcon,
+  eggsPetsTotal: EggIcon,
+  eggshellsTotal: EggshellIcon,
+  potions: VialIcon,
+};
+
+/** What scores war points: each shows the resource it uses. */
+export const ACTIVITY_ICONS: Record<WarActivity, ResourcePicture> = {
+  hammers: HammerIcon,
+  skillSummons: TicketIcon,
+  mountSummons: KeyIcon,
+  newMountMerges: HorseshoeIcon,
+  mountMerges: HorseshoeIcon,
+  eggMerges: EggIcon,
+  eggSummonMerges: EggshellIcon,
+};
+
+/** What members ascend: forge (hammers), skills (tickets), mounts and pets. */
+export const PILLAR_ICONS: Record<AscensionPillar, ResourcePicture> = {
+  forge: HammerIcon,
+  skills: TicketIcon,
+  mounts: HorseshoeIcon,
+  pets: EggIcon,
+};
