@@ -25,8 +25,12 @@
       "schedule": "0 10 * * 0"
     },
     {
-      "path": "/api/cron/leadership-reminder?for=war",
+      "path": "/api/cron/leadership-reminder?for=war,clanDays",
       "schedule": "0 10 * * 1"
+    },
+    {
+      "path": "/api/cron/leadership-reminder?for=warday",
+      "schedule": "0 21 * * 2-6"
     }
   ]
 }

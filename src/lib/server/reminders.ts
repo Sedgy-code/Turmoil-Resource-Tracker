@@ -1,9 +1,10 @@
-import { warWeekOf } from "../war-calendar";
+import { warDay, warWeekOf } from "../war-calendar";
 import { currentWeek } from "../resources";
 import { appUrl } from "./config";
 import { database, type Database } from "./db";
 import { webhookLook } from "./discord-branding";
 import { ApiError } from "./errors";
+import { clanDays } from "./war-days";
 import { snipeRecognition } from "./war-results";
 
 export interface ReminderResult {
@@ -119,53 +120,116 @@ export async function sendSnipeShoutout(
   return { posted: true, members: champions.length };
 }
 
-/** #the-dictators-den, where leadership gets the upload reminders (vials Sunday, war results Monday). */
+/** #the-dictators-den, where leadership gets its reminders. */
 const LEADERSHIP_CHANNEL_ID = "1504758222974746645";
+const DAY = 86_400_000;
 
-/** Which uploads are still missing for this clan week. */
 /**
- * Which uploads are still missing. Vials belong to the current Monday–Monday race week; war results
- * belong to the war that ran Tuesday to Monday (its week is the Monday before Day 1).
+ * Jobs the bot reminds leadership about, in the order they appear in a reminder:
+ * - warday: today's clan war screenshot (Days 1–5, before the day ends at 00:00 UTC)
+ * - clanDays: pick the clan days (Monday, before the next war's Day 1 starts on Tuesday 00:00 UTC)
+ * - war: the end-of-war screenshots (Monday, Day 7)
+ * - vials: the clan tech donation list (Sunday; the race resets Monday 00:00 UTC)
  */
-export async function missingUploads(db: Database, now = new Date(), kinds: ("war" | "vials")[] = ["war", "vials"]): Promise<("war" | "vials")[]> {
-  const missing: ("war" | "vials")[] = [];
-  for (const kind of kinds) {
-    const week = kind === "war" ? warWeekOf(now) : currentWeek(now);
-    const rows = await db.query("SELECT 1 FROM war_results WHERE week_start = $1 AND kind = $2 LIMIT 1", [week, kind]);
-    if (!rows.length) missing.push(kind);
+export const LEADERSHIP_TASKS = ["warday", "clanDays", "war", "vials"] as const;
+export type LeadershipTask = (typeof LEADERSHIP_TASKS)[number];
+
+export interface LeadershipDue {
+  tasks: LeadershipTask[];
+  /** The war day (1–5) that still needs its daily upload, and when that day ends. */
+  warDay?: { day: number; endsAt: Date };
+  /** On Day 7 the clan days are for the war that starts the next day (as on War → This Week). */
+  nextWar: boolean;
+}
+
+/**
+ * Which jobs are still undone. Vials belong to the Monday–Monday race week; war results and daily
+ * points belong to the war that runs Tuesday to Monday (its week is the Monday before Day 1).
+ */
+export async function leadershipDue(db: Database, now = new Date(), tasks: readonly LeadershipTask[] = ["war", "vials"]): Promise<LeadershipDue> {
+  const today = warDay(now);
+  const due: LeadershipDue = { tasks: [], nextWar: today.day === 7 };
+  for (const task of LEADERSHIP_TASKS.filter((item) => tasks.includes(item))) {
+    if (task === "warday") {
+      if (today.day > 5) continue; // Day 6 is the battle and Day 7 is for claiming: no daily points.
+      const rows = await db.query("SELECT 1 FROM war_results WHERE week_start = $1 AND kind = 'warday' AND war_day = $2 LIMIT 1", [warWeekOf(now), today.day]);
+      if (!rows.length) { due.tasks.push(task); due.warDay = { day: today.day, endsAt: today.nextDay }; }
+    } else if (task === "clanDays") {
+      const week = warWeekOf(due.nextWar ? new Date(now.getTime() + DAY) : now);
+      if (!(await clanDays(db, week)).length) due.tasks.push(task);
+    } else {
+      const week = task === "war" ? warWeekOf(now) : currentWeek(now);
+      const rows = await db.query("SELECT 1 FROM war_results WHERE week_start = $1 AND kind = $2 LIMIT 1", [week, task]);
+      if (!rows.length) due.tasks.push(task);
+    }
   }
-  return missing;
+  return due;
 }
 
-export function leadershipReminderMessage(missing: ("war" | "vials")[], base: string): string {
-  return [
-    "📸 **Weekly upload reminder**",
-    "Please grab the screenshots before they reset and add them to the Clan Hub:",
-    ...missing.map((kind) => kind === "war"
-      ? `• 🏆 **Clan war results** (clan total + member list) → ${base}/war-results`
-      : `• 🧪 **Clan tech vial donations** (member list) → ${base}/vial-donations`),
-    "Press **Add**, add the screenshots, then **Read screenshots** → check → **Save**.",
-  ].join("\n");
+/** Clan Hub admins (the people who can do these jobs), leaving out anyone on holiday. */
+export async function leadershipPings(db: Database, now = new Date()): Promise<string[]> {
+  const rows = await db.query(
+    `SELECT discord_id FROM app_members
+     WHERE role = 'ADMIN' AND active = TRUE AND (holiday_until IS NULL OR holiday_until < $1::date)
+     ORDER BY LOWER(COALESCE(NULLIF(display_name, ''), username))`,
+    [now.toISOString().slice(0, 10)],
+  );
+  return rows.map((row) => String(row.discord_id)).filter((id) => /^\d+$/.test(id)).slice(0, 50);
+}
+
+/** English only, like every automatic post: the server's translation bot does the rest. */
+export function leadershipReminderMessage(due: LeadershipDue, base: string, mentions: string[] = []): string {
+  const blocks = due.tasks.map((task) => {
+    if (task === "warday" && due.warDay) {
+      const { day, endsAt } = due.warDay;
+      return [
+        `📸 **Day ${day} war points**: add today's clan war screenshot before Day ${day} ends at 00:00 UTC (<t:${Math.floor(endsAt.getTime() / 1000)}:R>) → ${base}/war-results`,
+        `Under **Daily war points**, tap **Day ${day}**, add the screenshot, then **Read screenshots** → **Save daily points**.`,
+      ];
+    }
+    if (task === "clanDays") {
+      return due.nextWar
+        ? [`🗓️ **Clan days for the next war**: pick them before Day 1 starts (Tuesday 00:00 UTC) → ${base}/war`, "Tap the days the clan will spend on."]
+        : [`🗓️ **Clan days this war**: pick them so members know when to spend → ${base}/war`, "Tap the days the clan will spend on."];
+    }
+    if (task === "war") {
+      return [
+        `🏆 **Clan war results**: add the end-of-war screenshots (clan total + member list) before they reset → ${base}/war-results`,
+        "Press **Add**, add the screenshots, then **Read screenshots** → check → **Save**.",
+      ];
+    }
+    return [
+      `🧪 **Clan tech vial donations**: add the member list screenshots before the race resets (Monday 00:00 UTC) → ${base}/vial-donations`,
+      "Press **Add**, add the screenshots, then **Read screenshots** → check → **Save**.",
+    ];
+  });
+  return ["📌 **Leadership reminder**", ...(mentions.length ? [mentions.join(" ")] : []), ...blocks.flatMap((lines) => ["", ...lines])].join("\n");
 }
 
 /**
- * Posts in the leadership channel with the site's bot, only if something is missing:
- * Sunday 10:00 UTC for vials (the race ends Monday 00:00 UTC), Monday 10:00 UTC for war results
- * (the Day 6 battle ends Monday 00:00 UTC).
+ * Posts in the leadership channel with the site's bot, only when a job is undone, and pings the
+ * Clan Hub admins. Times are in vercel.json: daily points Tuesday–Saturday 21:00 UTC (Days 1–5),
+ * war results and clan days Monday 10:00 UTC, vials Sunday 10:00 UTC.
  */
-export async function sendLeadershipReminder(dependencies: { db?: Database; fetcher?: typeof fetch; now?: Date; kinds?: ("war" | "vials")[] } = {}): Promise<{ posted: boolean; missing: string[] }> {
+export async function sendLeadershipReminder(dependencies: { db?: Database; fetcher?: typeof fetch; now?: Date; tasks?: readonly LeadershipTask[] } = {}): Promise<{ posted: boolean; missing: LeadershipTask[]; pinged: number }> {
   const token = process.env.DISCORD_BOT_TOKEN;
   if (!token) throw new ApiError(503, "Set DISCORD_BOT_TOKEN so the bot can post reminders.", "REMINDER_NOT_CONFIGURED");
   const db = dependencies.db ?? await database();
-  const missing = await missingUploads(db, dependencies.now ?? new Date(), dependencies.kinds);
-  if (!missing.length) return { posted: false, missing };
+  const now = dependencies.now ?? new Date();
+  const due = await leadershipDue(db, now, dependencies.tasks);
+  if (!due.tasks.length) return { posted: false, missing: [], pinged: 0 };
+  const pings = await leadershipPings(db, now);
   const channel = process.env.DISCORD_LEADERSHIP_CHANNEL_ID || LEADERSHIP_CHANNEL_ID;
   const response = await (dependencies.fetcher ?? fetch)(`https://discord.com/api/v10/channels/${channel}/messages`, {
     method: "POST",
     headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
-    // flags 4 = no link previews, so the reminder stays short.
-    body: JSON.stringify({ content: leadershipReminderMessage(missing, appUrl()), allowed_mentions: { parse: [] }, flags: 4 }),
+    // Ping only the listed admins (never @everyone or roles); flags 4 = no link previews.
+    body: JSON.stringify({
+      content: leadershipReminderMessage(due, appUrl(), pings.map((id) => `<@${id}>`)),
+      allowed_mentions: { parse: [], users: pings },
+      flags: 4,
+    }),
   });
   if (!response.ok) throw new ApiError(502, "Discord did not accept the leadership reminder.", "REMINDER_FAILED");
-  return { posted: true, missing };
+  return { posted: true, missing: due.tasks, pinged: pings.length };
 }

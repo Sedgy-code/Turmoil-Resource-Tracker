@@ -1,5 +1,5 @@
 import { timingSafeMatch } from "@/lib/server/crypto";
-import { sendLeadershipReminder } from "@/lib/server/reminders";
+import { LEADERSHIP_TASKS, sendLeadershipReminder } from "@/lib/server/reminders";
 import { ApiError, errorResponse, privateResponse } from "@/lib/server/errors";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,8 +10,9 @@ export async function GET(request: Request) {
     if (!secret || !timingSafeMatch(request.headers.get("authorization") ?? "", `Bearer ${secret}`)) {
       throw new ApiError(401, "Scheduled leadership reminder is not authorized.", "UNAUTHORIZED_JOB");
     }
-    const which = new URL(request.url).searchParams.get("for");
-    const kinds = which === "war" ? ["war" as const] : which === "vials" ? ["vials" as const] : undefined;
-    return privateResponse(await sendLeadershipReminder({ kinds }));
+    // ?for= lists the jobs to check, e.g. "warday" or "war,clanDays" (see vercel.json).
+    const requested = (new URL(request.url).searchParams.get("for") ?? "").split(",");
+    const tasks = LEADERSHIP_TASKS.filter((task) => requested.includes(task));
+    return privateResponse(await sendLeadershipReminder({ tasks: tasks.length ? tasks : undefined }));
   } catch (error) { return errorResponse(error); }
 }
