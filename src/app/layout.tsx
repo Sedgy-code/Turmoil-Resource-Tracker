@@ -9,12 +9,15 @@ import "./app-shell.css";
 import "./glow-theme.css";
 import "./colour-refine.css";
 import "./easy-touch.css";
+import "./stack-tables.css";
+import "./calm.css";
 import {
   APP_DESCRIPTION,
   APP_NAME,
   APP_SHORT_NAME,
   APP_THEME_COLOR,
 } from "@/lib/app-shell";
+import { CALM_SCRIPT } from "@/lib/calm";
 
 export const metadata: Metadata = {
   title: APP_NAME,
@@ -38,7 +41,11 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* The calmer look, if this phone chose it, before anything is drawn. */}
+        <script dangerouslySetInnerHTML={{ __html: CALM_SCRIPT }} />
+      </head>
       <body>{children}</body>
     </html>
   );

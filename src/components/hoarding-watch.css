@@ -69,3 +69,6 @@
 .rule-input input { width: 90px; height: 38px; padding: 0 10px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 7px; font: inherit; font-size: 14px; font-weight: 700; }
 @media (max-width: 650px) { .rule-grid { grid-template-columns: minmax(0, 1fr); } }
 .rank-never { display: inline-block; margin: 3px 0 0 4px; padding: 1px 6px; border-radius: 99px; background: #3a1715; color: #ff9b94; font-size: 12px; }
+
+/* Ranking: a plain place number (the lowest scores are who to talk to first, not an award). */
+.rank-place { display: inline-grid; place-items: center; min-width: 30px; height: 26px; padding: 0 6px; border: 1px solid var(--chip-line, #2a4552); border-radius: 8px; color: #dce5f0; font-weight: 750; font-variant-numeric: tabular-nums; }

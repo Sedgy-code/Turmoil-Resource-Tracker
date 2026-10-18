@@ -7,6 +7,7 @@ import { useT } from "@/lib/i18n";
 import type { HoardingLevel, HoardingReason, HoardingResponse, HoardingRow, HoardingRules, WarSpendingResponse, WarSpendingRow } from "@/lib/types";
 import { currentWeek, formatWeek, shiftWeek } from "@/lib/resources";
 import { useSortable } from "./sortable";
+import { useStackFold } from "./stack-fold";
 import { MemberAvatar, MemberName } from "./member-identity";
 import "./hoarding-watch.css";
 
@@ -126,6 +127,8 @@ function WarSpending() {
     spent: (row) => row.spent,
     war: (row) => row.warPoints,
   }, { key: "spent", direction: "desc" });
+  // On a phone each member is one line (what they spent) until tapped.
+  const fold = useStackFold();
   const amount = (value: number | null) => value === null ? "—" : numberFormat(Math.round(value));
   const list = (rows: WarSpendingRow[], kind: "saved" | "spent") => rows.length ? <ol className="champion-list">{rows.map((row) => <li key={row.member.id}>
     <MemberAvatar member={row.member} small /><strong><MemberName member={row.member} /></strong>
@@ -151,14 +154,15 @@ function WarSpending() {
       {notUpdated.length > 0 && <p className="war-hint">{t("Not updated since the war started: {names}", { names: notUpdated.map((row) => row.member.username).join(", ") })}</p>}
       <details className="war-members">
         <summary>{t("Everyone ({count})", { count: data.rows.length })}</summary>
-        <div className="table-scroll"><table className="resource-table">
+        <div className="table-scroll"><table className="resource-table stack-table">
           <thead><tr>{header("member", t("Member"))}{header("before", t("Before the war"))}{header("after", t("After the war"))}{header("spent", t("Spent"))}{header("war", t("War points"))}</tr></thead>
-          <tbody>{sorted.map((row) => <tr key={row.member.id}>
-            <td><MemberName member={row.member} /></td>
-            <td>{amount(row.before)}</td>
-            <td>{row.after === null ? t("Not updated") : amount(row.after)}</td>
-            <td className={row.spent === null || row.spent === 0 ? "" : row.spent > 0 ? "hoard-down" : "hoard-up"}>{row.spent === null ? "—" : `${row.spent > 0 ? "−" : "+"}${numberFormat(Math.abs(Math.round(row.spent)))}`}</td>
-            <td>{amount(row.warPoints)}</td>
+          <tbody>{sorted.map((row) => <tr key={row.member.id} {...fold.row(row.member.id)}>
+            <td className="stack-title"><MemberName member={row.member} /></td>
+            <td data-label={t("Before the war")}>{amount(row.before)}</td>
+            <td data-label={t("After the war")}>{row.after === null ? t("Not updated") : amount(row.after)}</td>
+            <td data-label={t("Spent")} className={`stack-key${row.spent === null || row.spent === 0 ? "" : row.spent > 0 ? " hoard-down" : " hoard-up"}`}>{row.spent === null ? "—" : `${row.spent > 0 ? "−" : "+"}${numberFormat(Math.abs(Math.round(row.spent)))}`}</td>
+            <td data-label={t("War points")}>{amount(row.warPoints)}</td>
+            {fold.toggleCell(row.member.id)}
           </tr>)}</tbody>
         </table></div>
       </details>
@@ -197,8 +201,7 @@ export function HoardingWatch({ notify }: { notify: (message: string, error?: bo
       </div>
       <button className="button subtle" onClick={() => void load()} disabled={loading}><RefreshCw size={15} className={loading ? "spin" : undefined} />{t("Refresh")}</button>
     </section>
-    <RulesEditor rules={report.rules} measuredWars={report.measuredWars} notify={notify} onSaved={() => void load()} />
-    <WarSpending />
+    {/* Who to look at comes first; the war-by-war view and the rules come after. */}
     <div className="table-tabs hoard-tabs">
       <button className={filter === "flagged" ? "active" : ""} onClick={() => setFilter("flagged")}>{t("Flagged")}<span>{flagged.length}</span></button>
       <button className={filter === "savers" ? "active" : ""} onClick={() => setFilter("savers")}>{t("Good savers")}<span>{savers.length}</span></button>
@@ -227,5 +230,7 @@ export function HoardingWatch({ notify }: { notify: (message: string, error?: bo
         </article>;
       })}
     </div>}
+    <WarSpending />
+    <RulesEditor rules={report.rules} measuredWars={report.measuredWars} notify={notify} onSaved={() => void load()} />
   </div>;
 }

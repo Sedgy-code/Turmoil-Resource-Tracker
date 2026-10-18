@@ -68,3 +68,23 @@ test("Discord interactions: ping, /checkin, and /snipe-start for admins only", a
     assert.equal(pressed.data.flags, 64);
   });
 });
+
+test("members check in from the Hub once the snipe is close, and get the weekly reward once", async () => {
+  await withDatabase(async (db) => {
+    const { checkInToSnipe } = await import("../src/lib/server/planning");
+    const admin = await addMember(db, "Leader", "ADMIN");
+    const member = await addMember(db, "Raider");
+    const later = await addSnipe(db, admin, 120, "Tonight");
+    await assert.rejects(checkInToSnipe(member, later, db), /opens 30 minutes before/);
+    const soon = await addSnipe(db, admin, 10, "Now");
+    const plan = await checkInToSnipe(member, soon, db);
+    assert.deepEqual(plan.attendees?.map((attendee) => attendee.memberId), [member.id]);
+    assert.equal((await getDew(member, db)).snipeRewardEarned, true);
+    assert.equal((await getDew(member, db)).balance, 10);
+    // Checking in twice keeps one attendance and one reward.
+    await checkInToSnipe(member, soon, db);
+    assert.equal((await getDew(member, db)).balance, 10);
+    const old = await addSnipe(db, admin, -240, "Earlier");
+    await assert.rejects(checkInToSnipe(member, old, db), /closed/);
+  });
+});

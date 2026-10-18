@@ -11,6 +11,9 @@ import { useLanguage, useT } from "@/lib/i18n";
 import type { AscensionPillar, AscensionsResponse, DashboardResponse, DewResponse, Member, SnipePlan, SnipesResponse } from "@/lib/types";
 import { FoldButton, useFold } from "./home-fold";
 import { TermHelp, WelcomeCard } from "./first-visit";
+import { celebrate } from "./celebrate";
+import { announceClanPointsUpdate } from "@/lib/clan-points";
+import { checkInOpen } from "@/lib/snipe-calendar";
 import { CoinStack } from "./home-icons";
 import { PILLAR_ICONS, VialIcon } from "./resource-icons";
 import { MemberAvatar } from "./member-identity";
@@ -77,6 +80,7 @@ export function HomeWeek({ data, notify, leader }: { data: DashboardResponse; no
   const now = useNow();
   const me = data.currentUser;
   const [earned, setEarned] = useState<boolean | null>(null);
+  const [streak, setStreak] = useState(0);
   const [plans, setPlans] = useState<SnipePlan[] | null>(null);
   const [ascension, setAscension] = useState<AscensionPillar[] | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
@@ -88,7 +92,7 @@ export function HomeWeek({ data, notify, leader }: { data: DashboardResponse; no
     const [dew, snipes, ascensions] = await Promise.all([
       load<DewResponse>("/api/dew"), load<SnipesResponse>("/api/snipes"), load<AscensionsResponse>("/api/ascensions"),
     ]);
-    if (dew) setEarned(dew.resourceRewardEarned);
+    if (dew) { setEarned(dew.resourceRewardEarned); setStreak(dew.streak?.weeks ?? 0); }
     if (snipes) setPlans(snipes.plans);
     if (ascensions) setAscension(ascensions.mine);
     setLoadFailed(!dew || !snipes || !ascensions);
@@ -112,7 +116,7 @@ export function HomeWeek({ data, notify, leader }: { data: DashboardResponse; no
   const saved = earned ?? (!!ownEntry && currentWeek(new Date(ownEntry.updatedAt)) === week);
   const war = warDay(now);
   const saveHint = saved
-    ? t("You earned 20 Clan Points.")
+    ? streak >= 2 ? t("You earned 20 Clan Points. {count} weeks in a row!", { count: streak }) : t("You earned 20 Clan Points.")
     : war.day === 7
       ? t("Earn 20 Clan Points. Please save before Day 1 starts, in {time}.", { time: countdown(war.nextDay, now) })
       : t("Earn 20 Clan Points. The week closes in {time}.", { time: countdown(raceEnd(now), now) });
@@ -168,6 +172,23 @@ export function HomeWeek({ data, notify, leader }: { data: DashboardResponse; no
       setBusy(false);
     }
   }
+  // A snipe that's on right now: check in from Home with one tap.
+  const live = (plans ?? []).filter((plan) => !plan.archived && checkInOpen(plan.startsAt, now.getTime()))
+    .sort((a, b) => a.startsAt.localeCompare(b.startsAt))[0];
+  const checkedIn = !!live?.attendees?.some((attendee) => attendee.memberId === me.id);
+  async function checkIn(plan: SnipePlan) {
+    setBusy(true);
+    try {
+      const updated = (await send<{ plan: SnipePlan }>(`/api/snipes/${plan.id}/checkin`, "POST", {})).plan;
+      setPlans((current) => current?.map((item) => item.id === updated.id ? updated : item) ?? current);
+      announceClanPointsUpdate(me.id);
+      notify(t("Checked in! Thanks for joining. +10 Clan Points this week."));
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(false);
+    }
+  }
   const allDone = earned === true && answered && (!snipe || !!answer);
   // The jobs can only fold once they're all done. Done already when Home opened: start folded.
   // Finished just now: stay open, so the member sees it worked.
@@ -180,6 +201,13 @@ export function HomeWeek({ data, notify, leader }: { data: DashboardResponse; no
     {/* Nothing saved yet: what the Hub is for, once. */}
     {!ownEntry && <WelcomeCard />}
     {leader}
+    {live && <section className="home-card home-snipe-live" aria-labelledby="home-snipe-live-title">
+      <div className="home-card-head"><h2 id="home-snipe-live-title" className="home-kicker"><Target size={19} />{t("Snipe on now")}</h2></div>
+      <p className="home-today-main">{live.title}</p>
+      {checkedIn
+        ? <p className="snipe-checked-in"><Check size={18} aria-hidden="true" />{t("You’re checked in. Thanks for joining!")}</p>
+        : <button type="button" className="home-hero-cta home-checkin" disabled={busy} onClick={() => void checkIn(live)}><Check size={19} aria-hidden="true" /><span>{t("Check in now")}</span><em>{t("+10 points")}</em></button>}
+    </section>}
     {/* "Spend or hold?" comes first: the one answer members open the Hub for most days. */}
     <HomeToday now={now} notify={notify} memberId={me.id} />
     <HomeHero update={update} saved={savedEntries.length} total={data.stats.totalMembers} faces={faces} mine={saved} week={week} />
@@ -240,6 +268,9 @@ function HomeHero({ update, saved, total, faces, mine, week }: { update: string;
   const { language } = useLanguage();
   // Shrinks to the progress line once this member has saved this week (they can open it again).
   const fold = useFold(`hero:${week}`, { canFold: mine, folded: mine });
+  // The whole clan saved: a rare moment, celebrated once a week on this phone.
+  const everyone = total > 0 && saved >= total;
+  useEffect(() => { if (everyone) celebrate(t("🎉 The whole clan has saved this week. Stronger together!"), `clan:${week}`); }, [everyone, week, t]);
   // In English the painted lettering from the clan's design; other languages get the brush font,
   // in two lines: the first word in green, the rest in white.
   const title = t("Stronger together");
@@ -276,7 +307,9 @@ function HomeHero({ update, saved, total, faces, mine, week }: { update: string;
     </div>}
     <div className="home-hero-progress">
       {faces.length > 0 && <span className="home-hero-faces" aria-hidden="true">{faces.map((member) => <MemberAvatar key={member.id} member={member} small />)}</span>}
-      <p><strong>{t("{count} of {total} members", { count: saved, total })}</strong><small>{t("saved this week")}</small></p>
+      {total > 0 && saved >= total
+        ? <p><strong>{t("Everyone has saved!")}</strong><small>{t("The whole clan saved this week.")}</small></p>
+        : <p><strong>{t("{count} of {total} members", { count: saved, total })}</strong><small>{t("saved this week")}</small></p>}
       <div className="home-track" role="progressbar" aria-label={t("{count} of {total} members saved this week", { count: saved, total })} aria-valuemin={0} aria-valuemax={total} aria-valuenow={saved}>
         <i style={{ width: `${total ? Math.min(100, (saved / total) * 100) : 0}%` }} />
       </div>

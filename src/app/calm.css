@@ -1,0 +1,16 @@
+/* The calmer look (Me → Settings and help): no glow and no movement. Borders and colours still show
+   what's chosen, done or due. Loaded last so it wins over the theme files. */
+html[data-calm="true"] .app-shell *,
+html[data-calm="true"] .app-shell *::before,
+html[data-calm="true"] .app-shell *::after,
+html[data-calm="true"] .term-sheet {
+  text-shadow: none !important;
+  box-shadow: none !important;
+  transition: none !important;
+  animation-duration: 0s !important;
+  scroll-behavior: auto !important;
+}
+html[data-calm="true"] .app-shell svg,
+html[data-calm="true"] .app-shell img { filter: none !important; }
+/* Spinners still turn, so a slow save never looks frozen. */
+html[data-calm="true"] .app-shell .spin { animation-duration: 0.8s !important; }

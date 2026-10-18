@@ -99,8 +99,10 @@ export function shiftWeek(week: string, by: number): string {
   date.setUTCDate(date.getUTCDate() + by * 7);
   return date.toISOString().slice(0, 10);
 }
-export function formatWeek(week: string): string {
-  return new Date(`${week}T00:00:00Z`).toLocaleDateString("en-US", {
+/** "Oct 12, 2026" in the page's language (the Hub sets it on <html>), or US English on the server. */
+export function formatWeek(week: string, language?: string): string {
+  const pageLanguage = typeof document !== "undefined" ? document.documentElement.lang : "";
+  return new Date(`${week}T00:00:00Z`).toLocaleDateString(language || pageLanguage || "en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",

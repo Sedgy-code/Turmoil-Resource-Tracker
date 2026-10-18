@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { awayWeeksFrom, savingStreak } from "../streak";
 import { COSMETIC_CATEGORIES, DEW_ITEMS, equippedCosmetics } from "../dew";
 import { currentWeek } from "../resources";
 import type { CosmeticCategory, DewResponse, Member, ResourceEntry, SnipePlan, SnipesResponse, WarActivity, WarRates } from "../types";
@@ -212,6 +213,39 @@ export async function confirmSnipeAttendance(actor: Member, id: string, input: {
   });
 }
 
+/** Check-in opens shortly before a snipe and closes a while after it starts (the Hub and Discord's /checkin). */
+export const CHECKIN_OPENS_BEFORE_MS = 30 * 60 * 1000;
+export const CHECKIN_CLOSES_AFTER_MS = 3 * 60 * 60 * 1000;
+
+/**
+ * A member checks in to a snipe from the Hub, from 30 minutes before it starts until 3 hours after.
+ * It counts straight away and gives that week's 10 Clan Points, like Discord's /checkin; leaders
+ * only fix mistakes with the attendance ticks.
+ */
+export async function checkInToSnipe(actor: Member, id: string, db?: Database, now = new Date()): Promise<SnipePlan> {
+  const connection = db ?? await database();
+  return connection.transaction(async (tx) => {
+    await lockAdministration(tx, connection.dialect);
+    const freshActor = await activeActor(tx, actor.id);
+    let row = await findPlan(tx, id);
+    const startsAt = new Date(iso(row.starts_at)!);
+    if (now.getTime() < startsAt.getTime() - CHECKIN_OPENS_BEFORE_MS) throw new ApiError(409, "Check-in opens 30 minutes before the snipe starts.", "CHECKIN_NOT_OPEN");
+    if (now.getTime() > startsAt.getTime() + CHECKIN_CLOSES_AFTER_MS) throw new ApiError(409, "Check-in for this snipe has closed.", "CHECKIN_CLOSED");
+    const inserted = await tx.query(`INSERT INTO snipe_attendance (snipe_id, member_id, confirmed_by, confirmed_at)
+      VALUES ($1, $2, $2, $3) ON CONFLICT (snipe_id, member_id) DO NOTHING RETURNING member_id`, [id, freshActor.id, now.toISOString()]);
+    if (inserted.length) {
+      await awardWeeklyDew(tx, freshActor.id, "snipe", currentWeek(startsAt));
+      if (row.archived === true && row.archived_result) {
+        const frozen = jsonValue<SnipePlan>(row.archived_result);
+        const previous = new Map((frozen.attendees ?? []).map((attendee) => [attendee.memberId, attendee]));
+        frozen.attendees = (await attendeesFor(tx, id)).map((attendee) => previous.get(attendee.memberId) ?? attendee);
+        [row] = await tx.query("UPDATE snipe_plans SET archived_result = $2::jsonb WHERE id = $1 RETURNING *", [id, JSON.stringify(frozen)]);
+      }
+    }
+    return planFromRow(tx, row);
+  });
+}
+
 /** Takes back a week's snipe reward when the member no longer has any confirmed snipe that week. */
 async function withdrawSnipeReward(tx: SqlConnection, memberId: string, week: string): Promise<void> {
   const plans = await tx.query(`SELECT plan.starts_at FROM snipe_attendance attendance
@@ -230,6 +264,11 @@ async function dewResponse(tx: SqlConnection, actor: Member): Promise<DewRespons
   const voted = await tx.query("SELECT 1 FROM dew_weekly_earnings WHERE member_id = $1 AND week_start = $2 AND reason = 'vote'", [actor.id, nextWarWeek()]);
   const owned = await tx.query("SELECT item_id FROM dew_owned WHERE member_id = $1 ORDER BY purchased_at, item_id", [actor.id]);
   const cosmetics = equippedCosmetics(actor);
+  // The saving streak: weeks with a complete save in a row; time away pauses it instead of breaking it.
+  const savedWeeks = await tx.query("SELECT week_start::text AS week FROM dew_weekly_earnings WHERE member_id = $1 AND reason = 'resources'", [actor.id]);
+  const holidays = await tx.query("SELECT kind, detail, created_at FROM member_events WHERE member_id = $1 AND kind IN ('holiday', 'holiday-ended')", [actor.id]);
+  const streak = savingStreak(savedWeeks.map((row) => String(row.week).slice(0, 10)),
+    awayWeeksFrom(holidays.map((row) => ({ kind: String(row.kind), detail: String(row.detail ?? ""), at: iso(row.created_at)! }))), rewardWeek);
   return {
     balance: Number(balances[0]?.balance ?? 0),
     // Keep the older response field meaningful for browser tabs opened before this release.
@@ -238,6 +277,7 @@ async function dewResponse(tx: SqlConnection, actor: Member): Promise<DewRespons
     resourceRewardEarned: weeklyEarnings.some((row) => row.reason === "resources"),
     snipeRewardEarned: weeklyEarnings.some((row) => row.reason === "snipe"),
     voteRewardEarned: voted.length > 0,
+    streak,
     equipped: cosmetics.badge, equippedCosmetics: cosmetics,
     owned: owned.map((row) => String(row.item_id)), items: DEW_ITEMS.map((item) => ({ ...item })),
   };

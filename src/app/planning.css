@@ -247,6 +247,8 @@
 @media (max-width: 640px) {
   .planning-stack { gap: 16px; }
   .planning-heading { flex-wrap: wrap; padding: 20px 16px; gap: 14px; }
+  /* The decorative icon would sit alone on its own line on a phone. */
+  .planning-heading > svg { display: none; }
   .planning-heading h2 { font-size: 17px; }
   .planning-heading p { font-size: 11px; }
   .planning-controls { padding: 0 16px 18px; gap: 14px; }
@@ -294,3 +296,12 @@
 .dew-confirm { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%; }
 .dew-confirm strong { grid-column: 1 / -1; font-size: 13.5px; line-height: 1.4; text-align: center; }
 .dew-confirm .planning-button { justify-content: center; }
+
+/* Points Calculator: the answer sits right under "whose points", and the maths is one tap away. */
+.war-estimate-answer { margin: 4px 0 14px; }
+.planning-howto { margin-top: 8px; padding: 0 24px 8px; }
+.planning-howto > summary { display: inline-flex; align-items: center; min-height: 44px; color: var(--gold); font-size: 14px; font-weight: 650; cursor: pointer; }
+.planning-howto > summary::-webkit-details-marker { display: none; }
+.planning-howto > summary::after { content: "⌄"; margin-inline-start: 8px; font-size: 16px; line-height: 1; }
+.planning-howto[open] > summary::after { content: "⌃"; }
+.planning-howto .planning-footnote { margin: 0; padding: 4px 0 12px; }

@@ -130,6 +130,8 @@ export interface DewResponse {
   snipeRewardEarned: boolean;
   /** Voted for the next war's clan days (10 Clan Points, once per war). */
   voteRewardEarned: boolean;
+  /** Weeks in a row with a complete save (time away doesn't break it). */
+  streak?: { weeks: number; best: number };
   rewardWeek: string;
   equipped: string | null;
   equippedCosmetics: EquippedCosmetics;

@@ -64,7 +64,8 @@ export function ClanTech({ notify }: { notify: (message: string, error?: boolean
     {data.canEdit && <div className="tech-admin">
       <span>{t("Copy the levels from the in-game Tech Tree screen, then press Save.")}</span>
     </div>}
-    <div className="tech-sections">{TECH_SECTIONS.map((section) => {
+    {/* Members see what to fund next; the whole tree (61 nodes) is one tap away. Leaders edit it open. */}
+    {(() => { const tree = <div className="tech-sections">{TECH_SECTIONS.map((section) => {
       const nodes = TECH_NODES.filter((entry) => entry.section === section);
       return <section key={section} className="panel tech-section">
         <header><h2>{t(section)}</h2><span>{Math.round(progress(levels, nodes) * 100)}%</span></header>
@@ -82,7 +83,9 @@ export function ClanTech({ notify }: { notify: (message: string, error?: boolean
           </li>;
         })}</ul>
       </section>;
-    })}</div>
+    })}</div>;
+      return data.canEdit ? tree : <details className="tech-tree-fold"><summary>{t("See the whole tree")}</summary>{tree}</details>;
+    })()}
     {data.canEdit && <div className="save-bar tech-save-bar">
       <span className={dirty ? "unsaved" : "saved"}>{dirty ? <><span />{t("Unsaved changes")}</> : <><CheckCircle2 size={16} />{t("All changes saved")}</>}</span>
       <button className="button primary" disabled={!dirty || saving} onClick={() => void save({ levels: changed }, "Clan Tech saved.")}>{saving ? <LoaderCircle size={15} className="spin" /> : <Save size={15} />}{t("Save")}</button>

@@ -1,0 +1,91 @@
+/* Your own row, in any table: a gold edge so you find yourself at a glance. */
+.app-shell tr.row-me > td,
+.app-shell tr.row-me > th { background: #2a200a66; }
+.app-shell tr.row-me > td:first-child,
+.app-shell tr.row-me > th:first-child { box-shadow: inset 3px 0 0 #e2ad3c; }
+[dir="rtl"] .app-shell tr.row-me > td:first-child,
+[dir="rtl"] .app-shell tr.row-me > th:first-child { box-shadow: inset -3px 0 0 #e2ad3c; }
+
+/* Phones: wide tables turn into a stack of cards, one per row, so nobody swipes sideways. Each
+   value shows its column name above it; the first cell (usually the member) is the card's title.
+   Your own row is pinned first and marked "you" by each table. Opt in with .stack-table and give
+   each cell a data-label. */
+@media (max-width: 700px) {
+  /* The cards have their own frames, so the table's frame goes. */
+  .app-shell .table-scroll:has(> table.stack-table),
+  .app-shell .planning-table-wrap:has(> table.stack-table) { overflow: visible; border: 0; border-radius: 0; background: none; box-shadow: none; }
+  .app-shell .panel > .table-scroll:has(> table.stack-table),
+  .app-shell .panel > .planning-table-wrap:has(> table.stack-table),
+  .app-shell .planning-panel > .planning-table-wrap:has(> table.stack-table) { margin: 4px 10px 12px; }
+  .app-shell table.stack-table { display: block; width: 100%; min-width: 0 !important; border: 0; }
+  .app-shell table.stack-table > thead { display: none; }
+  .app-shell table.stack-table > caption { display: none; }
+  .app-shell table.stack-table > tbody { display: grid; gap: 8px; }
+  .app-shell table.stack-table > tbody > tr {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+    gap: 8px 12px;
+    padding: 12px 13px;
+    border: 1px solid #22302c;
+    border-radius: 14px;
+    background: linear-gradient(180deg, #111c19, #0c1513);
+  }
+  .app-shell table.stack-table > tbody > tr.row-me { border: 1.5px solid #e2ad3cb0; background: linear-gradient(180deg, #1d1a10, #0f0d07); }
+  .app-shell table.stack-table > tbody > tr > td,
+  .app-shell table.stack-table > tbody > tr > th {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 2px;
+    min-width: 0;
+    width: auto !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: none !important;
+    text-align: start !important;
+    white-space: normal;
+    font-size: 15px;
+    overflow-wrap: anywhere;
+  }
+  .app-shell table.stack-table > tbody > tr > [data-label]::before {
+    content: attr(data-label);
+    color: #a0b4d4;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+    text-transform: none;
+  }
+  /* The card's title (member, week or activity) runs across the top. */
+  .app-shell table.stack-table > tbody > tr > .stack-title { grid-column: 1 / -1; flex-direction: row; align-items: center; font-size: 16px; }
+  .app-shell table.stack-table > tbody > tr > .stack-title::before { display: none; }
+  .app-shell table.stack-table > tbody > tr > .stack-wide { grid-column: span 2; }
+  .app-shell table.stack-table > tbody > tr > .stack-full { grid-column: 1 / -1; }
+  /* A table with nothing in it keeps its message in one card. */
+  .app-shell table.stack-table > tbody > tr > td[colspan] { grid-column: 1 / -1; }
+  .app-shell table.stack-table .table-member { min-width: 0; }
+  /* Shown only in card form (a rank number inside the title), or only in the table. */
+  .app-shell table.stack-table > tbody > tr > .stack-hide { display: none; }
+  .app-shell table.stack-table .stack-only { display: inline-flex; align-items: center; justify-content: center; }
+  .app-shell table.stack-table > tbody > tr > .stack-title { flex-wrap: wrap; gap: 4px 10px; }
+
+  /* Long member lists fold: each card shows its title and key number (.stack-key) until it's
+     tapped open (stack-fold.tsx). The ⌄ button sits in the top corner. */
+  .app-shell table.stack-table > tbody > tr.open,
+  .app-shell table.stack-table > tbody > tr.folded { position: relative; cursor: pointer; }
+  .app-shell table.stack-table > tbody > tr > .stack-toggle-cell { position: absolute; top: 8px; inset-inline-end: 8px; }
+  .app-shell table.stack-table > tbody > tr.open > .stack-title { padding-inline-end: 46px !important; }
+  .app-shell table.stack-table > tbody > tr.folded { display: flex; align-items: center; gap: 12px; min-height: 60px; padding-block: 9px; padding-inline: 13px 56px; }
+  .app-shell table.stack-table > tbody > tr.folded > :not(.stack-title, .stack-key, .stack-toggle-cell) { display: none; }
+  .app-shell table.stack-table > tbody > tr.folded > .stack-title { flex: 1 1 auto; }
+  .app-shell table.stack-table > tbody > tr.folded > .stack-key { flex: none; align-items: flex-end; text-align: end !important; }
+  .app-shell table.stack-table > tbody > tr.folded > .stack-toggle-cell { top: 50%; transform: translateY(-50%); }
+  .app-shell table.stack-table > tbody > tr.folded .stack-folded-only { display: block; flex-basis: 100%; }
+  .stack-toggle { display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 1px solid #ffffff14; border-radius: 12px; background: #ffffff0a; color: #a9bde6; cursor: pointer; }
+  .stack-toggle svg { transition: transform 0.2s; }
+  .stack-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+  .app-shell table.stack-table .member-actions { flex-direction: row; flex-wrap: wrap; gap: 8px; }
+}
+
+/* Outside card form these stay hidden. */
+.stack-only, .stack-folded-only { display: none; }
+@media (prefers-reduced-motion: reduce) { .stack-toggle svg { transition: none; } }

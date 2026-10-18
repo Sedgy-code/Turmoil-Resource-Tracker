@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { errorText } from "@/lib/error-text";
-import { Archive, CalendarDays, Check, Crosshair, LoaderCircle, Pencil, Plus, RefreshCw, RotateCcw, X } from "lucide-react";
+import { Archive, CalendarDays, CalendarPlus, Check, Crosshair, LoaderCircle, Pencil, Plus, RefreshCw, RotateCcw, X } from "lucide-react";
+import { checkInOpen, downloadCalendarFile, googleCalendarLink, snipeCalendarFile } from "@/lib/snipe-calendar";
 import { numberFormat } from "@/lib/resources";
 import { WAR_ACTIVITIES } from "@/lib/war";
 import { ACTIVITY_ICONS } from "./resource-icons";
@@ -11,6 +12,7 @@ import { useLanguage } from "@/lib/i18n";
 import { countdown, utcDateTime } from "@/lib/war-calendar";
 import type { DashboardResponse, SnipePlan, SnipesResponse, WarActivity } from "@/lib/types";
 import { useSortable } from "./sortable";
+import { useStackFold } from "./stack-fold";
 import "./attendance.css";
 
 type Props = {
@@ -85,7 +87,7 @@ function PlanForm({ plan, busy, onCancel, onSave }: { plan?: SnipePlan; busy: bo
   </form>;
 }
 
-function ParticipantsTable({ plan, activityLabels }: { plan: SnipePlan; activityLabels: (typeof WAR_ACTIVITIES)[number][] }) {
+function ParticipantsTable({ plan, activityLabels, meId }: { plan: SnipePlan; activityLabels: (typeof WAR_ACTIVITIES)[number][]; meId: string }) {
   const { t } = useLanguage();
   const getters: Record<string, (row: SnipePlan["participants"][number]) => string | number> = {
     member: ({ member }) => member.username,
@@ -93,7 +95,10 @@ function ParticipantsTable({ plan, activityLabels }: { plan: SnipePlan; activity
   };
   for (const activity of activityLabels) getters[activity.key] = ({ estimate }) => estimate.rows.find((row) => row.activity === activity.key)?.minimum ?? 0;
   const { sorted, header } = useSortable(plan.participants, getters, { key: "total", direction: "desc" });
-  return <div className="planning-table-wrap"><table className="planning-table planning-participants"><caption className="planning-sr-only">{t("{title}: who’s joining and their war point estimates", { title: plan.title })}</caption><thead><tr>{header("member", t("Member"))}{activityLabels.map((activity) => { const Picture = ACTIVITY_ICONS[activity.key]; return header(activity.key, t(activity.label), { icon: <Picture size={18} /> }); })}{header("total", t("Total points"))}</tr></thead><tbody>{sorted.map(({ member, estimate }) => <tr key={member.id}><th scope="row">{member.username}</th>{activityLabels.map((activity) => { const row = estimate.rows.find((row) => row.activity === activity.key); return <td key={activity.key}>{row ? points(row.minimum, row.maximum) : "0"}</td>; })}<td className="planning-gold">{points(estimate.minimum, estimate.maximum)}</td></tr>)}{plan.participants.length === 0 && <tr><td colSpan={activityLabels.length + 2} className="planning-table-empty">{t("Members who answer Yes will appear here.")}</td></tr>}</tbody></table></div>;
+  // Your own row first, and open; on a phone the others are one line (total points) until tapped.
+  const rows = [...sorted.filter(({ member }) => member.id === meId), ...sorted.filter(({ member }) => member.id !== meId)];
+  const fold = useStackFold(meId);
+  return <div className="planning-table-wrap"><table className="planning-table planning-participants stack-table"><caption className="planning-sr-only">{t("{title}: who’s joining and their war point estimates", { title: plan.title })}</caption><thead><tr>{header("member", t("Member"))}{activityLabels.map((activity) => { const Picture = ACTIVITY_ICONS[activity.key]; return header(activity.key, t(activity.label), { icon: <Picture size={18} /> }); })}{header("total", t("Total points"))}</tr></thead><tbody>{rows.map(({ member, estimate }) => <tr key={member.id} {...fold.row(member.id, member.id === meId ? "row-me" : undefined)}><th scope="row" className="stack-title">{member.username}{member.id === meId && <span className="you-badge">{t("you")}</span>}</th>{activityLabels.map((activity) => { const row = estimate.rows.find((row) => row.activity === activity.key); return <td key={activity.key} data-label={t(activity.label)}>{row ? points(row.minimum, row.maximum) : "0"}</td>; })}<td className="planning-gold stack-wide stack-key" data-label={t("Total points")}>{points(estimate.minimum, estimate.maximum)}</td>{fold.toggleCell(member.id)}</tr>)}{plan.participants.length === 0 && <tr><td colSpan={activityLabels.length + 2} className="planning-table-empty">{t("Members who answer Yes will appear here.")}</td></tr>}</tbody></table></div>;
 }
 
 export function SnipePlanner({ data, notify }: Props) {
@@ -220,11 +225,26 @@ export function SnipePlanner({ data, notify }: Props) {
     } catch (error) { notify(t(errorText(error)), true); }
     finally { finishMutation(); }
   }
+  async function checkIn(plan: SnipePlan) {
+    if (!beginMutation(`checkin:${plan.id}`)) return;
+    try {
+      const result = await request<{ plan: SnipePlan }>(`/api/snipes/${plan.id}/checkin`, { method: "POST", body: "{}" });
+      replacePlan(result.plan);
+      announceClanPointsUpdate(data.currentUser.id);
+      notify(t("Checked in! Thanks for joining. +10 Clan Points this week."));
+    } catch (error) { notify(t(errorText(error)), true); }
+    finally { finishMutation(); }
+  }
+  /** The snipe in the member's own calendar, with a reminder when check-in opens. */
+  const calendarText = (plan: SnipePlan) => ({
+    summary: t("Turmoil snipe: {title}", { title: plan.title }),
+    description: t("Check in on the Clan Hub when it starts: {link}", { link: `${window.location.origin}/snipes` }),
+  });
   async function reopen(plan: SnipePlan) {
     if (!beginMutation(plan.id)) return;
     try {
       const result = await request<{ plan: SnipePlan }>(`/api/snipes/${plan.id}`, { method: "PATCH", body: JSON.stringify({ archived: false }) });
-      replacePlan(result.plan); setTab("open"); notify(t("Snipe moved back to Open."));
+      replacePlan(result.plan); setTab("open"); notify(t("Snipe reopened."));
     } catch (error) { notify(t(errorText(error)), true); }
     finally { finishMutation(); }
   }
@@ -232,7 +252,7 @@ export function SnipePlanner({ data, notify }: Props) {
   return <div className="planning-stack">
     <section className="planning-panel">
       <div className="planning-heading"><div><h2>{t("Snipe Plans")}</h2><p>{t("Tell the clan if you can join each snipe.")}</p></div><div className="planning-inline-actions"><button className="planning-button planning-button-subtle" aria-label={t("Refresh")} onClick={() => void load()} disabled={refreshing || busy !== null}><RefreshCw size={15} className={refreshing ? "spin" : undefined} />{t("Refresh")}</button>{isAdmin && <button className="planning-button" onClick={() => { setCreating((open) => !open); setEditing(null); }} disabled={!loaded || busy !== null} aria-expanded={creating}><Plus size={16} />{t("New snipe")}</button>}</div></div>
-      <div className="planning-controls"><div className="planning-tabs" aria-label={t("Snipe Plans")}><button aria-pressed={tab === "open"} onClick={() => setTab("open")}>{t("Open")} <span aria-hidden="true">{plans.filter((plan) => !plan.archived).length}</span></button><button aria-pressed={tab === "history"} onClick={() => setTab("history")}>{t("History")} <span aria-hidden="true">{plans.filter((plan) => plan.archived).length}</span></button></div></div>
+      <div className="planning-controls"><div className="planning-tabs" aria-label={t("Snipe Plans")}><button aria-pressed={tab === "open"} onClick={() => setTab("open")}>{t("Active")} <span aria-hidden="true">{plans.filter((plan) => !plan.archived).length}</span></button><button aria-pressed={tab === "history"} onClick={() => setTab("history")}>{t("History")} <span aria-hidden="true">{plans.filter((plan) => plan.archived).length}</span></button></div></div>
       {loaded && loadError && <p className="planning-notice" role="status">{t("The latest plans could not be loaded. Press Refresh to try again.")}</p>}
       {creating && isAdmin && <PlanForm busy={busy !== null} onCancel={() => setCreating(false)} onSave={(draft) => savePlan(draft)} />}
     </section>
@@ -255,14 +275,26 @@ export function SnipePlanner({ data, notify }: Props) {
         || plan.participants.find(({ member }) => member.id === memberId)?.member.username
         || t("Former clan member");
       return <section className="planning-panel planning-snipe snipe-card" key={plan.id} aria-label={plan.title}>
-        <div className="planning-heading"><div><h2>{plan.title}</h2><p className="planning-date"><CalendarDays size={14} /><time dateTime={plan.startsAt}>{utcDateTime(plan.startsAt, language)}</time>{!started && <span className="planning-countdown">{t("in {time}", { time: countdown(new Date(plan.startsAt)) })}</span>}</p></div>{isAdmin && !plan.archived && <div className="planning-inline-actions">{needsAttendance && <span className="planning-chip snipe-needs-attendance">{t("Needs attendance")}</span>}<button className="planning-button planning-button-subtle" onClick={() => { setEditing(editing === plan.id ? null : plan.id); setCreating(false); }} disabled={busy !== null} aria-expanded={editing === plan.id}><Pencil size={14} />{t("Edit plan")}</button><button className="planning-button planning-button-subtle" onClick={() => void archive(plan)} disabled={busy !== null}><Archive size={14} />{t("Archive snipe")}</button></div>}{plan.archived && <div className="planning-inline-actions"><span className="planning-chip">{t("Archived")}</span>{isAdmin && <button className="planning-button planning-button-subtle" onClick={() => void reopen(plan)} disabled={busy !== null}><RotateCcw size={14} />{t("Move back to Open")}</button>}</div>}</div>
+        <div className="planning-heading"><div><h2>{plan.title}</h2><p className="planning-date"><CalendarDays size={14} /><time dateTime={plan.startsAt}>{utcDateTime(plan.startsAt, language)}</time>{!started && <span className="planning-countdown">{t("in {time}", { time: countdown(new Date(plan.startsAt)) })}</span>}</p></div>{isAdmin && !plan.archived && <div className="planning-inline-actions">{needsAttendance && <span className="planning-chip snipe-needs-attendance">{t("Needs attendance")}</span>}<button className="planning-button planning-button-subtle" onClick={() => { setEditing(editing === plan.id ? null : plan.id); setCreating(false); }} disabled={busy !== null} aria-expanded={editing === plan.id}><Pencil size={14} />{t("Edit plan")}</button><button className="planning-button planning-button-subtle" onClick={() => void archive(plan)} disabled={busy !== null}><Archive size={14} />{t("Archive snipe")}</button></div>}{plan.archived && <div className="planning-inline-actions"><span className="planning-chip">{t("Archived")}</span>{isAdmin && <button className="planning-button planning-button-subtle" onClick={() => void reopen(plan)} disabled={busy !== null}><RotateCcw size={14} />{t("Reopen")}</button>}</div>}</div>
         {editing === plan.id && isAdmin && !plan.archived && <PlanForm key={plan.id} plan={plan} busy={busy !== null} onCancel={() => setEditing(null)} onSave={(draft) => savePlan(draft, plan.id)} />}
         <div className="planning-attendance" aria-label={t("Attendance")}><span className="planning-yes"><Check size={15} />{t("Yes")}: {plan.counts.yes}</span><span className="planning-no"><X size={15} />{t("No")}: {plan.counts.no}</span><span>{t("No answer")}: {plan.counts.unanswered}</span></div>
         {!plan.archived && <details className="planning-response-details"><summary>{t("See who said No or hasn’t answered")}</summary><div className="planning-response-grid"><div><h3>{t("Can’t join")}</h3><p>{unavailable.length ? unavailable.map((member) => member.username).join(", ") : t("Nobody has said No.")}</p></div><div><h3>{t("No answer yet")}</h3><p>{unanswered.length ? unanswered.map((member) => member.username).join(", ") : t("Everyone has answered.")}</p></div></div></details>}
+        {/* On now: one tap checks in and gives the week's 10 Clan Points. */}
+        {!plan.archived && checkInOpen(plan.startsAt) && <div className="snipe-checkin">
+          {attendedIds.has(data.currentUser.id)
+            ? <p className="snipe-checked-in"><Check size={18} aria-hidden="true" />{t("You’re checked in. Thanks for joining!")}</p>
+            : <button className="planning-button snipe-checkin-button" disabled={busy !== null} onClick={() => void checkIn(plan)}>
+              {busy === `checkin:${plan.id}` ? <LoaderCircle size={17} className="spin" /> : <Check size={18} />}{t("Check in now")}<span>{t("+10 points")}</span>
+            </button>}
+        </div>}
+        {!plan.archived && !started && <div className="snipe-calendar">
+          <button className="planning-button planning-button-subtle" onClick={() => downloadCalendarFile(`turmoil-snipe-${plan.startsAt.slice(0, 10)}.ics`, snipeCalendarFile(plan, calendarText(plan), `${window.location.origin}/snipes`))}><CalendarPlus size={16} />{t("Add to calendar")}</button>
+          <a className="snipe-calendar-google" href={googleCalendarLink(plan, calendarText(plan))} target="_blank" rel="noreferrer">{t("Google Calendar")}</a>
+        </div>}
         {!plan.archived && <div className="planning-rsvp"><p>{t(started ? "This snipe has started. Answers are closed." : "Can you join this snipe?")}</p>{!started && <div className="planning-tabs"><button aria-pressed={answer === "yes"} disabled={busy !== null} onClick={() => void respond(plan, "yes")}><Check size={14} />{t("Yes")}</button><button aria-pressed={answer === "no"} disabled={busy !== null} onClick={() => void respond(plan, "no")}><X size={14} />{t("No")}</button></div>}{busy === plan.id && <LoaderCircle size={16} className="spin" aria-label={t("Saving…")} />}</div>}
         <section className="snipe-confirmed-attendance" aria-label={t("Confirmed attendance for {title}", { title: plan.title })}>
           <div className="snipe-attendance-heading"><h3>{t("Confirmed attendance")}</h3><span className="planning-chip">{t("{count} attended", { count: attendees.length })}</span></div>
-          <p className="snipe-attendance-copy">{t("Get 10 Clan Points a week for joining a snipe. When it starts, type /checkin in Discord or press the Check in button there.")}</p>
+          <p className="snipe-attendance-copy">{t("Get 10 Clan Points a week for joining a snipe. Check in here or in Discord, from 30 minutes before it starts.")}</p>
           {attendees.length > 0 ? <ul className="snipe-confirmed-list">{attendees.map((attendee) => <li key={attendee.memberId}><Check size={14} aria-hidden="true" /><span>{confirmedName(attendee.memberId)}</span>{attendee.memberId === data.currentUser.id && <small>{t("You attended")}</small>}</li>)}</ul> : <p className="snipe-attendance-empty">{t(started || plan.archived ? "No attendance has been confirmed." : "Admins confirm attendance after the snipe starts.")}</p>}
           {started && isAdmin && <div className="snipe-attendance-management">
             <h4 className="snipe-checklist-title">{t("Who took part? Tick each member who joined.")}</h4>
@@ -286,7 +318,7 @@ export function SnipePlanner({ data, notify }: Props) {
           </div>}
         </section>
         <div className="planning-activity-chips" aria-label={t("Include activities")}>{activityLabels.map((activity) => { const Picture = ACTIVITY_ICONS[activity.key]; return <span className="planning-chip planning-activity-chip" key={activity.key}><Picture size={18} />{t(activity.label)}</span>; })}</div>
-        <ParticipantsTable plan={plan} activityLabels={activityLabels} />
+        <ParticipantsTable plan={plan} activityLabels={activityLabels} meId={data.currentUser.id} />
         <div className="planning-total"><div><span>{t("{count} said Yes", { count: numberFormat(plan.counts.yes) })}</span><small>{t("Estimated snipe points")}</small></div><strong>{points(plan.estimate.minimum, plan.estimate.maximum)}</strong></div>
         {plan.estimate.missingCosts > 0 && <p className="planning-notice">{t("Some members who said Yes are missing summon costs, so part of their resources is left out.")}</p>}
         <p className="planning-footnote">{t(plan.archived ? "Saved as it was when the snipe was archived." : "Only members who said Yes are counted. Uses everyone’s latest saved resources.")}</p>

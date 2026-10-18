@@ -7,8 +7,8 @@ import { numberFormat } from "@/lib/resources";
 import { useT } from "@/lib/i18n";
 import type { ContributionRankingResponse, ContributionRow, RankingMetric } from "@/lib/types";
 import { MemberAvatar, MemberName } from "./member-identity";
-import { RankBadge } from "./contribution-cards";
 import { useSortable } from "./sortable";
+import { useStackFold } from "./stack-fold";
 import "./hoarding-watch.css";
 
 const METRIC_LABELS: Record<RankingMetric, string> = {
@@ -58,6 +58,8 @@ export function ContributionRanking() {
     days: (row) => row.daysInClan,
     saved: (row) => row.lastSavedAt ? new Date(row.lastSavedAt).getTime() : null,
   }, { key: "rank", direction: "desc" });
+  // On a phone each member is one line (place, name, score) until tapped.
+  const fold = useStackFold();
   if (!data) return <section className="panel hoard-state">{error ? <><p>{t(error)}</p><button className="button primary" onClick={() => void load()}>{t("Try again")}</button></> : <LoaderCircle size={24} className="spin" />}</section>;
   const weights = Object.entries(data.weights) as [RankingMetric, number][];
   const missing = (Object.keys(METRIC_LABELS) as RankingMetric[]).filter((metric) => !(metric in data.weights));
@@ -81,27 +83,29 @@ export function ContributionRanking() {
       </div>
     </section>
     <section className="panel">
-      <div className="table-scroll"><table className="resource-table rank-table">
+      <div className="table-scroll"><table className="resource-table rank-table stack-table">
         <thead><tr>
           {header("rank", "#")}{header("member", t("Member"))}{header("score", t("Score"))}
           {header("warPoints", t("War points (avg)"))}{header("vials", t("Vials donated"))}{header("snipes", t("Snipes (8 wk)"))}
           {header("noShows", t("No-shows"))}{header("updates", t("Weekly updates"))}{header("clanDays", t("On clan days"))}{header("blackMarks", t("Black marks"))}
           {header("hoarding", t("Hoarding"))}{header("days", t("Days in clan"))}{header("saved", t("Last saved"))}
         </tr></thead>
-        <tbody>{sorted.map((row) => <tr key={row.member.id}>
-          <td><RankBadge rank={row.rank} /></td>
-          <td><div className="table-member"><MemberAvatar member={row.member} small /><div><strong><MemberName member={row.member} /></strong>{row.isNew && <span className="rank-new">{t("New")}</span>}{row.member.neverSignedIn && <span className="rank-never">{t("Never signed in")}</span>}{!!row.member.strikes && <span className="rank-never">⚠️ {t("{count} strikes", { count: row.member.strikes })}</span>}</div></div></td>
-          <td><span className={`rank-score ${scoreClass(row.score)}`}>{row.score}</span>{row.penalty > 0 && <small className="rank-penalty">−{row.penalty}</small>}</td>
-          <td>{amount(row.warPoints)}{row.warPoints !== null && <small className="rank-sub">{t("{count} of {total} wars", { count: row.warsPlayed, total: data.records.wars })}</small>}</td>
-          <td>{amount(row.vials)}</td>
-          <td>{row.snipes || "—"}</td>
-          <td className={row.noShows ? "hoard-up" : undefined}>{row.noShows || "—"}</td>
-          <td>{row.updates} / 8</td>
-          <td>{row.clanDayShare === null ? "—" : `${Math.round(row.clanDayShare * 100)}%`}</td>
-          <td className={row.blackMarks ? "hoard-up" : undefined}>{row.blackMarks || "—"}</td>
-          <td>{row.hoarding === "ok" ? "—" : <span className={`hoard-level hoard-level-${row.hoarding}`}>{t(row.hoarding === "high" ? "Hoarding" : row.hoarding === "saver" ? "💰 Good saver" : "Keep an eye on")}</span>}</td>
-          <td>{row.daysInClan}</td>
-          <td>{row.lastSavedAt ? t("{days} days ago", { days: Math.floor((Date.now() - new Date(row.lastSavedAt).getTime()) / 86_400_000) }) : t("Never")}</td>
+        <tbody>{sorted.map((row) => <tr key={row.member.id} {...fold.row(row.member.id)}>
+          {/* A plain place number: the lowest scores are who to talk to first, not an award. */}
+          <td className="stack-hide"><span className="rank-place">{row.rank}</span></td>
+          <td className="stack-title"><div className="table-member"><span className="rank-place stack-only">{row.rank}</span><MemberAvatar member={row.member} small /><div><strong><MemberName member={row.member} /></strong>{row.isNew && <span className="rank-new">{t("New")}</span>}{row.member.neverSignedIn && <span className="rank-never">{t("Never signed in")}</span>}{!!row.member.strikes && <span className="rank-never">⚠️ {t("{count} strikes", { count: row.member.strikes })}</span>}</div></div></td>
+          <td className="stack-key" data-label={t("Score")}><span className={`rank-score ${scoreClass(row.score)}`}>{row.score}</span>{row.penalty > 0 && <small className="rank-penalty">−{row.penalty}</small>}</td>
+          <td data-label={t("War points (avg)")}>{amount(row.warPoints)}{row.warPoints !== null && <small className="rank-sub">{t("{count} of {total} wars", { count: row.warsPlayed, total: data.records.wars })}</small>}</td>
+          <td data-label={t("Vials donated")}>{amount(row.vials)}</td>
+          <td data-label={t("Snipes (8 wk)")}>{row.snipes || "—"}</td>
+          <td data-label={t("No-shows")} className={row.noShows ? "hoard-up" : undefined}>{row.noShows || "—"}</td>
+          <td data-label={t("Weekly updates")}>{row.updates} / 8</td>
+          <td data-label={t("On clan days")}>{row.clanDayShare === null ? "—" : `${Math.round(row.clanDayShare * 100)}%`}</td>
+          <td data-label={t("Black marks")} className={row.blackMarks ? "hoard-up" : undefined}>{row.blackMarks || "—"}</td>
+          <td data-label={t("Hoarding")}>{row.hoarding === "ok" ? "—" : <span className={`hoard-level hoard-level-${row.hoarding}`}>{t(row.hoarding === "high" ? "Hoarding" : row.hoarding === "saver" ? "💰 Good saver" : "Keep an eye on")}</span>}</td>
+          <td data-label={t("Days in clan")}>{row.daysInClan}</td>
+          <td data-label={t("Last saved")}>{row.lastSavedAt ? t("{days} days ago", { days: Math.floor((Date.now() - new Date(row.lastSavedAt).getTime()) / 86_400_000) }) : t("Never")}</td>
+          {fold.toggleCell(row.member.id)}
         </tr>)}</tbody>
       </table></div>
     </section>

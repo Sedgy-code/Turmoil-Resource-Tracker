@@ -176,7 +176,7 @@ export function shouldOfferAfterSave(member: Member): boolean {
 }
 
 /** Right after a member saves: add the Hub to the home screen, and choose Discord reminders. Shown once per phone. */
-export function AfterSaveSheet({ member, onClose, notify }: { member: Member; onClose: () => void; notify: (message: string, error?: boolean) => void }) {
+export function AfterSaveSheet({ member, first = false, onClose, notify }: { member: Member; first?: boolean; onClose: () => void; notify: (message: string, error?: boolean) => void }) {
   const t = useT();
   const [reminders, setReminders] = useState(member.remindersAllowed === true);
   const [busy, setBusy] = useState(false);
@@ -191,7 +191,7 @@ export function AfterSaveSheet({ member, onClose, notify }: { member: Member; on
   });
   return <div className="modal-backdrop after-save-backdrop" onClick={close}>
     <section className="after-save" role="dialog" aria-modal="true" aria-labelledby="after-save-title" onClick={(event) => event.stopPropagation()}>
-      <h2 id="after-save-title"><span className="after-save-tick" aria-hidden="true"><Check size={18} strokeWidth={3} /></span>{t("Saved! Two quick extras")}</h2>
+      <h2 id="after-save-title"><span className="after-save-tick" aria-hidden="true"><Check size={18} strokeWidth={3} /></span>{first ? t("🎉 Your first save! Two quick extras") : t("Saved! Two quick extras")}</h2>
       {!standalone && <div className="after-save-part">
         <h3><Download size={17} aria-hidden="true" />{t("Add the Hub to your home screen")}</h3>
         <p>{t("It opens like an app, without the browser bar.")}</p>

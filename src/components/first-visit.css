@@ -126,3 +126,49 @@
   .after-save-backdrop { align-items: flex-end; padding: 0; }
   .after-save { width: 100%; border-radius: 22px 22px 0 0; border-bottom: 0; }
 }
+
+/* Celebrations: a short banner at the top, with a small burst of colour that's over in half a second. */
+.celebration {
+  position: fixed;
+  top: calc(12px + env(safe-area-inset-top));
+  inset-inline: 12px;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 14px 8px 14px 18px;
+  border: 1.5px solid #e2ad3c;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #2b2209, #141005);
+  box-shadow: 0 16px 40px -14px #000, 0 0 26px -8px #e2ad3c99;
+  color: #fff3d0;
+  font-size: 16px;
+  font-weight: 750;
+  line-height: 1.4;
+  animation: celebration-in 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.25);
+}
+.celebration p { flex: 1; margin: 0; }
+.celebration button { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: #f1e2b6; cursor: pointer; }
+.celebration-burst { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+.celebration-burst i { position: absolute; top: 50%; left: 24px; width: 7px; height: 7px; border-radius: 2px; opacity: 0; animation: celebration-burst 0.6s ease-out; }
+.celebration-burst i:nth-child(odd) { background: #ffd56b; }
+.celebration-burst i:nth-child(even) { background: #2fe46c; }
+.celebration-burst i:nth-child(3n) { background: #a6acfe; }
+.celebration-burst i:nth-child(1) { --dx: -10px; --dy: -46px; }
+.celebration-burst i:nth-child(2) { --dx: 34px; --dy: -40px; }
+.celebration-burst i:nth-child(3) { --dx: 70px; --dy: -24px; }
+.celebration-burst i:nth-child(4) { --dx: 96px; --dy: 18px; }
+.celebration-burst i:nth-child(5) { --dx: 52px; --dy: 44px; }
+.celebration-burst i:nth-child(6) { --dx: 8px; --dy: 50px; }
+.celebration-burst i:nth-child(7) { --dx: -30px; --dy: 30px; }
+.celebration-burst i:nth-child(8) { --dx: -40px; --dy: -8px; }
+.celebration-burst i:nth-child(9) { --dx: 130px; --dy: -34px; }
+.celebration-burst i:nth-child(10) { --dx: 150px; --dy: 30px; }
+@keyframes celebration-in { from { transform: translateY(-14px) scale(0.96); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes celebration-burst { 0% { opacity: 1; transform: translate(0, 0) rotate(0); } 100% { opacity: 0; transform: translate(var(--dx), var(--dy)) rotate(160deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .celebration, .celebration-burst i { animation: none; }
+}
+html[data-calm="true"] .celebration, html[data-calm="true"] .celebration-burst i { animation: none; box-shadow: none; }

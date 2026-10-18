@@ -86,3 +86,15 @@
 }
 .snipe-said-yes { color: #9fd3a9; font-size: 12px; white-space: nowrap; }
 .snipe-needs-attendance { border-color: #d9a52b88 !important; color: #f0c560 !important; }
+
+/* Check in: one big button while the snipe is on; calendar links before it starts. */
+.snipe-checkin { margin: 0 24px 16px; }
+.snipe-checkin-button { width: 100%; min-height: 52px; font-size: 16px; }
+.snipe-checkin-button span { margin-inline-start: 6px; padding: 2px 8px; border-radius: 999px; background: #1d140422; font-size: 12.5px; }
+.snipe-checked-in { display: flex; align-items: center; gap: 8px; margin: 0; padding: 12px 14px; border: 1px solid #2fe46c77; border-radius: 14px; background: #0b2716; color: #6cf59a; font-weight: 700; }
+.snipe-calendar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 0 24px 16px; }
+.snipe-calendar .planning-button { min-height: 44px; }
+.snipe-calendar-google { display: inline-flex; align-items: center; min-height: 44px; color: var(--gold); font-size: 14px; font-weight: 650; }
+@media (max-width: 640px) {
+  .snipe-checkin, .snipe-calendar { margin-left: 16px; margin-right: 16px; }
+}

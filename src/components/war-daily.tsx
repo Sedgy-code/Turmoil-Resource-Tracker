@@ -9,6 +9,7 @@ import type { Member, WarDayReport, WarDayRow, WarResult } from "@/lib/types";
 import { MemberAvatar, MemberName } from "./member-identity";
 import { RecordEditor, request, TEXT } from "./record-editor";
 import { useSortable } from "./sortable";
+import { useStackFold } from "./stack-fold";
 
 const DAYS = [1, 2, 3, 4, 5];
 
@@ -17,7 +18,7 @@ const DAYS = [1, 2, 3, 4, 5];
  * scored on which day; points on days that weren't clan days are highlighted (and earn a black mark
  * in the ranking when they're more than a small share of that member's points).
  */
-export function WarDaily({ members, admin, notify }: { members: Member[]; admin: boolean; notify: (message: string, error?: boolean) => void }) {
+export function WarDaily({ members, meId, admin, notify }: { members: Member[]; meId?: string; admin: boolean; notify: (message: string, error?: boolean) => void }) {
   const t = useT();
   const words = TEXT.warday;
   const [week, setWeek] = useState<string | undefined>(undefined);
@@ -77,12 +78,12 @@ export function WarDaily({ members, admin, notify }: { members: Member[]; admin:
     {admin && editing && <RecordEditor key={`${editing.day}-${editing.existing?.id ?? "new"}`} kind="warday" warDay={editing.day} week={report.week}
       existing={editing.existing} members={members} notify={notify}
       onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void load(); }} />}
-    {report.uploads.length > 0 && <WarDayTable key={`${report.week}-${report.clanDays.join(",")}`} report={report} admin={admin} />}
+    {report.uploads.length > 0 && <WarDayTable key={`${report.week}-${report.clanDays.join(",")}`} report={report} meId={meId} admin={admin} />}
   </section>;
 }
 
 /** Sorted so the members who scored on other days come first (once clan days are picked). */
-function WarDayTable({ report, admin }: { report: WarDayReport; admin: boolean }) {
+function WarDayTable({ report, meId, admin }: { report: WarDayReport; meId?: string; admin: boolean }) {
   const t = useT();
   const clanDays = report.clanDays;
   const picked = clanDays.length > 0;
@@ -91,7 +92,14 @@ function WarDayTable({ report, admin }: { report: WarDayReport; admin: boolean }
     on: (row) => row.onClanDays,
     other: (row) => row.otherDays,
   }, picked ? { key: "other", direction: "desc" } : { key: "member", direction: "asc" });
-  return <div className="table-scroll"><table className="resource-table war-table war-daily-table">
+  // Your own row first.
+  const mine = (row: WarDayRow) => !!meId && row.member?.id === meId;
+  const rows = [...sorted.filter(mine), ...sorted.filter((row) => !mine(row))];
+  const keyOf = (row: WarDayRow) => row.member?.id ?? `name:${row.name}`;
+  // On a phone each member is one line (points on clan days) until tapped; yours starts open.
+  // Before clan days are picked there's no total to show, so every card stays open.
+  const fold = useStackFold(meId, !picked);
+  return <div className="table-scroll"><table className="resource-table war-table war-daily-table stack-table">
       <thead><tr>
         {header("member", t("Member"))}
         {DAYS.map((day) => <th key={day} className={clanDays.includes(day) ? "war-daily-clan" : undefined}>
@@ -101,16 +109,18 @@ function WarDayTable({ report, admin }: { report: WarDayReport; admin: boolean }
         {header("other", t("Other days"))}
         {admin && <th>{t("Black mark")}</th>}
       </tr></thead>
-      <tbody>{sorted.map((row) => <tr key={row.member?.id ?? `name:${row.name}`}>
-        <td>{row.member
-          ? <div className="table-member"><MemberAvatar member={row.member} small /><strong><MemberName member={row.member} /></strong></div>
-          : <span className="war-guest">{row.name}</span>}</td>
-        {row.days.map((value, index) => <td key={index} className={value && picked && !clanDays.includes(index + 1) ? "war-offday" : undefined}>
+      <tbody>{rows.map((row) => <tr key={keyOf(row)} {...fold.row(keyOf(row), mine(row) ? "row-me" : undefined)}>
+        <td className="stack-title">{row.member
+          ? <div className="table-member"><MemberAvatar member={row.member} small /><strong><MemberName member={row.member} /></strong>{mine(row) && <span className="you-badge">{t("you")}</span>}</div>
+          : <span className="war-guest">{row.name}</span>}
+          {picked && row.otherDays > 0 && <small className="stack-folded-only war-offday-note">{t("Other days")}: {numberFormat(row.otherDays)}</small>}</td>
+        {row.days.map((value, index) => <td key={index} data-label={`${t("Day {day}", { day: index + 1 })}${clanDays.includes(index + 1) ? " ★" : ""}`} className={value && picked && !clanDays.includes(index + 1) ? "war-offday" : undefined}>
           {value === null ? "—" : numberFormat(value)}
         </td>)}
-        <td className="war-points">{picked ? numberFormat(row.onClanDays) : "—"}</td>
-        <td className={row.otherDays ? "war-offday" : undefined}>{picked ? numberFormat(row.otherDays) : "—"}</td>
-        {admin && <td>{row.blackMark ? <span className="hoard-level hoard-level-high">{t("Black mark")}</span> : "—"}</td>}
+        <td className="war-points stack-key" data-label={t("On clan days")}>{picked ? numberFormat(row.onClanDays) : "—"}</td>
+        <td className={row.otherDays ? "war-offday" : undefined} data-label={t("Other days")}>{picked ? numberFormat(row.otherDays) : "—"}</td>
+        {admin && <td data-label={t("Black mark")}>{row.blackMark ? <span className="hoard-level hoard-level-high">{t("Black mark")}</span> : "—"}</td>}
+        {fold.toggleCell(keyOf(row))}
       </tr>)}</tbody>
     </table></div>;
 }

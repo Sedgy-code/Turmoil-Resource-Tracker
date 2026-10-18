@@ -30,7 +30,7 @@ function useWarResults(kind: RecordKind) {
   return { results, error, load };
 }
 
-function WarPlayersTable({ kind, result, byId }: { kind: RecordKind; result: WarResult; byId: Map<string, Member> }) {
+function WarPlayersTable({ kind, result, byId, meId }: { kind: RecordKind; result: WarResult; byId: Map<string, Member>; meId?: string }) {
   const t = useT();
   const ranked = result.points.map((point, rank) => ({ ...point, rank }));
   const name = (point: (typeof ranked)[number]) => (point.memberId ? byId.get(point.memberId)?.username : undefined) ?? point.gameName;
@@ -39,14 +39,16 @@ function WarPlayersTable({ kind, result, byId }: { kind: RecordKind; result: War
     member: name,
     points: (point) => point.points,
   }, { key: "points", direction: "desc" });
+  // Your own row first, so you never hunt for it.
+  const rows = [...sorted.filter((point) => meId && point.memberId === meId), ...sorted.filter((point) => !meId || point.memberId !== meId)];
   return <div className={`table-scroll${kind === "vials" ? " tone-teal" : ""}`}><table className="resource-table war-table">
     <thead><tr>{header("rank", "#")}{header("member", t("Member"))}{header("points", t(TEXT[kind].points), { icon: kind === "vials" ? <VialIcon size={20} /> : <Trophy size={16} aria-hidden="true" /> })}</tr></thead>
-    <tbody>{sorted.map((point) => {
+    <tbody>{rows.map((point) => {
       const member = point.memberId ? byId.get(point.memberId) : undefined;
-      return <tr key={point.position}>
+      return <tr key={point.position} className={meId && point.memberId === meId ? "row-me" : undefined}>
         <td><RankBadge rank={point.rank + 1} /></td>
         <td>{member
-          ? <div className="table-member"><MemberAvatar member={member} small /><strong><MemberName member={member} /></strong></div>
+          ? <div className="table-member"><MemberAvatar member={member} small /><strong><MemberName member={member} /></strong>{member.id === meId && <span className="you-badge">{t("you")}</span>}</div>
           : <span className="war-guest">{point.gameName}</span>}</td>
         <td className="war-points">{numberFormat(point.points)}</td>
       </tr>;
@@ -54,7 +56,7 @@ function WarPlayersTable({ kind, result, byId }: { kind: RecordKind; result: War
   </table></div>;
 }
 
-export function WarResults({ kind = "war", members, admin, notify }: { kind?: RecordKind; members: Member[]; admin: boolean; notify: (message: string, error?: boolean) => void }) {
+export function WarResults({ kind = "war", members, meId, admin, notify }: { kind?: RecordKind; members: Member[]; meId?: string; admin: boolean; notify: (message: string, error?: boolean) => void }) {
   const t = useT();
   const words = TEXT[kind];
   const { results, error, load } = useWarResults(kind);
@@ -88,8 +90,8 @@ export function WarResults({ kind = "war", members, admin, notify }: { kind?: Re
         <span className="war-bar-label">{formatWeek(result.week)}</span>
       </div>)}</div>
     </section>}
-    {kind === "vials" && results && <VialDaily results={results} byId={byId} admin={admin} />}
-    {kind === "war" && <WarDaily members={members} admin={admin} notify={notify} />}
+    {kind === "vials" && results && <VialDaily results={results} byId={byId} meId={meId} admin={admin} />}
+    {kind === "war" && <WarDaily members={members} meId={meId} admin={admin} notify={notify} />}
     {error && <div className="error-banner" role="alert">{t(error)}<button onClick={() => void load()}>{t("Retry")}</button></div>}
     {!results ? <section className="panel war-empty"><LoaderCircle size={22} className="spin" /></section>
       : !results.length ? <section className="panel war-empty"><Trophy size={30} /><p>{admin ? t(words.empty) : kind === "vials" ? t("No vial donations yet.") : t("No war results yet.")}</p></section>
@@ -106,7 +108,7 @@ export function WarResults({ kind = "war", members, admin, notify }: { kind?: Re
             </header>
             {result.points.length > 0 && <details className="war-members" open={index === 0}>
               <summary>{t("{count} players", { count: result.points.length })}</summary>
-              <WarPlayersTable kind={kind} result={result} byId={byId} />
+              <WarPlayersTable kind={kind} result={result} byId={byId} meId={meId} />
             </details>}
             <footer>
               {result.imageIds.length > 0 && <div className="war-thumbs">{result.imageIds.map((id, n) => <a key={id} href={`/api/war-results/images/${id}`} target="_blank" rel="noreferrer">
@@ -143,13 +145,13 @@ export function WarTotalsHistory({ kind = "war" }: { kind?: RecordKind }) {
   return <section className="panel war-history">
     <div className="table-section-heading"><div><h2>{t(words.history)}</h2><p>{t(words.historySub)}</p></div>
       <Link className="text-link" href={kind === "war" ? "/war-results" : "/vial-donations"}>{t(words.link)}</Link></div>
-    <div className={`table-scroll${kind === "vials" ? " tone-teal" : ""}`}><table className="resource-table">
-      <thead><tr>{header("war", t(words.column))}{header("total", t(words.total), { icon: kind === "vials" ? <VialIcon size={20} /> : <Trophy size={16} aria-hidden="true" /> })}{header("change", t("Change"))}{header("top", t(words.top))}</tr></thead>
+    <div className={`table-scroll${kind === "vials" ? " tone-teal" : ""}`}><table className="resource-table stack-table">
+      <thead><tr>{header("war", t(words.column))}{header("total", t(words.total), { icon: kind === "vials" ? <VialIcon size={20} /> : <Trophy size={16} aria-hidden="true" /> })}{header("change", t("Difference"))}{header("top", t(words.top))}</tr></thead>
       <tbody>{sorted.map(({ result, change, top }) => <tr key={result.id}>
-        <td><strong>{result.label || t("Week of {date}", { date: formatWeek(result.week) })}</strong></td>
-        <td>{result.clanTotal === null ? "—" : numberFormat(result.clanTotal)}</td>
-        <td className={change === null || change === 0 ? "" : change > 0 ? "movement-up" : "movement-down"}>{change === null ? "—" : `${change > 0 ? "+" : ""}${numberFormat(change)}`}</td>
-        <td>{top ? `${top.gameName} · ${numberFormat(top.points)}` : "—"}</td>
+        <td className="stack-title"><strong>{result.label || t("Week of {date}", { date: formatWeek(result.week) })}</strong></td>
+        <td data-label={t(words.total)}>{result.clanTotal === null ? "—" : numberFormat(result.clanTotal)}</td>
+        <td data-label={t("Difference")} className={change === null || change === 0 ? "" : change > 0 ? "movement-up" : "movement-down"}>{change === null ? "—" : `${change > 0 ? "+" : ""}${numberFormat(change)}`}</td>
+        <td data-label={t(words.top)} className="stack-wide">{top ? `${top.gameName} · ${numberFormat(top.points)}` : "—"}</td>
       </tr>)}</tbody>
     </table></div>
   </section>;

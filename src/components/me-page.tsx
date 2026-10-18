@@ -9,6 +9,7 @@ import { announceClanPointsUpdate } from "@/lib/clan-points";
 import { numberFormat } from "@/lib/resources";
 import { useLanguage } from "@/lib/i18n";
 import { warDay } from "@/lib/war-calendar";
+import { isCalm, setCalm } from "@/lib/calm";
 import type { DashboardResponse, DewResponse, Member } from "@/lib/types";
 import { CrownShield } from "./crown-shield";
 import { InstallSteps, saveReminders } from "./first-visit";
@@ -95,6 +96,9 @@ export function MePage({ data, notify, refresh, onSignOut, onOpenGuide }: {
     }
   }
   const [installOpen, setInstallOpen] = useState(false);
+  // The calmer look is this phone's choice, so it's read once the page is in the browser.
+  const [calm, setCalmState] = useState(false);
+  useEffect(() => setCalmState(isCalm()), []);
 
   return <div className="me-page">
     <section className="home-card me-profile" aria-label={me.username}>
@@ -117,6 +121,14 @@ export function MePage({ data, notify, refresh, onSignOut, onOpenGuide }: {
         <strong className="me-balance">{wallet ? numberFormat(wallet.balance) : "—"}</strong>
       </div>
       {wallet ? <>
+        {wallet.streak && <p className="me-streak">
+          <span aria-hidden="true">🔥</span>
+          <span>{wallet.streak.weeks > 0
+            ? <><strong>{t("{count}-week saving streak", { count: wallet.streak.weeks })}</strong><small>{wallet.streak.best > wallet.streak.weeks
+              ? t("Best: {count} weeks. Weeks away don’t break it.", { count: wallet.streak.best })
+              : t("Weeks away don’t break it.")}</small></>
+            : <><strong>{t("Save this week to start a streak")}</strong><small>{t("Weeks away don’t break it.")}</small></>}</span>
+        </p>}
         <p className="me-points-week">{t("This week")}</p>
         <ul className="me-earn">
           <li className={wallet.resourceRewardEarned ? "done" : ""}><span aria-hidden="true">{wallet.resourceRewardEarned ? <Check size={14} strokeWidth={3} /> : null}</span>{t("Save your resources")}<b>+20</b></li>
@@ -158,6 +170,10 @@ export function MePage({ data, notify, refresh, onSignOut, onOpenGuide }: {
     <section className="home-card me-settings" aria-labelledby="me-settings-title">
       <div className="home-card-head"><h2 id="me-settings-title">{t("Settings and help")}</h2></div>
       <div className="me-row me-language"><span>{t("Language")}</span><LanguagePicker /></div>
+      <button type="button" className="me-row me-calm" role="switch" aria-checked={calm} onClick={() => { setCalm(!calm); setCalmState(!calm); }}>
+        <span><strong>{t("Calmer look")}</strong><small>{t("Less glow and no animations.")}</small></span>
+        <span className={`me-switch-track${calm ? " on" : ""}`} aria-hidden="true"><i /></span>
+      </button>
       <Link className="me-row" href="/guide"><BookOpen size={19} aria-hidden="true" /><span>{t("Picture guide")}</span><ArrowRight size={16} aria-hidden="true" /></Link>
       <button type="button" className="me-row" onClick={onOpenGuide}><CircleHelp size={19} aria-hidden="true" /><span>{t("How the Hub works")}</span><ArrowRight size={16} aria-hidden="true" /></button>
       <button type="button" className="me-row" aria-expanded={installOpen} aria-controls="me-install" onClick={() => setInstallOpen(!installOpen)}><Download size={19} aria-hidden="true" /><span>{t("Add the Hub to your home screen")}</span><ChevronDown size={16} className={installOpen ? "me-open" : ""} aria-hidden="true" /></button>

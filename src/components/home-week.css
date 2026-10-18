@@ -107,6 +107,9 @@
 .home-card { min-width: 0; padding: 14px; border: 1px solid #22302c; border-radius: 18px; background: linear-gradient(180deg, #111c19, #0c1513); }
 .home-card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; margin-bottom: 11px; }
 .home-card-head > .home-fold { margin-inline-start: auto; }
+/* Long headings (German, Russian…) wrap inside the heading, so ⌄ stays beside it, not on a line of its own. */
+.home-card-head:has(> .home-fold) { flex-wrap: nowrap; }
+.home-card-head:has(> .home-fold) > h2 { flex: 0 1 auto; min-width: 0; }
 .home-card-head h2 { display: flex; align-items: center; gap: 10px; margin: 0; font-family: var(--heading); font-size: 19px; font-weight: 800; letter-spacing: -0.2px; color: var(--hw-ink); }
 .home-card-head .home-kicker { gap: 9px; font-family: var(--font); font-size: 12.5px; font-weight: 650; letter-spacing: 1.2px; text-transform: uppercase; color: var(--hw-cool); }
 .home-kicker svg { flex-shrink: 0; color: var(--hw-gold); }
@@ -328,4 +331,14 @@ button.home-link { padding: 0; border: 0; background: none; font: inherit; font-
   .home-week .home-today,
   .home-week .home-next-war { grid-column: 1 / -1; }
   .home-week:has(.home-next-war) .home-jobs-card { grid-row: span 2; }
+}
+
+/* A snipe that's on now: check in with one tap. */
+.home-snipe-live { border: 1.5px solid #e2ad3cb0; background: radial-gradient(100% 70% at 0% 0%, #3a2b0a88, transparent 62%), linear-gradient(180deg, #0f0d07, #090806); box-shadow: 0 0 22px -8px #e2ad3c88; }
+.home-snipe-live .home-kicker svg { color: var(--hw-gold); }
+.home-checkin { width: 100%; justify-content: center; min-height: 52px; border: 0; font: inherit; font-size: 16px; font-weight: 750; cursor: pointer; }
+.home-checkin em { padding: 2px 8px; border-radius: 999px; background: #1d140422; font-size: 12.5px; font-style: normal; }
+.home-snipe-live .snipe-checked-in { display: flex; align-items: center; gap: 8px; margin: 0; padding: 12px 14px; border: 1px solid #2fe46c77; border-radius: 14px; background: #0b2716; color: #6cf59a; font-weight: 700; }
+@media (min-width: 900px) {
+  .home-week .home-snipe-live { grid-column: 1 / -1; }
 }

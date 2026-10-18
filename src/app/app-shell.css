@@ -119,3 +119,7 @@ html.home-screen-app body {
 @media (prefers-reduced-motion: reduce) {
   .pull-refresh.refreshing svg { animation-duration: 2.4s; }
 }
+
+/* Offline: one calm line at the top of the page. */
+.offline-banner { display: flex; align-items: center; gap: 9px; margin: 0 0 14px; padding: 10px 14px; border: 1.5px dashed #c9d4e3; border-radius: 14px; background: #0f1a1f; color: #f2f5f8; font-size: 14.5px; line-height: 1.4; }
+.offline-banner svg { flex-shrink: 0; color: #a6acfe; }

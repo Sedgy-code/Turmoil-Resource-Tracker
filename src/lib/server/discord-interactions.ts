@@ -3,7 +3,7 @@ import { currentWeek } from "../resources";
 import { database, lockAdministration, type Database, type SqlConnection } from "./db";
 import { guildId } from "./config";
 import { iso, memberFromRow } from "./mappers";
-import { awardWeeklyDew, SNIPE_REWARD_WINDOW_MS } from "./planning";
+import { awardWeeklyDew, CHECKIN_CLOSES_AFTER_MS, CHECKIN_OPENS_BEFORE_MS, SNIPE_REWARD_WINDOW_MS } from "./planning";
 import {
   APPLY_BUTTON_ID,
   APPLY_FORM_ID,
@@ -18,9 +18,8 @@ import {
 /** The Turmoil Resource Tracker app's public key (not a secret); DISCORD_PUBLIC_KEY overrides it. */
 const DEFAULT_PUBLIC_KEY = "d88e07eec52a0316cdf5f908e6e5236bfe5ec519c80bc3beb625f8da44677709";
 const DEFAULT_APPLICATION_ID = "1556826056688934983";
-/** Check-in opens shortly before a snipe and closes a while after it starts. */
-export const CHECKIN_OPENS_BEFORE_MS = 30 * 60 * 1000;
-export const CHECKIN_CLOSES_AFTER_MS = 3 * 60 * 60 * 1000;
+/** Check-in opens shortly before a snipe and closes a while after it starts (shared with the Hub). */
+export { CHECKIN_CLOSES_AFTER_MS, CHECKIN_OPENS_BEFORE_MS };
 const EPHEMERAL = 64;
 
 /** Discord signs every request; anything not signed with the app's key is refused. */

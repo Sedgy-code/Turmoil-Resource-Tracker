@@ -23,8 +23,11 @@ import { StatusBoard } from "./status-board";
 import { MePage } from "./me-page";
 import { MyPlaces } from "./my-places";
 import { AfterSaveSheet, shouldOfferAfterSave, TermHelp } from "./first-visit";
+import { celebrate, Celebrations } from "./celebrate";
+import { forgetOfflineCopies, OfflineBanner, useOfflineSupport, useOnline } from "./offline";
 import { ASCENSIONS_UPDATED, PILLAR_LABELS } from "@/lib/ascension";
 import { useSortable } from "./sortable";
+import { useStackFold } from "./stack-fold";
 import { ClanPointsBalance } from "./clan-points-balance";
 import { PullToRefresh } from "./pull-to-refresh";
 import { ContributionCards } from "./contribution-cards";
@@ -91,6 +94,7 @@ import {
   Table2,
   Users,
   X,
+  WifiOff,
 } from "lucide-react";
 import {
   EMPTY_RESOURCES,
@@ -118,6 +122,7 @@ import type {
   AscensionsResponse,
   ClanSettings,
   DashboardResponse,
+  DewResponse,
   EntryResponse,
   Member,
   MembersResponse,
@@ -316,6 +321,7 @@ function TrackerApp({ view }: { view: View }) {
   const snapshotId = params.get("snapshot");
   const explicitWeek = params.get("week");
   const [session, setSession] = useState<SessionResponse | null>(null);
+  useOfflineSupport(session?.user?.id);
   const [sessionError, setSessionError] = useState("");
   const [week, setWeek] = useState(currentWeek());
   const [data, setData] = useState<DashboardResponse | null>(null);
@@ -449,6 +455,7 @@ function TrackerApp({ view }: { view: View }) {
   async function signOut() {
     try {
       await api("/api/auth/logout", { method: "POST" });
+      await forgetOfflineCopies();
       window.location.href = "/";
     } catch (e) {
       notify((e as Error).message, true);
@@ -558,6 +565,7 @@ function TrackerApp({ view }: { view: View }) {
     <RecognitionProvider enabled={!!sessionUserId}>
     <div className="app-shell">
       <PullToRefresh onRefresh={pullRefresh} />
+      <Celebrations />
       {mobileOpen && (
         <button
           className="sidebar-scrim"
@@ -691,6 +699,7 @@ function TrackerApp({ view }: { view: View }) {
           </div>
         </header>
         <main className="main-content">
+          <OfflineBanner />
           {sectionOf(view).tabs.length > 1 && (!sectionOf(view).admin || user.role === "ADMIN") && (
             <nav className="section-tabs" aria-label={t(sectionOf(view).label)}>
               {sectionOf(view).tabs.map((tab) => (
@@ -816,11 +825,11 @@ function TrackerApp({ view }: { view: View }) {
               refresh={refresh}
             />
           ) : data && view === "vials" ? (
-            <WarResults kind="vials" members={data.members} admin={user.role === "ADMIN"} notify={notify} />
+            <WarResults kind="vials" members={data.members} meId={user.id} admin={user.role === "ADMIN"} notify={notify} />
           ) : data && view === "ranking" ? (
             <ContributionRanking />
           ) : data && view === "warResults" ? (
-            <WarResults members={data.members} admin={user.role === "ADMIN"} notify={notify} />
+            <WarResults members={data.members} meId={user.id} admin={user.role === "ADMIN"} notify={notify} />
           ) : data && view === "tech" ? (
             <ClanTech notify={notify} />
           ) : data && view === "settings" ? (
@@ -1597,7 +1606,17 @@ function ResourceForm({
   const [notes, setNotes] = useState(entry?.notes ?? "");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
-  const [afterSave, setAfterSave] = useState(false);
+  const [afterSave, setAfterSave] = useState<"first" | "again" | null>(null);
+  // No connection when Save was pressed: the numbers wait on this phone and go when it's back online.
+  const [waiting, setWaiting] = useState(false);
+  const online = useOnline();
+  const formRef = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    if (online && waiting) {
+      setWaiting(false);
+      formRef.current?.requestSubmit();
+    }
+  }, [online, waiting]);
   const savedDraft = draftResources(savedResources);
   const savedCostDraft = draftCosts(savedCosts);
   const dirty =
@@ -1642,6 +1661,7 @@ function ResourceForm({
   async function save(event: FormEvent) {
     event.preventDefault();
     if (readOnly) return;
+    const firstSave = !entry;
     if (!completeness.complete) {
       setFormError(t("Some boxes are still empty or wrong: {fields}.", { fields: completeness.missing.map((field) => t(field)).join(", ") }));
       return;
@@ -1714,10 +1734,28 @@ function ResourceForm({
           ? t("Saved! Thank you. Clan totals are updated.")
           : t("{name}’s resources are saved.", { name: selected.username }),
       );
-      // Once per phone, right after their own save: home-screen help and Discord reminders.
-      if (selected.id === data.currentUser.id && shouldOfferAfterSave(data.currentUser)) setAfterSave(true);
+      if (selected.id === data.currentUser.id) {
+        // Once per phone, right after their own save: home-screen help and Discord reminders.
+        if (shouldOfferAfterSave(data.currentUser)) setAfterSave(firstSave ? "first" : "again");
+        else if (firstSave) celebrate(t("🎉 Your first save! Welcome to the clan’s numbers."), "first-save");
+        // Streak milestones are celebrated once each.
+        void fetch("/api/dew", { cache: "no-store" })
+          .then((response) => response.ok ? response.json() as Promise<DewResponse> : null)
+          .then((dew) => {
+            const weeks = dew?.streak?.weeks ?? 0;
+            if (dew?.resourceRewardEarned && [4, 8, 12, 26, 52].includes(weeks)) {
+              celebrate(t("🔥 {count} weeks in a row! Thanks for keeping the clan’s numbers fresh.", { count: weeks }), `streak:${weeks}:${week}`);
+            }
+          })
+          .catch(() => undefined);
+      }
     } catch (e) {
-      setFormError(t((e as Error).message));
+      if ((e as Error).message === OFFLINE_MESSAGE || !navigator.onLine) {
+        setWaiting(true);
+        setFormError(t("You’re offline. Your numbers are kept on this phone and will be saved when you’re back online."));
+        // Also as a toast: the note above the form may be off screen when Save is pressed.
+        notify(t("You’re offline. Your numbers are kept on this phone and will be saved when you’re back online."));
+      } else setFormError(t((e as Error).message));
     } finally {
       setSaving(false);
     }
@@ -1731,8 +1769,8 @@ function ResourceForm({
   };
   return (
     <>
-    {afterSave && <AfterSaveSheet member={data.currentUser} notify={notify} onClose={() => setAfterSave(false)} />}
-    <form className="resource-form" onSubmit={save} noValidate>
+    {afterSave && <AfterSaveSheet member={data.currentUser} first={afterSave === "first"} notify={notify} onClose={() => setAfterSave(null)} />}
+    <form ref={formRef} className="resource-form" onSubmit={save} noValidate>
       {data.currentUser.role === "ADMIN" && <div className="entry-profile panel">
         <Avatar member={selected} />
         <div>
@@ -1802,8 +1840,10 @@ function ResourceForm({
           {selected.id !== data.currentUser.id && <p>{t("Editing another member does not earn you Clan Points.")}</p>}
         </div>
       </div>}
-      {formError && (
-        <div className="error-banner" role="alert">
+      {formError && (waiting
+        // Waiting for a connection isn't an error: the numbers go as soon as the phone is online.
+        ? <p className="offline-banner" role="status"><WifiOff size={17} aria-hidden="true" />{formError}</p>
+        : <div className="error-banner" role="alert">
           {formError}
         </div>
       )}
@@ -2058,6 +2098,9 @@ function MembersManager({
   const setSort = (value: string) => setRosterSort(value === "alphabetical" ? { key: "member", direction: "asc" } : { key: "updated", direction: value === "newest" ? "desc" : "asc" });
   const activeCount = members.filter((member) => member.active).length;
   const openSlots = Math.max(0, capacity - activeCount);
+  // On a phone each member is one line (name and last update) until tapped; a search that finds
+  // only a few shows them in full, buttons and all.
+  const fold = useStackFold(null, filtered.length <= 3);
   return (
     <>
       <div className="management-stats">
@@ -2126,7 +2169,7 @@ function MembersManager({
           </div>
         )}
         <div className="table-scroll">
-          <table className="management-table">
+          <table className="management-table stack-table">
             <thead>
               <tr>
                 {rosterHeader("member", t("Member"))}
@@ -2140,8 +2183,8 @@ function MembersManager({
             </thead>
             <tbody>
               {filtered.map((member) => (
-                <tr key={member.id}>
-                  <td>
+                <tr key={member.id} {...fold.row(member.id, member.id === currentUser.id ? "row-me" : undefined)}>
+                  <td className="stack-title">
                     <div className="table-member">
                       <Avatar member={member} />
                       <div>
@@ -2156,7 +2199,7 @@ function MembersManager({
                       </div>
                     </div>
                   </td>
-                  <td>
+                  <td data-label={t("Role")}>
                     <span
                       className={`role-badge ${member.role === "ADMIN" ? "admin-role" : ""}`}
                     >
@@ -2164,7 +2207,7 @@ function MembersManager({
                       {member.role === "ADMIN" ? t("Admin") : t("Member")}
                     </span>
                   </td>
-                  <td>
+                  <td data-label={t("Status")}>
                     <span
                       className={`status-badge ${member.active ? "active-status" : "inactive-status"}`}
                     >
@@ -2172,10 +2215,12 @@ function MembersManager({
                       {member.active ? (member.holidayUntil ? t("Away until {date}", { date: member.holidayUntil }) : t("Active")) : t("Inactive")}
                     </span>
                   </td>
-                  <td>
+                  <td data-label={t("Strikes")}>
                     <span className={`roster-strikes ${(member.strikes ?? 0) > 0 ? "has" : ""}`}>{member.strikes ?? 0}</span>
                   </td>
                   <td
+                    className="stack-key"
+                    data-label={t("Last resource update")}
                     title={
                       member.lastUpdatedAt
                         ? new Date(member.lastUpdatedAt).toLocaleString()
@@ -2184,7 +2229,7 @@ function MembersManager({
                   >
                     <Freshness date={member.lastUpdatedAt} />
                   </td>
-                  <td>
+                  <td data-label={t("Joined")}>
                     {new Date(member.joinedAt).toLocaleDateString(language, {
                       month: "short",
                       day: "numeric",
@@ -2192,7 +2237,7 @@ function MembersManager({
                       timeZone: "UTC",
                     })}
                   </td>
-                  <td>
+                  <td className="stack-full">
                     <div className="member-actions">
                       <button className="button secondary small-button" onClick={() => setHistoryFor(member)}>
                         <History size={13} />
@@ -2225,6 +2270,7 @@ function MembersManager({
                       </button>
                     </div>
                   </td>
+                  {fold.toggleCell(member.id)}
                 </tr>
               ))}
             </tbody>

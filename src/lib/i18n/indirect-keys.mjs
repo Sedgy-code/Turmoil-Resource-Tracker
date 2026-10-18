@@ -154,4 +154,10 @@ export const INDIRECT_KEYS = [
   "This member has already saved this week.", "This member hasn’t allowed Discord reminders.", "This member is away, so they aren’t reminded.",
   "This member was already reminded this week.", "Discord reminders aren’t set up yet.",
   "Discord didn’t deliver the reminder. Try again later, or remind them in the clan chat.",
+  // Points Calculator rate boxes for leaders (src/components/war-planner.tsx RATE_FIELDS)
+  "Hammers minimum points", "Hammers maximum points", "{activity}: points each",
+  // Snipe check-in and offline messages
+  "Check-in opens 30 minutes before the snipe starts.", "Check-in for this snipe has closed.",
+  "You’re offline. Connect to the internet and try again.",
+  "Unable to calculate this estimate. Reduce the selected activities or saved resource counts.",
 ];

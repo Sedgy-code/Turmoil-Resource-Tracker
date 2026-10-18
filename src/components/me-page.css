@@ -51,6 +51,11 @@
 
 /* Clan Points */
 .me-balance { color: var(--hw-gold-bright); font-family: var(--heading); font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; text-shadow: 0 0 16px #f6c95a40; }
+.me-streak { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; padding: 10px 12px; border: 1px solid #e2ad3c66; border-radius: 13px; background: #2a200a66; }
+.me-streak > span:first-child { font-size: 22px; }
+.me-streak > span:last-child { display: grid; gap: 2px; }
+.me-streak strong { color: var(--hw-gold-bright); font-size: 15.5px; }
+.me-streak small { color: var(--hw-cool); font-size: 13px; }
 .me-points-week { margin: 0 0 6px; color: var(--hw-cool); font-size: 12.5px; font-weight: 650; letter-spacing: 0.4px; }
 .me-earn { display: grid; gap: 6px; margin: 0 0 12px; padding: 0; list-style: none; }
 .me-earn li { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 40px; padding: 6px 10px; border: 1px solid var(--hw-row-line); border-radius: 12px; background: #141d1bd9; color: var(--hw-ink); font-size: 14.5px; }
@@ -86,6 +91,12 @@
 .me-row > svg.me-open { transform: rotate(180deg); }
 [dir="rtl"] .me-row > svg.lucide-arrow-right { transform: scaleX(-1); }
 .me-language .language-picker select { min-height: 44px; font-size: 15px; }
+.me-calm > span:first-child { display: grid; gap: 2px; }
+.me-calm > .me-switch-track { flex: none; }
+.me-calm small { color: var(--hw-cool); font-size: 13px; font-weight: 500; }
+.me-switch-track.on { background: #1fc057; box-shadow: 0 0 10px #2fe46c66; }
+.me-switch-track.on i { transform: translateX(18px); background: #fff; }
+[dir="rtl"] .me-switch-track.on i { transform: translateX(-18px); }
 .me-install { padding: 2px 0 10px; }
 .me-sign-out { width: 100%; margin-top: 4px; }
 

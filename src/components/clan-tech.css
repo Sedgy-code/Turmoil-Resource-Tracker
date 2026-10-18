@@ -46,3 +46,9 @@
 .tech-confirm strong { flex: 1 1 100%; font-size: 14px; }
 .app-shell .button.danger { border: 1px solid #e04557; background: #2a0d13; color: #ffb3ba; }
 .app-shell .button.danger:hover:not(:disabled) { background: #3a1119; color: #ffd0d4; }
+
+/* Members: the whole tree folds away under "Fund next". */
+.tech-tree-fold > summary { display: flex; align-items: center; justify-content: center; min-height: 48px; margin: 4px 0 12px; border: 1px solid var(--chip-line, #2a4552); border-radius: 14px; background: var(--chip-bg, #0e1c22); color: #ffd56b; font-weight: 700; cursor: pointer; list-style: none; }
+.tech-tree-fold > summary::-webkit-details-marker { display: none; }
+.tech-tree-fold > summary::after { content: "⌄"; margin-inline-start: 8px; }
+.tech-tree-fold[open] > summary::after { content: "⌃"; }

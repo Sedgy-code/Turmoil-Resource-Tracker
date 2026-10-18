@@ -99,3 +99,6 @@
 .war-daily-table th.war-daily-clan { color: var(--gold); }
 .war-daily-table th small { display: block; margin-top: 2px; font-size: 9.5px; color: var(--gold); }
 .war-daily-table td.war-offday { color: #f19a91; font-weight: 700; }
+/* Phone cards, folded: points on other days shown under the name. */
+.war-offday-note { color: #f19a91; font-size: 12.5px; font-weight: 700; white-space: nowrap; }
+.vial-quiet-note { color: #ff9b8a; font-size: 12.5px; font-weight: 700; }
