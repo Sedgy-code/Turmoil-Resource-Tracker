@@ -2443,7 +2443,7 @@ h1 {
   .breadcrumb {
     font-size: 12px;
   }
-  .topbar-actions > .avatar {
+  .topbar-actions > .topbar-me .avatar {
     width: 28px;
     height: 28px;
   }

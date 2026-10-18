@@ -74,7 +74,6 @@
 .app-shell .bottom-bar a.active,
 .app-shell .table-tabs button.active,
 .app-shell .nav-link.active { text-shadow: 0 0 10px #e6bd5933; }
-.app-shell .home-arsenal-range strong { text-shadow: 0 0 18px #f6c95a26; }
 
 /* 7. Hold days: lavender-blue with the hand, so they never look like "done" green. */
 .app-shell .war-week-now.tone-hold,

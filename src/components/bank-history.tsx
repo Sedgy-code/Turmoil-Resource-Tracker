@@ -6,6 +6,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown, CalendarDays, LoaderCircle } from "luc
 import { RESOURCE_FIELDS, currentWeek, formatWeek, numberFormat, type ResourceKey } from "@/lib/resources";
 import { RESOURCE_ICONS } from "./resource-icons";
 import { utcDateTime } from "@/lib/war-calendar";
+import { useLanguage } from "@/lib/i18n";
 import type { BankHistoryResponse, BankHistorySnapshot } from "@/lib/types";
 
 type Props = {
@@ -23,6 +24,7 @@ async function historyApi<T>(options?: RequestInit): Promise<T> {
 }
 
 export function BankHistory({ admin, notify, refresh }: Props) {
+  const { t, language } = useLanguage();
   const [data, setData] = useState<BankHistoryResponse | null>(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -42,7 +44,7 @@ export function BankHistory({ admin, notify, refresh }: Props) {
       await historyApi({ method: "POST", body: "{}" });
       await load();
       await refresh();
-      notify("Weekly snapshot saved. Its roster and totals are now fixed.");
+      notify(t("This week is saved. Its members and totals are now fixed."));
     } catch (e) { notify((e as Error).message, true); }
     finally { setSaving(false); }
   }
@@ -62,8 +64,8 @@ export function BankHistory({ admin, notify, refresh }: Props) {
   const selectedResourceLabel = RESOURCE_FIELDS.find((item) => item.key === resource)?.label;
   const rows = view === "clan"
     ? (data ? [
-      { id: "live", name: "Current live bank", sortName: `${data.current.week}T23:59:59Z`, value: data.current.totals[resource], previous: snapshots[0]?.totals[resource] ?? null, week: data.current.week, snapshotId: undefined, capturedAt: null, automatic: false },
-      ...snapshots.map((snapshot, index) => ({ id: snapshotKey(snapshot), name: `Week of ${formatWeek(snapshot.week)}`, sortName: `${snapshot.week}T${snapshot.capturedAt}`,
+      { id: "live", name: t("Now (live)"), sortName: `${data.current.week}T23:59:59Z`, value: data.current.totals[resource], previous: snapshots[0]?.totals[resource] ?? null, week: data.current.week, snapshotId: undefined, capturedAt: null, automatic: false },
+      ...snapshots.map((snapshot, index) => ({ id: snapshotKey(snapshot), name: t("Week of {date}", { date: formatWeek(snapshot.week) }), sortName: `${snapshot.week}T${snapshot.capturedAt}`,
         snapshotId: snapshot.id, value: snapshot.totals[resource], previous: snapshots[index + 1]?.totals[resource] ?? null, week: snapshot.week, capturedAt: snapshot.capturedAt, automatic: snapshot.automatic })),
     ] : [])
     : (selected?.members ?? []).filter((item) => member === "all" || item.id === member).map((item) => ({ id: item.id, name: item.username, sortName: item.username, value: selected?.entries.find((entry) => entry.memberId === item.id)?.resources[resource] ?? 0, previous: previous ? previous.entries.find((entry) => entry.memberId === item.id)?.resources[resource] ?? 0 : null, week: selected?.week ?? currentWeek(), snapshotId: undefined, capturedAt: null, automatic: false }));
@@ -76,30 +78,33 @@ export function BankHistory({ admin, notify, refresh }: Props) {
   const selectedSnapshot = selected && "capturedAt" in selected ? selected as BankHistorySnapshot : null;
   return <section className="panel bank-history">
     <div className="table-section-heading">
-      <div><h2>Weekly bank history</h2><p>Automatic capture at Monday 00:00 UTC.</p></div>
-      {admin && <button className="button secondary" disabled={saving || !data} onClick={capture}>{saving ? <LoaderCircle size={15} className="spin" /> : <CalendarDays size={15} />}Save snapshot now</button>}
+      <div><h2>{t("Week by week")}</h2><p>{t("Saved automatically every Monday at 00:00 UTC.")}</p></div>
+      {admin && <button className="button secondary" disabled={saving || !data} onClick={capture}>{saving ? <LoaderCircle size={15} className="spin" /> : <CalendarDays size={15} />}{t("Save this week now")}</button>}
     </div>
     <div className="history-controls">
-      <label><span>Compare</span><select aria-label="History view" value={view} onChange={(event) => { setView(event.target.value); setSort({ key: "name", direction: event.target.value === "member" ? "asc" : "desc" }); }}><option value="clan">Clan totals</option><option value="member">By member</option></select></label>
-      <label><span>Resource</span><select aria-label="History resource" value={resource} onChange={(event) => setResource(event.target.value as ResourceKey)}>{RESOURCE_FIELDS.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>
-      {view === "member" && <><label><span>Bank</span><select aria-label="History bank" value={source} onChange={(event) => setSource(event.target.value)}><option value="live">Current live bank</option>{snapshots.map((snapshot) => <option key={snapshotKey(snapshot)} value={snapshotKey(snapshot)}>Week of {formatWeek(snapshot.week)} · {snapshot.automatic ? "Automatic" : "Manual"} {utcDateTime(snapshot.capturedAt, "en-GB")}</option>)}</select></label><label><span>Member</span><select aria-label="History member" value={member} onChange={(event) => setMember(event.target.value)}><option value="all">All members</option>{allMembers.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}</select></label></>}
+      <label><span>{t("Compare")}</span><select aria-label={t("Compare")} value={view} onChange={(event) => { setView(event.target.value); setSort({ key: "name", direction: event.target.value === "member" ? "asc" : "desc" }); }}><option value="clan">{t("Clan totals")}</option><option value="member">{t("By member")}</option></select></label>
+      <label><span>{t("Resource")}</span><select aria-label={t("Resource")} value={resource} onChange={(event) => setResource(event.target.value as ResourceKey)}>{RESOURCE_FIELDS.map((item) => <option key={item.key} value={item.key}>{t(item.label)}</option>)}</select></label>
+      {view === "member" && <><label><span>{t("Week")}</span><select aria-label={t("Week")} value={source} onChange={(event) => setSource(event.target.value)}><option value="live">{t("Now (live)")}</option>{snapshots.map((snapshot) => <option key={snapshotKey(snapshot)} value={snapshotKey(snapshot)}>{t("Week of {date}", { date: formatWeek(snapshot.week) })} · {snapshot.automatic ? t("Automatic") : t("Manual")} {utcDateTime(snapshot.capturedAt, language)}</option>)}</select></label><label><span>{t("Member")}</span><select aria-label={t("Member")} value={member} onChange={(event) => setMember(event.target.value)}><option value="all">{t("All members")}</option>{allMembers.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}</select></label></>}
     </div>
-    {error && <div className="error-banner" role="alert">{error}<button onClick={load}>Retry history</button></div>}
-    {!data && !error ? <div className="table-empty"><LoaderCircle size={20} className="spin" /><p>Loading weekly history…</p></div> : <>
-      <p className="history-context">{view === "member" ? <>Comparing {source === "live" ? "the live bank" : `week of ${formatWeek(selected?.week ?? currentWeek())}`} with {previous ? `week of ${formatWeek(previous.week)}` : "no earlier saved snapshot"}.{selectedSnapshot && <> Captured {utcDateTime(selectedSnapshot.capturedAt, "en-GB")}.</>}</> : "Each movement compares a bank with the next earlier saved snapshot. These are inventory changes, not points spent or earned."}</p>
+    {error && <div className="error-banner" role="alert">{t(error)}<button onClick={load}>{t("Retry")}</button></div>}
+    {!data && !error ? <div className="table-empty"><LoaderCircle size={20} className="spin" /><p>{t("Loading…")}</p></div> : <>
+      <p className="history-context">{view === "member" ? <>{source === "live"
+        ? previous ? t("Comparing now with the week of {previous}.", { previous: formatWeek(previous.week) }) : t("Comparing now with no earlier saved week.")
+        : previous ? t("Comparing the week of {date} with the week of {previous}.", { date: formatWeek(selected?.week ?? currentWeek()), previous: formatWeek(previous.week) }) : t("Comparing the week of {date} with no earlier saved week.", { date: formatWeek(selected?.week ?? currentWeek()) })}
+        {selectedSnapshot && <> {t("Saved {date}.", { date: utcDateTime(selectedSnapshot.capturedAt, language) })}</>}</> : t("Each change compares a week with the saved week before it. These are changes in what’s held, not points spent or earned.")}</p>
       <div className="table-scroll"><table className="resource-table history-table"><thead><tr>
-        <th aria-sort={sortOrder("name")}><button className="column-sort" onClick={() => changeSort("name")}>{view === "clan" ? "Week" : "Member"}{sortIcon("name")}</button></th>
-        <th aria-sort={sortOrder("value")}><button className="column-sort" onClick={() => changeSort("value")}>{(() => { const Picture = RESOURCE_ICONS[resource]; return <Picture size={18} />; })()}{selectedResourceLabel}{sortIcon("value")}</button></th>
-        <th aria-sort={sortOrder("previous")}><button className="column-sort" onClick={() => changeSort("previous")}>Previous snapshot{sortIcon("previous")}</button></th>
-        <th aria-sort={sortOrder("movement")}><button className="column-sort" onClick={() => changeSort("movement")}>Movement{sortIcon("movement")}</button></th>
-        {view === "clan" && <th>Saved week</th>}
+        <th aria-sort={sortOrder("name")}><button className="column-sort" onClick={() => changeSort("name")}>{view === "clan" ? t("Week") : t("Member")}{sortIcon("name")}</button></th>
+        <th aria-sort={sortOrder("value")}><button className="column-sort" onClick={() => changeSort("value")}>{(() => { const Picture = RESOURCE_ICONS[resource]; return <Picture size={18} />; })()}{selectedResourceLabel ? t(selectedResourceLabel) : ""}{sortIcon("value")}</button></th>
+        <th aria-sort={sortOrder("previous")}><button className="column-sort" onClick={() => changeSort("previous")}>{t("Week before")}{sortIcon("previous")}</button></th>
+        <th aria-sort={sortOrder("movement")}><button className="column-sort" onClick={() => changeSort("movement")}>{t("Change")}{sortIcon("movement")}</button></th>
+        {view === "clan" && <th>{t("Saved week")}</th>}
       </tr></thead><tbody>{rows.map((row) => {
         const movement = row.previous === null ? null : row.value - row.previous;
-        return <tr key={row.id}><td><strong>{row.name}</strong>{row.capturedAt && <small className="history-capture">{row.automatic ? "Automatic" : "Manual"} · {utcDateTime(row.capturedAt, "en-GB")}</small>}</td><td>{numberFormat(row.value)}</td><td>{row.previous === null ? "—" : numberFormat(row.previous)}</td><td className={movement === null || movement === 0 ? "" : movement > 0 ? "movement-up" : "movement-down"}>{movement === null ? "—" : `${movement > 0 ? "+" : ""}${numberFormat(movement)}`}</td>{view === "clan" && <td><Link className="text-link" href={row.id === "live" ? "/" : `/?week=${row.week}${row.snapshotId ? `&snapshot=${encodeURIComponent(row.snapshotId)}` : ""}`}>View that week</Link></td>}</tr>;
+        return <tr key={row.id}><td><strong>{row.name}</strong>{row.capturedAt && <small className="history-capture">{row.automatic ? t("Automatic") : t("Manual")} · {utcDateTime(row.capturedAt, language)}</small>}</td><td>{numberFormat(row.value)}</td><td>{row.previous === null ? "—" : numberFormat(row.previous)}</td><td className={movement === null || movement === 0 ? "" : movement > 0 ? "movement-up" : "movement-down"}>{movement === null ? "—" : `${movement > 0 ? "+" : ""}${numberFormat(movement)}`}</td>{view === "clan" && <td><Link className="text-link" href={row.id === "live" ? "/" : `/?week=${row.week}${row.snapshotId ? `&snapshot=${encodeURIComponent(row.snapshotId)}` : ""}`}>{t("View that week")}</Link></td>}</tr>;
       })}</tbody></table></div>
-      {!snapshots.length && <p className="history-context">No fixed snapshots yet. Your current bank is available above; the first snapshot will establish a comparison.</p>}
-      {view === "member" && !rows.length && <p className="table-empty">No members match this historical roster.</p>}
+      {!snapshots.length && <p className="history-context">{t("No saved weeks yet. The first one is saved on Monday at 00:00 UTC.")}</p>}
+      {view === "member" && !rows.length && <p className="table-empty">{t("No members match this view.")}</p>}
     </>}
-    <div className="table-footer"><span>Saved snapshots keep their original members and totals.</span><span>Automatic weekly captures + manual snapshots</span></div>
+    <div className="table-footer"><span>{t("Saved weeks keep the members and totals they had then.")}</span><span>{t("Saved automatically each Monday, or by a leader")}</span></div>
   </section>;
 }

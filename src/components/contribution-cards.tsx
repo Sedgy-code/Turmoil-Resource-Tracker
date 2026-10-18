@@ -18,10 +18,10 @@ import "./contribution-cards.css";
  * (Updated, Pending, Ascending) lists every match.
  */
 
-type Tone = "green" | "gold" | "violet" | "ice" | "teal" | "pink" | "peach";
+export type Tone = "green" | "gold" | "violet" | "ice" | "teal" | "pink" | "peach";
 
 /** In the order of the My Resources form; colours match each resource's picture. */
-const BOARDS: { key: ResourceKey; label: string; tone: Tone }[] = [
+export const BOARDS: { key: ResourceKey; label: string; tone: Tone }[] = [
   { key: "skillTickets", label: "Skill Tickets", tone: "green" },
   { key: "mountKeys", label: "Mount Keys", tone: "gold" },
   { key: "mountsToMerge", label: "Mounts to Merge", tone: "violet" },
@@ -58,7 +58,7 @@ export interface ContributionData {
 }
 
 /** Place in the clan for each member with more than 0 (equal amounts share a place). */
-function places(everyone: Member[], metric: Metric): Map<string, number> {
+export function places(everyone: Member[], metric: Metric): Map<string, number> {
   const scored = everyone
     .map((member) => ({ id: member.id, value: metric(member.id) }))
     .filter((item): item is { id: string; value: number } => item.value !== undefined && item.value > 0)

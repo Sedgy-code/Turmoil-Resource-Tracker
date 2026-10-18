@@ -1,12 +1,20 @@
+"use client";
 import Link from "next/link";
-export default function NotFound() {
+import { LanguageProvider, useT } from "@/lib/i18n";
+
+function NotFoundMessage() {
+  const t = useT();
   return (
     <main className="fatal-error">
-      <h1>Page not found.</h1>
-      <p>The page you’re looking for doesn’t exist.</p>
+      <h1>{t("Page not found.")}</h1>
+      <p>{t("This page doesn’t exist. Check the link, or go back Home.")}</p>
       <Link className="button primary" href="/">
-        Return to dashboard
+        {t("Home")}
       </Link>
     </main>
   );
+}
+
+export default function NotFound() {
+  return <LanguageProvider><NotFoundMessage /></LanguageProvider>;
 }

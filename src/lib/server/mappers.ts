@@ -32,6 +32,8 @@ export function memberFromRow(row: Record<string, unknown>): Member {
     ...(row.never_signed_in === true ? { neverSignedIn: true } : {}),
     // Only while the holiday is still running (it ends after the given day, UTC).
     ...(row.holiday_until && dateText(row.holiday_until) >= new Date().toISOString().slice(0, 10) ? { holidayUntil: dateText(row.holiday_until) } : {}),
+    // Said yes to a Discord message when they forget to save (leaders can nudge them once a week).
+    ...(row.reminders_allowed === true ? { remindersAllowed: true } : {}),
   };
 }
 export function entryFromRow(row: Record<string, unknown>): ResourceEntry {

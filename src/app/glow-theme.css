@@ -95,8 +95,7 @@
 .app-shell .rarity-card,
 .app-shell .management-stats article,
 .app-shell .week-card,
-.app-shell .history-block,
-.app-shell .home-more {
+.app-shell .history-block {
   border: 1.5px solid #2fe46c47;
   border-radius: 18px;
   background: radial-gradient(120% 80% at 0% 0%, #0e2a1b99 0%, transparent 55%), linear-gradient(180deg, #111c19, #0c1513);

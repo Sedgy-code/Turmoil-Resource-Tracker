@@ -20,6 +20,8 @@ export interface Member {
   holidayUntil?: string | null;
   /** Active strikes. Only included for admins. */
   strikes?: number;
+  /** Allowed a Discord message when they haven't saved (a leader's nudge, once a week). */
+  remindersAllowed?: boolean;
 }
 
 export interface ResourceEntry {
@@ -146,6 +148,9 @@ export interface MemberHistoryEvent {
   at: string;
   kind: "joined" | "left" | "returned" | "role" | "strike" | "strike-removed" | "holiday" | "holiday-ended" | "war" | "vials" | "snipe" | "saved";
   text: string;
+  /** The English sentence with {placeholders}, so the panel can show it in the reader's language. */
+  template?: string;
+  values?: Record<string, string>;
   by?: string | null;
   strikeId?: string;
 }
@@ -319,6 +324,49 @@ export interface ContributionRow {
   isNew: boolean;
   lastSavedAt: string | null;
 }
+/** Leadership jobs that are due right now, for the to-do card at the top of Home. */
+export interface LeaderTodo {
+  /** Today's daily war screenshot (Days 1–5) is missing; that day ends at endsAt. */
+  warDay: { day: number; endsAt: string } | null;
+  /** The clan days aren't picked: this war's (Days 1–5) or the next war's (Days 6–7, with members' votes). */
+  clanDays: { nextWar: boolean; voters: number } | null;
+  /** Day 7: the end-of-war screenshots are missing (they reset when the next war starts). */
+  warResults: { closesAt: string } | null;
+  /** Day 6: the vial donation list is missing (the race resets on Monday 00:00 UTC). */
+  vials: { closesAt: string } | null;
+  /** Snipes that started recently and aren't archived: check who came. */
+  attendance: { id: string; title: string; startsAt: string; checkedIn: number; saidYes: number }[];
+  /** Active members (not away) without a complete save this clan week. */
+  unsaved: number;
+  /** Members away right now. */
+  away: number;
+}
+
+export type MemberWeekState = "saved" | "notStarted" | "away";
+/** One member's week on the leaders' status board. */
+export interface StatusRow {
+  member: Member;
+  state: MemberWeekState;
+  /** When they last saved their resources (any week). */
+  savedAt: string | null;
+  /** Their vote for next war's clan days, while voting is open (null: not voted). */
+  vote: number[] | null;
+  /** Their answer to the next snipe (null: not answered, or no snipe). */
+  snipe: "yes" | "no" | null;
+  remindersAllowed: boolean;
+  /** A leader's reminder this clan week (one per member per week). */
+  nudge: { by: string; at: string } | null;
+}
+export interface StatusResponse {
+  /** The clan week (Monday 00:00 UTC). */
+  week: string;
+  /** Voting for next war's clan days is open (Days 6–7). */
+  voting: boolean;
+  /** The next snipe, whose answers are shown. */
+  snipe: { id: string; title: string; startsAt: string } | null;
+  rows: StatusRow[];
+}
+
 export interface ContributionRankingResponse {
   rows: ContributionRow[];
   weights: Partial<Record<RankingMetric, number>>;

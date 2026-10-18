@@ -5,6 +5,7 @@
   .app-shell .mobile-menu { min-width: 44px; min-height: 44px; }
   .app-shell .topbar .language-picker select { min-height: 40px; }
   .app-shell .topbar-clan-points { min-height: 44px; }
+  .app-shell .topbar-me { min-width: 44px; min-height: 44px; }
   /* Fold arrows on Home's cards */
   .app-shell .home-fold { width: 44px; height: 44px; }
   /* Section tabs, chips and switches */

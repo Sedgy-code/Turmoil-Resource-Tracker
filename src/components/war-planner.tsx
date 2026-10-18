@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { errorText } from "@/lib/error-text";
 import { Check, LoaderCircle, Settings2, Swords } from "lucide-react";
 import { numberFormat } from "@/lib/resources";
 import { DEFAULT_WAR_RATES, WAR_ACTIVITIES, estimateWar } from "@/lib/war";
@@ -98,7 +99,7 @@ export function WarPlanner({ data, notify }: Props) {
   async function saveRates(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (Object.values(rateDraft).some((value) => !Number.isFinite(value) || value < 0) || rateDraft.hammersMax < rateDraft.hammersMin) {
-      notify("Use nonnegative point rates, with the hammer maximum at least its minimum.", true);
+      notify(t("Use point rates of 0 or more, with the hammer maximum at least its minimum."), true);
       return;
     }
     setSaving(true);
@@ -107,9 +108,9 @@ export function WarPlanner({ data, notify }: Props) {
       setRates(result.settings.warRates);
       setRateDraft(result.settings.warRates);
       setEditingRates(false);
-      notify("Clan war point rates saved.");
+      notify(t("Clan war point rates saved."));
     } catch (error) {
-      notify(error instanceof Error ? error.message : "Unable to save point rates.", true);
+      notify(t(errorText(error)), true);
     } finally { setSaving(false); }
   }
 

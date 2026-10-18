@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { TermHelp } from "./first-visit";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { formatWeek, numberFormat } from "@/lib/resources";
 import { useT } from "@/lib/i18n";
@@ -55,7 +56,7 @@ export function WarDaily({ members, admin, notify }: { members: Member[]; admin:
   return <section className="panel war-card war-daily">
     <header>
       <div>
-        <h2>{t("Daily war points")}</h2>
+        <h2>{t("Daily war points")}<TermHelp term="blackMark" /></h2>
         <p>{admin ? t("Upload the clan war screenshot before each war day ends (00:00 UTC). Points on clan days count; points on other days earn a black mark.") : t("Each war day’s points, from the clan war screenshot. Points on clan days count; points on other days earn a black mark.")}</p>
       </div>
       {weeks.length > 1 && <select className="war-daily-week" aria-label={t("Week of {date}", { date: formatWeek(report.week) })} value={report.week} onChange={(event) => setWeek(event.target.value)}>

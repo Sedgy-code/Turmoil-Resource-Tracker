@@ -17,7 +17,12 @@ import { ClanTech } from "./clan-tech";
 import { MonthlyAwardsPanel } from "./monthly-awards";
 import { LeadershipSettings } from "./leadership-settings";
 import { downloadRows } from "@/lib/csv";
-import { HomeArsenal, HomeGreeting, HomeMore, HomeWeek } from "./home-week";
+import { HomeGreeting, HomeWeek } from "./home-week";
+import { LeaderTodoCard } from "./leader-todo";
+import { StatusBoard } from "./status-board";
+import { MePage } from "./me-page";
+import { MyPlaces } from "./my-places";
+import { AfterSaveSheet, shouldOfferAfterSave, TermHelp } from "./first-visit";
 import { ASCENSIONS_UPDATED, PILLAR_LABELS } from "@/lib/ascension";
 import { useSortable } from "./sortable";
 import { ClanPointsBalance } from "./clan-points-balance";
@@ -32,7 +37,7 @@ import { filterPlanningIssues, memberPlanningIssues, type PlanningIssueKey } fro
 import { MissingDataIndicator } from "./missing-data-indicator";
 import { LanguagePicker } from "./language-picker";
 import { FieldGuide, type GuidedField } from "./field-guide";
-import { LanguageProvider, useT, type Translate } from "@/lib/i18n";
+import { LanguageProvider, useLanguage, useT, type Translate } from "@/lib/i18n";
 import missingDataStyles from "./missing-data-indicator.module.css";
 import { loginHref } from "@/lib/return-path";
 import { useLeaveGuard } from "./leave-guard";
@@ -67,6 +72,7 @@ import {
   ChevronsUp,
   CircleHelp,
   CircleAlert,
+  CircleUserRound,
   Clipboard,
   Flame,
   History,
@@ -120,8 +126,8 @@ import type {
   WarRates,
 } from "@/lib/types";
 
-type View = "dashboard" | "resources" | "members" | "weeks" | "war" | "warWeek" | "snipes" | "store" | "hoarding" | "warResults" | "vials" | "ranking" | "settings" | "tech";
-const ADMIN_VIEWS: View[] = ["members", "hoarding", "ranking", "settings"];
+type View = "dashboard" | "resources" | "members" | "weeks" | "war" | "warWeek" | "snipes" | "store" | "hoarding" | "warResults" | "vials" | "ranking" | "settings" | "tech" | "clan" | "me" | "status";
+const ADMIN_VIEWS: View[] = ["members", "hoarding", "ranking", "settings", "status"];
 type Icon = ComponentType<{
   size?: number;
   className?: string;
@@ -142,6 +148,9 @@ const viewNames = {
   ranking: "Contribution Ranking",
   settings: "Settings",
   tech: "Clan Tech",
+  clan: "Clan",
+  me: "Me",
+  status: "Status board",
 };
 const VIEW_HREF: Record<View, string> = {
   dashboard: "/",
@@ -158,16 +167,23 @@ const VIEW_HREF: Record<View, string> = {
   hoarding: "/hoarding-watch",
   settings: "/settings",
   tech: "/clan-tech",
+  clan: "/clan",
+  me: "/me",
+  status: "/status",
 };
-type Section = "home" | "resources" | "war" | "records" | "store" | "leadership";
-/** The menu: each section opens its first tab; sections with more than one page show tabs. */
+type Section = "home" | "resources" | "war" | "clan" | "me" | "leadership";
+/**
+ * The menu, the same five tabs for everyone: Home, Resources, War (what's happening now), Clan (how
+ * the clan and its members are doing) and Me (your own things and settings). Each opens its first
+ * page; a section with more than one page shows tabs. Leaders also get Leadership in the side menu.
+ */
 const SECTIONS: { section: Section; label: string; short: string; icon: Icon; tabs: { view: View; label: string }[]; admin?: boolean }[] = [
   { section: "home", label: "Home", short: "Home", icon: House, tabs: [{ view: "dashboard", label: "Home" }] },
   { section: "resources", label: "My Resources", short: "Resources", icon: Backpack, tabs: [{ view: "resources", label: "My Resources" }] },
   { section: "war", label: "War", short: "War", icon: Swords, tabs: [{ view: "warWeek", label: "This Week" }, { view: "snipes", label: "Snipes" }, { view: "war", label: "Points Calculator" }] },
-  { section: "records", label: "Records", short: "Records", icon: Trophy, tabs: [{ view: "warResults", label: "War Results" }, { view: "vials", label: "Vials" }, { view: "tech", label: "Clan Tech" }, { view: "weeks", label: "Weekly History" }] },
-  { section: "store", label: "Reward Shop", short: "Shop", icon: Flame, tabs: [{ view: "store", label: "Reward Shop" }] },
-  { section: "leadership", label: "Leadership", short: "Leadership", icon: ShieldCheck, admin: true, tabs: [{ view: "members", label: "Members" }, { view: "ranking", label: "Ranking" }, { view: "hoarding", label: "Hoarding" }, { view: "settings", label: "Settings" }] },
+  { section: "clan", label: "Clan", short: "Clan", icon: Trophy, tabs: [{ view: "clan", label: "Rankings" }, { view: "warResults", label: "War Results" }, { view: "vials", label: "Vials" }, { view: "tech", label: "Clan Tech" }, { view: "weeks", label: "Weekly History" }] },
+  { section: "me", label: "Me", short: "Me", icon: CircleUserRound, tabs: [{ view: "me", label: "Me" }, { view: "store", label: "Reward Shop" }] },
+  { section: "leadership", label: "Leadership", short: "Leadership", icon: ShieldCheck, admin: true, tabs: [{ view: "status", label: "Status board" }, { view: "members", label: "Members" }, { view: "ranking", label: "Ranking" }, { view: "hoarding", label: "Hoarding" }, { view: "settings", label: "Settings" }] },
 ];
 const sectionOf = (view: View) => SECTIONS.find((entry) => entry.tabs.some((tab) => tab.view === view))!;
 /** Resources with war points on the dashboard (Clan Tech Vials, stored as "potions", are tracked only). */
@@ -403,7 +419,7 @@ function TrackerApp({ view }: { view: View }) {
     const renew = () => {
       if (document.visibilityState === "visible") {
         void checkSession();
-        if (sessionUserId && ["dashboard", "war", "warWeek", "snipes"].includes(view)) void refresh();
+        if (sessionUserId && ["dashboard", "war", "warWeek", "snipes", "clan", "me"].includes(view)) void refresh();
       }
     };
     const interval = setInterval(() => {
@@ -509,8 +525,8 @@ function TrackerApp({ view }: { view: View }) {
     try { dashboardWar = estimateWar(data.entries, warRates, WAR_ACTIVITIES.map(({ key }) => key), data.live === false ? "historical" : "current"); }
     catch (e) { warEstimateError = (e as Error).message; }
   }
-  /** The clan's totals and every member's numbers: folded away on Home, open when looking at a past week. */
-  const renderClanTotals = (current: DashboardResponse) => <>
+  /** The clan's totals and every member's numbers (on Clan, and on Home when looking at a past week). */
+  const renderClanTotals = (current: DashboardResponse, between?: ReactNode) => <>
     <div className="section-heading">
       <div>
         <h2>
@@ -535,6 +551,7 @@ function TrackerApp({ view }: { view: View }) {
     </div>
     {warEstimateError && <div className="error-banner" role="alert">{t("War estimate unavailable:")} {t(warEstimateError)}</div>}
     <ClanArsenal data={current} estimate={dashboardWar} rates={warRates} estimateError={warEstimateError} snapshotId={snapshotId} />
+    {between}
     <MemberResources data={current} week={week} admin={user.role === "ADMIN"} snapshotId={snapshotId} />
   </>;
   return (
@@ -619,13 +636,14 @@ function TrackerApp({ view }: { view: View }) {
       <div className="workspace">
         <header className="topbar">
           <div className="breadcrumb">
-            <button
+            {/* Members find everything in the five tabs and on Me; leaders keep the full menu. */}
+            {user.role === "ADMIN" && <button
               className="icon-button mobile-menu"
               aria-label={t("Open navigation")}
               onClick={() => setMobileOpen(true)}
             >
               <Menu size={22} />
-            </button>
+            </button>}
             <span>Turmoil Clan Hub</span>
             <ChevronRight size={13} />
             <strong>{t(viewNames[view])}</strong>
@@ -667,7 +685,9 @@ function TrackerApp({ view }: { view: View }) {
                 </div>
               )}
             </div>
-            <Avatar member={user} small />
+            <Link className="topbar-me" href="/me" aria-label={t("Me")} title={t("Me")}>
+              <Avatar member={user} small />
+            </Link>
           </div>
         </header>
         <main className="main-content">
@@ -693,6 +713,9 @@ function TrackerApp({ view }: { view: View }) {
                     : view === "members"
                       ? "Manage who can use the tracker."
                       : view === "tech" ? "The clan’s tech tree and what we spend vials on next."
+                      : view === "clan" ? "How the clan is doing, and where you stand."
+                      : view === "me" ? "Your numbers, your Clan Points and your settings."
+                      : view === "status" ? "Every member’s week at a glance. Remind the ones who haven’t saved."
                       : view === "settings" ? "Clan Hub settings for leadership."
                       : view === "hoarding" ? "Spot members who hold a lot but don’t spend it. Only admins can see this page."
                       : view === "warResults" ? "Final clan war scores, read from the end-of-war screenshots."
@@ -768,13 +791,21 @@ function TrackerApp({ view }: { view: View }) {
                 {renderClanTotals(data)}
               </>
             ) : (
-              <>
-                <HomeWeek data={data} notify={notify} between={<HomeArsenal minimum={warEstimateError ? null : dashboardWar?.minimum ?? 0} maximum={warEstimateError ? null : dashboardWar?.maximum ?? 0} />} />
+              <HomeWeek data={data} notify={notify} leader={user.role === "ADMIN" ? <LeaderTodoCard /> : undefined} />
+            )
+          ) : data && dataMatches && view === "clan" ? (
+            <>
+              {/* Your places pinned on top, then the clan's shared progress, last month's stars and every board. */}
+              <MyPlaces data={data} compact action={<Link className="home-link" href="/me">{t("Me")}<ArrowRight size={15} aria-hidden="true" /></Link>} />
+              <div className="clan-totals">{renderClanTotals(data, <>
                 <MonthlyAwardsPanel members={data.members} />
                 <SnipeChampions members={data.members} />
-                <HomeMore>{renderClanTotals(data)}</HomeMore>
-              </>
-            )
+              </>)}</div>
+            </>
+          ) : data && dataMatches && view === "me" ? (
+            <MePage data={data} notify={notify} refresh={refresh} onSignOut={() => void signOut()} onOpenGuide={() => setHelp(true)} />
+          ) : data && view === "status" ? (
+            <StatusBoard notify={notify} />
           ) : data && dataMatches && view === "resources" ? (
             <ResourceForm
               data={data}
@@ -1011,7 +1042,7 @@ function ClanArsenal({ data, estimate, rates, estimateError, snapshotId }: { dat
     <>
       <article className="stat-card arsenal-summary arsenal-total">
         <div className="arsenal-summary-head">
-          <div className="stat-label"><span className="resource-icon gold"><Sparkles size={19} /></span><span>{t("Total Potential War Points")}</span></div>
+          <div className="stat-label"><span className="resource-icon gold"><Sparkles size={19} /></span><span>{t("Total Potential War Points")}</span><TermHelp term="warPoints" /></div>
           <p className="arsenal-summary-copy">{t("The clan’s combined war estimate")}</p>
         </div>
         <WarPointRange minimum={estimateError ? null : estimate?.minimum ?? 0} maximum={estimateError ? null : estimate?.maximum ?? 0} />
@@ -1566,6 +1597,7 @@ function ResourceForm({
   const [notes, setNotes] = useState(entry?.notes ?? "");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+  const [afterSave, setAfterSave] = useState(false);
   const savedDraft = draftResources(savedResources);
   const savedCostDraft = draftCosts(savedCosts);
   const dirty =
@@ -1682,6 +1714,8 @@ function ResourceForm({
           ? t("Saved! Thank you. Clan totals are updated.")
           : t("{name}’s resources are saved.", { name: selected.username }),
       );
+      // Once per phone, right after their own save: home-screen help and Discord reminders.
+      if (selected.id === data.currentUser.id && shouldOfferAfterSave(data.currentUser)) setAfterSave(true);
     } catch (e) {
       setFormError(t((e as Error).message));
     } finally {
@@ -1696,6 +1730,8 @@ function ResourceForm({
     }));
   };
   return (
+    <>
+    {afterSave && <AfterSaveSheet member={data.currentUser} notify={notify} onClose={() => setAfterSave(false)} />}
     <form className="resource-form" onSubmit={save} noValidate>
       {data.currentUser.role === "ADMIN" && <div className="entry-profile panel">
         <Avatar member={selected} />
@@ -1906,6 +1942,7 @@ function ResourceForm({
         </button>
       </div>}
     </form>
+    </>
   );
 }
 
@@ -1918,7 +1955,7 @@ function MembersManager({
   notify: (message: string, error?: boolean) => void;
   refresh: () => Promise<void>;
 }) {
-  const t = useT();
+  const { t, language } = useLanguage();
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -1952,7 +1989,7 @@ function MembersManager({
     event.preventDefault();
     const value = Number(capacityDraft);
     if (!Number.isInteger(value) || value < 1 || value > 1000) {
-      notify("Clan capacity must be a whole number between 1 and 1,000.", true);
+      notify(t("Clan capacity must be a whole number between 1 and 1,000."), true);
       return;
     }
     setCapacitySaving(true);
@@ -1960,7 +1997,7 @@ function MembersManager({
       const result = await api<{ settings: ClanSettings }>("/api/settings", { method: "PATCH", body: JSON.stringify({ capacity: value }) });
       setCapacity(result.settings.capacity);
       await refresh();
-      notify("Clan capacity saved.");
+      notify(t("Clan capacity saved."));
     } catch (e) { notify((e as Error).message, true); }
     finally { setCapacitySaving(false); }
   }
@@ -1974,14 +2011,14 @@ function MembersManager({
     if (
       patch.active === false &&
       !window.confirm(
-        `Deactivate ${member.username}? Their saved entries will be retained, but they will lose access and be excluded from clan totals.`,
+        t("Deactivate {name}? Their saved numbers are kept, but they lose access and leave the clan totals.", { name: member.username }),
       )
     )
       return;
     if (
       patch.role &&
       !window.confirm(
-        `${patch.role === "ADMIN" ? "Promote" : "Demote"} ${member.username} to ${patch.role.toLowerCase()}?`,
+        patch.role === "ADMIN" ? t("Make {name} an admin?", { name: member.username }) : t("Make {name} a member instead of an admin?", { name: member.username }),
       )
     )
       return;
@@ -1993,7 +2030,7 @@ function MembersManager({
       });
       await load();
       await refresh();
-      notify("Member updated successfully.");
+      notify(t("Member updated."));
       if (member.id === currentUser.id) window.location.reload();
     } catch (e) {
       notify((e as Error).message, true);
@@ -2027,44 +2064,41 @@ function MembersManager({
         <article className="panel">
           <Users size={21} />
           <strong>{activeCount}/{capacity}</strong>
-          <span>Active registered members</span>
+          <span>{t("Active registered members")}</span>
         </article>
         <article className="panel">
           <ShieldCheck size={21} />
           <strong>
             {members.filter((m) => m.active && m.role === "ADMIN").length}
           </strong>
-          <span>Clan admins</span>
+          <span>{t("Clan admins")}</span>
         </article>
         <article className="panel">
           <Swords size={21} />
           <strong>{openSlots}</strong>
-          <span>{activeCount > capacity ? `${activeCount - capacity} above capacity` : "Open clan slots"}</span>
+          <span>{activeCount > capacity ? t("{count} above capacity", { count: activeCount - capacity }) : t("Open clan slots")}</span>
         </article>
       </div>
       <form className="capacity-form panel" onSubmit={saveCapacity}>
-        <div><h2>Clan capacity</h2><p>Counts reflect active members registered on this tracker.</p></div>
-        <label><span>Member capacity</span><input aria-label="Member capacity" type="number" min="1" max="1000" step="1" value={capacityDraft} onChange={(event) => setCapacityDraft(event.target.value)} /></label>
-        <button className="button secondary" type="submit" disabled={capacitySaving}>{capacitySaving ? "Saving…" : "Save capacity"}</button>
+        <div><h2>{t("Clan capacity")}</h2><p>{t("Counts reflect active members registered on this tracker.")}</p></div>
+        <label><span>{t("Member capacity")}</span><input aria-label={t("Member capacity")} type="number" min="1" max="1000" step="1" value={capacityDraft} onChange={(event) => setCapacityDraft(event.target.value)} /></label>
+        <button className="button secondary" type="submit" disabled={capacitySaving}>{capacitySaving ? t("Saving…") : t("Save capacity")}</button>
       </form>
       <div className="entry-notice">
         <ShieldCheck size={17} />
-        <span>
-          Members join through Discord. Deactivating a member preserves their
-          history and removes them from clan totals.
-        </span>
+        <span>{t("Members join through Discord. Deactivating a member keeps their history and removes them from the clan totals.")}</span>
       </div>
       <section className="panel">
         <div className="table-section-heading">
           <div>
-            <h2>The Turmoil roster</h2>
-            <p>Manage access and admin permissions.</p>
+            <h2>{t("The Turmoil roster")}</h2>
+            <p>{t("Manage access and admin permissions.")}</p>
           </div>
           <label className="search-input">
             <Search size={16} />
             <input
-              aria-label="Search roster"
-              placeholder="Search members…"
+              aria-label={t("Search members…")}
+              placeholder={t("Search members…")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -2077,33 +2111,31 @@ function MembersManager({
               className={filter === item ? "active" : ""}
               onClick={() => setFilter(item)}
             >
-              {item === "all"
-                ? "All members"
-                : `${item[0].toUpperCase()}${item.slice(1)} members`}
+              {item === "all" ? t("All members") : item === "active" ? t("Active members") : t("Inactive members")}
             </button>
           ))}
         </div>
         <div className="roster-tools">
-          <label><span>Sort</span><select aria-label="Sort roster" value={sort} onChange={(event) => setSort(event.target.value)}>{sort === "" && <option value="">By column</option>}<option value="oldest">Oldest update first</option><option value="newest">Newest update first</option><option value="alphabetical">A–Z</option></select></label>
-          <div className="freshness-legend"><span className="freshness fresh"><i />Under 24h</span><span className="freshness aging"><i />1–7 days</span><span className="freshness stale"><i />A week or never</span></div>
+          <label><span>{t("Sort")}</span><select aria-label={t("Sort")} value={sort} onChange={(event) => setSort(event.target.value)}>{sort === "" && <option value="">{t("By column")}</option>}<option value="oldest">{t("Oldest update first")}</option><option value="newest">{t("Newest update first")}</option><option value="alphabetical">A–Z</option></select></label>
+          <div className="freshness-legend"><span className="freshness fresh"><i />{t("Under 24h")}</span><span className="freshness aging"><i />{t("1–7 days")}</span><span className="freshness stale"><i />{t("A week or never")}</span></div>
         </div>
         {error && (
           <div className="error-banner" role="alert">
-            {error}
-            <button onClick={load}>Retry</button>
+            {t(error)}
+            <button onClick={load}>{t("Retry")}</button>
           </div>
         )}
         <div className="table-scroll">
           <table className="management-table">
             <thead>
               <tr>
-                {rosterHeader("member", "Member")}
-                {rosterHeader("role", "Role")}
-                {rosterHeader("status", "Status")}
-                {rosterHeader("strikes", "Strikes")}
-                {rosterHeader("updated", "Last resource update")}
-                {rosterHeader("joined", "Joined")}
-                <th>Actions</th>
+                {rosterHeader("member", t("Member"))}
+                {rosterHeader("role", t("Role"))}
+                {rosterHeader("status", t("Status"))}
+                {rosterHeader("strikes", t("Strikes"))}
+                {rosterHeader("updated", t("Last resource update"))}
+                {rosterHeader("joined", t("Joined"))}
+                <th>{t("Actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -2120,7 +2152,7 @@ function MembersManager({
                           )}
                         </strong>
                         <MemberTitle member={member} />
-                        <span>Discord · {member.discordId}{member.neverSignedIn ? " · Never signed in" : ""}</span>
+                        <span>Discord · {member.discordId}{member.neverSignedIn ? ` · ${t("Never signed in")}` : ""}</span>
                       </div>
                     </div>
                   </td>
@@ -2129,7 +2161,7 @@ function MembersManager({
                       className={`role-badge ${member.role === "ADMIN" ? "admin-role" : ""}`}
                     >
                       {member.role === "ADMIN" && <ShieldCheck size={12} />}
-                      {member.role === "ADMIN" ? "Admin" : "Member"}
+                      {member.role === "ADMIN" ? t("Admin") : t("Member")}
                     </span>
                   </td>
                   <td>
@@ -2137,7 +2169,7 @@ function MembersManager({
                       className={`status-badge ${member.active ? "active-status" : "inactive-status"}`}
                     >
                       <i />
-                      {member.active ? (member.holidayUntil ? `Holiday until ${member.holidayUntil}` : "Active") : "Inactive"}
+                      {member.active ? (member.holidayUntil ? t("Away until {date}", { date: member.holidayUntil }) : t("Active")) : t("Inactive")}
                     </span>
                   </td>
                   <td>
@@ -2153,7 +2185,7 @@ function MembersManager({
                     <Freshness date={member.lastUpdatedAt} />
                   </td>
                   <td>
-                    {new Date(member.joinedAt).toLocaleDateString("en-US", {
+                    {new Date(member.joinedAt).toLocaleDateString(language, {
                       month: "short",
                       day: "numeric",
                       year: "numeric",
@@ -2164,7 +2196,7 @@ function MembersManager({
                     <div className="member-actions">
                       <button className="button secondary small-button" onClick={() => setHistoryFor(member)}>
                         <History size={13} />
-                        Holiday, strikes & history
+                        {t("Holiday, strikes & history")}
                       </button>
                       <button
                         className="button secondary small-button"
@@ -2180,7 +2212,7 @@ function MembersManager({
                         ) : (
                           <ShieldCheck size={13} />
                         )}
-                        {member.role === "ADMIN" ? "Demote" : "Make admin"}
+                        {member.role === "ADMIN" ? t("Remove admin") : t("Make admin")}
                       </button>
                       <button
                         className={`button subtle small-button ${member.active ? "danger-text" : ""}`}
@@ -2189,7 +2221,7 @@ function MembersManager({
                           change(member, { active: !member.active })
                         }
                       >
-                        {member.active ? "Deactivate" : "Reactivate"}
+                        {member.active ? t("Deactivate") : t("Reactivate")}
                       </button>
                     </div>
                   </td>
@@ -2200,7 +2232,7 @@ function MembersManager({
           {loading && (
             <div className="table-empty">
               <LoaderCircle className="spin" size={20} />
-              <p>Loading members…</p>
+              <p>{t("Loading members…")}</p>
             </div>
           )}
           {!loading && !filtered.length && (
@@ -2211,12 +2243,12 @@ function MembersManager({
           )}
         </div>
         <div className="table-footer">
-          <span>{filtered.length} members</span>
+          <span>{t("{count} members", { count: filtered.length })}</span>
           <button className="button subtle small-button" onClick={() => downloadRows(`turmoil-members-${new Date().toISOString().slice(0, 10)}.csv`, [
             ["Member", "Discord ID", "Role", "Status", "Holiday until", "Strikes", "Last resource update", "Joined", "Never signed in"],
             ...filtered.map((member) => [member.username, member.discordId, member.role, member.active ? "Active" : "Inactive", member.holidayUntil ?? "", String(member.strikes ?? 0), member.lastUpdatedAt ?? "", member.joinedAt, member.neverSignedIn ? "Yes" : ""]),
-          ])}><ArrowDownToLine size={13} />Export CSV</button>
-          <span>At least one active admin is always required</span>
+          ])}><ArrowDownToLine size={13} />{t("Export CSV")}</button>
+          <span>{t("At least one active admin is always required")}</span>
         </div>
       </section>
       {historyFor && <MemberHistoryPanel member={historyFor} notify={notify} onClose={() => setHistoryFor(null)} onChanged={() => { void load(); void refresh(); }} />}
@@ -2237,6 +2269,7 @@ function Weeks({
   notify: (message: string, error?: boolean) => void;
   refresh: () => Promise<void>;
 }) {
+  const t = useT();
   const weeks = [...new Set([currentWeek(), week, ...data.weeks])]
     .sort()
     .reverse();
@@ -2245,13 +2278,10 @@ function Weeks({
       <section className="archive-intro panel">
         <CalendarDays size={28} />
         <div>
-          <h2>Weekly history</h2>
-          <p>
-            Weekly bank snapshots keep resource totals fixed, including the roster
-            at capture time. Compare movements or revisit a saved dashboard.
-          </p>
+          <h2>{t("Weekly history")}</h2>
+          <p>{t("Every Monday at 00:00 UTC the clan’s totals are saved, with who was in the clan then. Look back at any week here; saved weeks can’t be changed.")}</p>
         </div>
-        <span className="count-badge">{data.weeks.length} saved weeks</span>
+        <span className="count-badge">{t("{count} saved weeks", { count: data.weeks.length })}</span>
       </section>
       <WarTotalsHistory />
       <WarTotalsHistory kind="vials" />
@@ -2269,11 +2299,11 @@ function Weeks({
               {item === currentWeek() && (
                 <span className="status-badge active-status">
                   <i />
-                  Current week
+                  {t("Current week")}
                 </span>
               )}
             </div>
-            <h2>Week of {formatWeek(item)}</h2>
+            <h2>{t("Week of {date}", { date: formatWeek(item) })}</h2>
             <p>
               {formatWeek(item)} – {formatWeek(shiftDate(item, 6))}
             </p>
@@ -2281,22 +2311,22 @@ function Weeks({
               <div className="week-card-stats">
                 <span>
                   <Users size={15} />
-                  {data.stats.submittedMembers} contributions
+                  {t("{count} members saved", { count: data.stats.submittedMembers })}
                 </span>
                 <span>
-                  {numberFormat(data.totals.skillTickets)} skill tickets
+                  {t("{count} skill tickets", { count: numberFormat(data.totals.skillTickets) })}
                 </span>
               </div>
             )}
             <div className="week-card-actions">
               <Link className="button secondary" href={`/?week=${item}`}>
-                View dashboard
+                {t("View that week")}
                 <ArrowUpRight size={15} />
               </Link>
               {item !== week && (
                 <button
                   className="icon-button"
-                  aria-label={`Select week of ${item}`}
+                  aria-label={t("Select week of {date}", { date: formatWeek(item) })}
                   onClick={() => selectWeek(item)}
                 >
                   <ChevronRight size={18} />
@@ -2305,7 +2335,7 @@ function Weeks({
               {item === week && (
                 <span className="selected-label">
                   <Check size={14} />
-                  Selected
+                  {t("Selected")}
                 </span>
               )}
             </div>
@@ -2314,10 +2344,7 @@ function Weeks({
       </div>
       <div className="archive-note">
         <CircleHelp size={16} />
-        <span>
-          Weeks begin Monday 00:00 UTC. Historical views are read-only; live
-          banks carry forward.
-        </span>
+        <span>{t("Weeks begin Monday 00:00 UTC. Saved weeks are read-only; everyone’s current numbers carry forward.")}</span>
       </div>
     </>
   );
@@ -2328,10 +2355,11 @@ function shiftDate(week: string, days: number) {
   return date.toISOString().slice(0, 10);
 }
 function DashboardSkeleton() {
+  const t = useT();
   return (
     <div
       className="dashboard-skeleton"
-      aria-label="Loading resources"
+      aria-label={t("Loading…")}
       aria-busy="true"
     >
       <div className="skeleton skeleton-hero" />

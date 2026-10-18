@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { errorText } from "@/lib/error-text";
 import { Check, ChevronDown, Coins, LoaderCircle, Sparkles } from "lucide-react";
 import { COSMETIC_CATEGORIES, COSMETIC_CATEGORY_LABELS, REWARD_TIERS } from "@/lib/dew";
 import { announceClanPointsUpdate } from "@/lib/clan-points";
@@ -45,6 +46,8 @@ function RewardPreview({ item, member }: { item: DewItem; member: Member }) {
 export function DewStore({ data, notify, refresh }: Props) {
   const { t, language } = useLanguage();
   const categoryLabel = (slot: CosmeticCategory) => t(COSMETIC_CATEGORY_LABELS[slot]);
+  /** Reward names are translated too (the catalogue keeps the English names). */
+  const itemName = (item: DewItem) => t(item.name);
   const [wallet, setWallet] = useState<DewResponse | null>(null);
   const [loadError, setLoadError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -105,8 +108,8 @@ export function DewStore({ data, notify, refresh }: Props) {
       setWallet(updated);
       announceClanPointsUpdate(data.currentUser.id, updated.balance);
       setLoadError("");
-      notify(t("{name} unlocked. Equip it to show it on your profile.", { name: item.name }));
-    } catch (error) { notify(error instanceof Error ? error.message : "Unable to unlock this reward.", true); }
+      notify(t("{name} unlocked. Equip it to show it on your profile.", { name: itemName(item) }));
+    } catch (error) { notify(t(errorText(error)), true); }
     finally { mutationPending.current = false; setBusy(null); }
   }
 
@@ -121,8 +124,8 @@ export function DewStore({ data, notify, refresh }: Props) {
       announceClanPointsUpdate(data.currentUser.id, updated.balance);
       setLoadError("");
       await refresh();
-      notify(remove ? t("{name} removed.", { name: categoryLabel(item.category) }) : t("{name} equipped.", { name: item.name }));
-    } catch (error) { notify(error instanceof Error ? error.message : "Unable to change your reward.", true); }
+      notify(remove ? t("{name} removed.", { name: categoryLabel(item.category) }) : t("{name} equipped.", { name: itemName(item) }));
+    } catch (error) { notify(t(errorText(error)), true); }
     finally { mutationPending.current = false; setBusy(null); }
   }
 
@@ -142,22 +145,22 @@ export function DewStore({ data, notify, refresh }: Props) {
     const equipped = wallet.equippedCosmetics[item.category] === item.id;
     const affordable = wallet.balance >= item.cost;
     return (
-      <article className={`planning-store-card dew-item${equipped ? " equipped" : ""}`} key={item.id} aria-label={item.name}>
+      <article className={`planning-store-card dew-item${equipped ? " equipped" : ""}`} key={item.id} aria-label={itemName(item)}>
         <span className="planning-reward-category">{categoryLabel(item.category)}</span>
         <RewardPreview item={item} member={data.currentUser} />
-        <h3>{item.name}</h3>
+        <h3>{itemName(item)}</h3>
         <p className="planning-store-price"><Coins size={13} aria-hidden="true" />{t("{count} Clan Points", { count: numberFormat(item.cost) })}</p>
         <div className="planning-reward-ownership">
           {owned ? <span><Check size={12} aria-hidden="true" />{t(equipped ? "Equipped" : "Owned")}</span> : <span>{affordable ? t("Ready to unlock") : t("{count} more points needed", { count: numberFormat(item.cost - wallet.balance) })}</span>}
         </div>
-        {owned ? <div className="planning-reward-progress planning-reward-progress-owned" aria-hidden="true" /> : <div className="planning-reward-progress" role="progressbar" aria-label={`Progress toward ${item.name}`} aria-valuemin={0} aria-valuemax={item.cost} aria-valuenow={Math.min(wallet.balance, item.cost)}><span style={{ width: `${Math.min(100, wallet.balance / item.cost * 100)}%` }} /></div>}
+        {owned ? <div className="planning-reward-progress planning-reward-progress-owned" aria-hidden="true" /> : <div className="planning-reward-progress" role="progressbar" aria-label={t("Progress toward {name}", { name: itemName(item) })} aria-valuemin={0} aria-valuemax={item.cost} aria-valuenow={Math.min(wallet.balance, item.cost)}><span style={{ width: `${Math.min(100, wallet.balance / item.cost * 100)}%` }} /></div>}
         {owned ? (
           <button className={`planning-button${equipped ? " planning-button-subtle" : ""}`} onClick={() => void equip(item, equipped)} disabled={busy !== null}>
             {busy === item.id && <LoaderCircle size={15} className="spin" />}{equipped ? t("Remove") : t("Equip")}
           </button>
         ) : confirming === item.id ? (
-          <div className="dew-confirm" role="group" aria-label={t("Spend {count} points on {name}?", { count: numberFormat(item.cost), name: item.name })}>
-            <strong>{t("Spend {count} points on {name}?", { count: numberFormat(item.cost), name: item.name })}</strong>
+          <div className="dew-confirm" role="group" aria-label={t("Spend {count} points on {name}?", { count: numberFormat(item.cost), name: itemName(item) })}>
+            <strong>{t("Spend {count} points on {name}?", { count: numberFormat(item.cost), name: itemName(item) })}</strong>
             <button className="planning-button" onClick={() => { setConfirming(null); void purchase(item); }} disabled={busy !== null}>{t("Yes, unlock")}</button>
             <button className="planning-button planning-button-subtle" onClick={() => setConfirming(null)} disabled={busy !== null}>{t("Cancel")}</button>
           </div>
@@ -175,9 +178,9 @@ export function DewStore({ data, notify, refresh }: Props) {
       <section className="planning-panel planning-dew-intro">
         <div className="planning-heading">
           <div><h2>{t("Reward Shop")}</h2><p>{t("Earn up to 40 Clan Points each week. Spend them on a badge, title, name colour and avatar frame.")}</p></div>
-          <div className="planning-dew-balance" aria-label={`${wallet.balance} Clan Points available`}><Coins size={20} aria-hidden="true" /><strong>{numberFormat(wallet.balance)}</strong><span>{t("Clan Points")}</span></div>
+          <div className="planning-dew-balance" aria-label={t("{count} Clan Points", { count: numberFormat(wallet.balance) })}><Coins size={20} aria-hidden="true" /><strong>{numberFormat(wallet.balance)}</strong><span>{t("Clan Points")}</span></div>
         </div>
-        <div className="planning-weekly-rewards" aria-label="This week’s Clan Point rewards">
+        <div className="planning-weekly-rewards" aria-label={t("This week’s Clan Point rewards")}>
           <div className={`planning-weekly-reward${wallet.resourceRewardEarned ? " earned" : ""}`}>
             {wallet.resourceRewardEarned ? <Check size={19} /> : <Sparkles size={19} />}
             <div><strong>{t("Save your resources")} <span>{t("+20 points")}</span></strong><p>{t(wallet.resourceRewardEarned ? "Done for this week. Thank you!" : "Fill in every box in My Resources and press Save this week.")}</p></div>
@@ -197,15 +200,15 @@ export function DewStore({ data, notify, refresh }: Props) {
         <p className="planning-footnote">{t("Each reward can be earned once a week. Next reset: {date}, in {time}.", { date: utcDateTime(nextRewardReset(wallet.rewardWeek).toISOString(), language), time: countdown(nextRewardReset(wallet.rewardWeek)) })}</p>
       </section>
 
-      <section className="planning-panel planning-equipped-profile" aria-label="Your equipped rewards">
+      <section className="planning-panel planning-equipped-profile" aria-label={t("Your equipped rewards")}>
         <div className="planning-profile-preview"><MemberAvatar member={equippedMember} /><div><span className="planning-eyebrow">{t("Your profile")}</span><MemberName member={equippedMember} /><MemberTitle member={equippedMember} /></div></div>
-        <dl className="planning-equipped-slots">{COSMETIC_CATEGORIES.map((slot) => <div key={slot}><dt>{categoryLabel(slot)}</dt><dd>{wallet.items.find((item) => item.id === wallet.equippedCosmetics[slot])?.name ?? t("None equipped")}</dd></div>)}</dl>
+        <dl className="planning-equipped-slots">{COSMETIC_CATEGORIES.map((slot) => <div key={slot}><dt>{categoryLabel(slot)}</dt><dd>{(() => { const item = wallet.items.find((candidate) => candidate.id === wallet.equippedCosmetics[slot]); return item ? itemName(item) : t("None equipped"); })()}</dd></div>)}</dl>
         <p>{t("You can wear one reward from each type at the same time.")}</p>
       </section>
 
       {loadError && <div className="planning-notice planning-shop-load-error" role="alert">{t(loadError)}<button className="planning-button planning-button-subtle" onClick={() => void load()}>{t("Refresh")}</button></div>}
 
-      <div className="planning-tabs planning-shop-filters" aria-label="Reward categories">
+      <div className="planning-tabs planning-shop-filters" aria-label={t("Reward categories")}>
         <button aria-pressed={category === "all"} onClick={() => setCategory("all")}>{t("All rewards")}</button>
         {COSMETIC_CATEGORIES.map((slot) => <button key={slot} aria-pressed={category === slot} onClick={() => setCategory(slot)}>{categoryLabel(slot)}</button>)}
       </div>
@@ -213,7 +216,7 @@ export function DewStore({ data, notify, refresh }: Props) {
       {REWARD_TIERS.map((price, index) => {
         const items = filtered(wallet.items.filter((item) => !item.legacy && item.cost === price));
         return items.length ? (
-          <section className="planning-reward-tier" key={price} aria-label={`Tier ${index + 1}: ${price} Clan Points each`}>
+          <section className="planning-reward-tier" key={price} aria-label={t("Tier {number}: {count} Clan Points each", { number: index + 1, count: numberFormat(price) })}>
             <div className="planning-tier-heading"><div><span className="planning-eyebrow">{t("Tier {number}", { number: index + 1 })}</span><h2>{t("{count} Clan Points", { count: numberFormat(price) })} <small>{t("per item")}</small></h2></div><span>{category === "all" ? t("Four ways to make your profile yours") : categoryLabel(category)}</span></div>
             <div className="planning-store-grid">{items.map(rewardCard)}</div>
           </section>
@@ -221,7 +224,7 @@ export function DewStore({ data, notify, refresh }: Props) {
       })}
 
       {/* The original collection folds away: it's older, cheaper badges most members already know. */}
-      {legacyItems.length > 0 && <details className="planning-reward-tier planning-legacy-rewards" aria-label="Original rewards"><summary className="planning-tier-heading"><div><span className="planning-eyebrow">{t("The original collection")}</span><h2>{t("Classic badges")}</h2></div><span>{t("Your earlier purchases are still yours")}</span><ChevronDown size={18} className="planning-legacy-chevron" aria-hidden="true" /></summary><div className="planning-store-grid">{legacyItems.map(rewardCard)}</div></details>}
+      {legacyItems.length > 0 && <details className="planning-reward-tier planning-legacy-rewards" aria-label={t("The original collection")}><summary className="planning-tier-heading"><div><span className="planning-eyebrow">{t("The original collection")}</span><h2>{t("Classic badges")}</h2></div><span>{t("Your earlier purchases are still yours")}</span><ChevronDown size={18} className="planning-legacy-chevron" aria-hidden="true" /></summary><div className="planning-store-grid">{legacyItems.map(rewardCard)}</div></details>}
     </div>
   );
 }

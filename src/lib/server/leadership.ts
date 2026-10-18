@@ -5,7 +5,7 @@ import { database, lockAdministration, type Database, type SqlConnection } from 
 import { ApiError } from "./errors";
 import { iso, memberFromRow } from "./mappers";
 
-async function requireAdmin(connection: SqlConnection, actorId: string): Promise<Member> {
+export async function requireAdmin(connection: SqlConnection, actorId: string): Promise<Member> {
   const rows = await connection.query("SELECT * FROM app_members WHERE id = $1 AND active = TRUE", [actorId]);
   if (!rows.length || rows[0].role !== "ADMIN") throw new ApiError(403, "Only administrators can do this.", "ADMIN_REQUIRED");
   return memberFromRow(rows[0]);
@@ -62,25 +62,34 @@ export async function memberHistory(actor: Member, memberId: string, db?: Databa
   const member = await findMember(connection, memberId);
   const names = new Map((await connection.query("SELECT id, COALESCE(NULLIF(display_name, ''), username) AS name FROM app_members")).map((row) => [String(row.id), String(row.name)]));
   const events: MemberHistoryEvent[] = [];
+  /** An event whose English sentence can be translated: {placeholders} filled from values. */
+  const line = (at: string, kind: MemberHistoryEvent["kind"], template: string, values: Record<string, string> = {}, by?: string | null): MemberHistoryEvent =>
+    ({ at, kind, text: template.replace(/\{(\w+)\}/g, (match, name: string) => values[name] ?? match), template, values, ...(by !== undefined ? { by } : {}) });
 
   // Joining, leaving, coming back and role changes.
   const statuses = await connection.query("SELECT active, role, changed_at FROM member_status_events WHERE member_id = $1 ORDER BY changed_at, id", [memberId]);
   let previous: Record<string, unknown> | null = null;
   for (const row of statuses) {
     const at = iso(row.changed_at)!;
-    if (!previous) events.push({ at, kind: "joined", text: "Joined the Clan Hub" });
-    else if (previous.active !== row.active) events.push({ at, kind: row.active ? "returned" : "left", text: row.active ? "Came back" : "Left or was switched off" });
-    else if (previous.role !== row.role) events.push({ at, kind: "role", text: row.role === "ADMIN" ? "Made an admin" : "No longer an admin" });
+    if (!previous) events.push(line(at, "joined", "Joined the Clan Hub"));
+    else if (previous.active !== row.active) events.push(line(at, row.active ? "returned" : "left", row.active ? "Came back" : "Left or was switched off"));
+    else if (previous.role !== row.role) events.push(line(at, "role", row.role === "ADMIN" ? "Made an admin" : "No longer an admin"));
     previous = row;
   }
 
   const strikes = await connection.query("SELECT id, reason, created_at, created_by, removed_at FROM member_strikes WHERE member_id = $1 ORDER BY created_at DESC", [memberId]);
-  for (const row of strikes) events.push({ at: iso(row.created_at)!, kind: "strike", text: String(row.reason || "Strike"), by: names.get(String(row.created_by)) ?? null, strikeId: row.removed_at ? undefined : String(row.id) });
+  // A strike's reason is the leader's own words, shown as written.
+  for (const row of strikes) events.push({ at: iso(row.created_at)!, kind: "strike", text: String(row.reason || "Strike"), ...(row.reason ? {} : { template: "Strike" }), by: names.get(String(row.created_by)) ?? null, strikeId: row.removed_at ? undefined : String(row.id) });
   const logged = await connection.query("SELECT kind, detail, created_at, created_by FROM member_events WHERE member_id = $1", [memberId]);
   for (const row of logged) {
     const kind = String(row.kind) as MemberHistoryEvent["kind"];
-    const text = kind === "strike-removed" ? `Strike removed${row.detail ? `: ${row.detail}` : ""}` : kind === "holiday" ? `On holiday until ${row.detail}` : kind === "holiday-ended" ? "Back from holiday" : String(row.detail);
-    events.push({ at: iso(row.created_at)!, kind, text, by: names.get(String(row.created_by)) ?? null });
+    const at = iso(row.created_at)!;
+    const by = names.get(String(row.created_by)) ?? null;
+    const detail = String(row.detail ?? "");
+    if (kind === "strike-removed") events.push(detail ? line(at, kind, "Strike removed: {reason}", { reason: detail }, by) : line(at, kind, "Strike removed", {}, by));
+    else if (kind === "holiday") events.push(line(at, kind, "On holiday until {date}", { date: detail }, by));
+    else if (kind === "holiday-ended") events.push(line(at, kind, "Back from holiday", {}, by));
+    else events.push({ at, kind, text: detail, by });
   }
 
   const results = await connection.query(`SELECT result.kind, result.label, result.week_start::text AS week, result.created_at, SUM(point.points) AS points
@@ -88,12 +97,15 @@ export async function memberHistory(actor: Member, memberId: string, db?: Databa
     WHERE point.member_id = $1 GROUP BY result.id, result.kind, result.label, result.week_start, result.created_at`, [memberId]);
   for (const row of results) {
     const vials = row.kind === "vials";
-    events.push({ at: `${row.week}T12:00:00.000Z`, kind: vials ? "vials" : "war", text: `${vials ? "Donated" : "Scored"} ${numberFormat(Number(row.points))} ${vials ? "vials" : "war points"}${row.label ? ` · ${row.label}` : ""}` });
+    const values = { points: numberFormat(Number(row.points)), label: String(row.label ?? "") };
+    events.push(line(`${row.week}T12:00:00.000Z`, vials ? "vials" : "war", vials
+      ? row.label ? "Donated {points} vials · {label}" : "Donated {points} vials"
+      : row.label ? "Scored {points} war points · {label}" : "Scored {points} war points", values));
   }
   const snipes = await connection.query(`SELECT plan.title, plan.starts_at FROM snipe_attendance attendance JOIN snipe_plans plan ON plan.id = attendance.snipe_id WHERE attendance.member_id = $1`, [memberId]);
-  for (const row of snipes) events.push({ at: iso(row.starts_at)!, kind: "snipe", text: `Joined snipe: ${row.title}` });
+  for (const row of snipes) events.push(line(iso(row.starts_at)!, "snipe", "Joined snipe: {title}", { title: String(row.title) }));
   const saves = await connection.query("SELECT week_start::text AS week, earned_at FROM dew_weekly_earnings WHERE member_id = $1 AND reason = 'resources'", [memberId]);
-  for (const row of saves) events.push({ at: iso(row.earned_at)!, kind: "saved", text: `Saved resources for the week of ${row.week}` });
+  for (const row of saves) events.push(line(iso(row.earned_at)!, "saved", "Saved resources for the week of {week}", { week: String(row.week) }));
 
   events.sort((a, b) => b.at.localeCompare(a.at));
   return {

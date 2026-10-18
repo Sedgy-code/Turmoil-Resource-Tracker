@@ -64,8 +64,8 @@ export function ClanPointsBalance({ memberId, revision }: { memberId: string; re
 
   const balance = wallet?.memberId === memberId ? wallet.balance : null;
   return <Link className="topbar-clan-points" href="/reward-shop"
-    aria-label={balance === null ? "Clan Points. Open Reward Shop." : `${numberFormat(balance)} Clan Points. Open Reward Shop.`}
-    title={unavailable ? "Unable to refresh your balance. Open Reward Shop to retry." : "Your current Clan Points. Open Reward Shop."}>
+    aria-label={balance === null ? t("Clan Points. Open the Reward Shop.") : t("{count} Clan Points. Open the Reward Shop.", { count: numberFormat(balance) })}
+    title={unavailable ? t("Couldn’t update your Clan Points. Open the Reward Shop to try again.") : t("Your Clan Points. Open the Reward Shop.")}>
     <CrownShield size={19} />
     <span className="topbar-points-label">{t("Clan Points")}</span>
     <strong aria-live="polite" aria-atomic="true">{balance === null ? "—" : numberFormat(balance)}</strong>

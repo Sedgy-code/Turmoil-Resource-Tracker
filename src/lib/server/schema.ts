@@ -290,4 +290,13 @@ CREATE TABLE IF NOT EXISTS member_ascensions (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (member_id, week_start)
 );
+ALTER TABLE app_members ADD COLUMN IF NOT EXISTS reminders_allowed BOOLEAN NOT NULL DEFAULT FALSE;
+CREATE TABLE IF NOT EXISTS member_nudges (
+  member_id TEXT NOT NULL REFERENCES app_members(id),
+  week_start DATE NOT NULL CHECK (EXTRACT(ISODOW FROM week_start) = 1),
+  nudged_by TEXT NOT NULL REFERENCES app_members(id),
+  nudged_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  channel TEXT NOT NULL DEFAULT 'dm' CHECK (channel IN ('dm', 'mention', 'demo')),
+  PRIMARY KEY (member_id, week_start)
+);
 `;

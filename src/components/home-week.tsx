@@ -1,16 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ComponentType, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowRight, BarChart3, Check, ChevronDown, ChevronsUp, Clock, Gift, Hand, RefreshCw, ShieldCheck, Star, Swords, Target, X, type LucideProps } from "lucide-react";
+import { ArrowRight, Check, ChevronsUp, Clock, Gift, Hand, RefreshCw, ShieldCheck, Star, Swords, Target, X, type LucideProps } from "lucide-react";
 import "@fontsource/knewave/400.css";
 import { ASCENSION_PILLARS, ASCENSIONS_UPDATED, PILLAR_LABELS } from "@/lib/ascension";
 import { countdown, raceEnd, warDay, warWeekOf } from "@/lib/war-calendar";
-import { currentWeek, numberFormat } from "@/lib/resources";
+import { currentWeek } from "@/lib/resources";
 import { useLanguage, useT } from "@/lib/i18n";
 import type { AscensionPillar, AscensionsResponse, DashboardResponse, DewResponse, Member, SnipePlan, SnipesResponse } from "@/lib/types";
-import { CrownShield } from "./crown-shield";
 import { FoldButton, useFold } from "./home-fold";
+import { TermHelp, WelcomeCard } from "./first-visit";
 import { CoinStack } from "./home-icons";
 import { PILLAR_ICONS, VialIcon } from "./resource-icons";
 import { MemberAvatar } from "./member-identity";
@@ -67,11 +67,12 @@ function JobMark({ tone, done, children }: { tone: "gold" | "slate"; done: boole
 }
 
 /**
- * Home, built for phones: a call to save resources with the clan's progress, the jobs every member has
- * each week (save resources, say whether they're ascending, answer the next snipe), then what to do in
- * the war today. The rest is for the curious.
+ * Home, built for phones and kept short: what to do in the war today (spend or hold), the clan's
+ * progress with the call to save, and the jobs every member has each week (save resources, say
+ * whether they're ascending, answer the next snipe). A first-time member gets a welcome card on
+ * top; leaders get their to-do card. The clan's totals and rankings live on the Clan tab.
  */
-export function HomeWeek({ data, notify, between }: { data: DashboardResponse; notify: (message: string, error?: boolean) => void; between?: ReactNode }) {
+export function HomeWeek({ data, notify, leader }: { data: DashboardResponse; notify: (message: string, error?: boolean) => void; leader?: ReactNode }) {
   const t = useT();
   const now = useNow();
   const me = data.currentUser;
@@ -176,6 +177,9 @@ export function HomeWeek({ data, notify, between }: { data: DashboardResponse; n
   const jobsOpen = ready && jobsFold.open;
 
   return <div className="home-week">
+    {/* Nothing saved yet: what the Hub is for, once. */}
+    {!ownEntry && <WelcomeCard />}
+    {leader}
     {/* "Spend or hold?" comes first: the one answer members open the Hub for most days. */}
     <HomeToday now={now} notify={notify} memberId={me.id} />
     <HomeHero update={update} saved={savedEntries.length} total={data.stats.totalMembers} faces={faces} mine={saved} week={week} />
@@ -201,7 +205,7 @@ export function HomeWeek({ data, notify, between }: { data: DashboardResponse; n
         {ascension !== undefined && <li className={`home-job${answered ? " done" : ""}`}>
           <JobMark tone="slate" done={answered}><ChevronsUp size={21} /></JobMark>
           <div className="home-job-text">
-            <strong>{ascensionTitle}</strong>
+            <strong>{ascensionTitle}<TermHelp term="ascending" /></strong>
             {!answered && <small>{t("Tap what you’re ascending, or No.")}</small>}
           </div>
           <div className="home-chips" role="group" aria-label={t("Are you ascending this week?")}>
@@ -217,7 +221,7 @@ export function HomeWeek({ data, notify, between }: { data: DashboardResponse; n
         {snipe && <li className={`home-job${answer ? " done" : ""}`}>
           <JobMark tone="slate" done={!!answer}><Target size={20} /></JobMark>
           <div className="home-job-text">
-            <strong>{snipeTitle}</strong>
+            <strong>{snipeTitle}<TermHelp term="snipe" /></strong>
             <small>{snipe.title} · {t("Starts in {time}", { time: countdown(new Date(snipe.startsAt), now) })}</small>
           </div>
           <div className="home-choice" role="group" aria-label={t("Can you join this snipe?")}>
@@ -227,7 +231,6 @@ export function HomeWeek({ data, notify, between }: { data: DashboardResponse; n
         </li>}
       </ol>}
     </section>
-    {between}
   </div>;
 }
 
@@ -282,33 +285,6 @@ function HomeHero({ update, saved, total, faces, mine, week }: { update: string;
   </section>;
 }
 
-/** Asks the folded clan totals further down Home to open. */
-const OPEN_TOTALS = "turmoil-open-totals";
-
-/** The clan's combined war estimate, kept short so it can sit between the jobs and today's plan. */
-export function HomeArsenal({ minimum, maximum }: { minimum: number | null; maximum: number | null }) {
-  const t = useT();
-  const amount = (value: number | null) => value === null ? "--" : numberFormat(Math.round(value));
-  const fold = useFold("arsenal");
-  return <section className={`home-card home-arsenal${fold.open ? "" : " folded"}`} aria-labelledby="home-arsenal-title">
-    <div className="home-card-head">
-      <h2 id="home-arsenal-title" className="home-kicker"><CrownShield size={19} />{t("Clan arsenal")}</h2>
-      <span className="home-card-tail">
-        <span className="live-badge"><i />{t("LIVE TOTALS")}</span>
-        <FoldButton open={fold.open} onClick={fold.toggle} label={t("Clan arsenal")} controls="home-arsenal-body" />
-      </span>
-    </div>
-    {fold.open && <div id="home-arsenal-body">
-      <p className="home-arsenal-range"><strong>{amount(minimum)}</strong><span aria-hidden="true">–</span><strong>{amount(maximum)}</strong></p>
-      <div className="home-today-foot">
-        <span className="home-arsenal-label">{t("Total Potential War Points")}</span>
-        <button type="button" className="home-link" onClick={() => window.dispatchEvent(new Event(OPEN_TOTALS))}>{t("Clan totals")}<ChevronDown size={16} /></button>
-      </div>
-    </div>}
-  </section>;
-}
-
-
 type Tone = TodayTone;
 const TONE_ICONS: Record<Tone, ComponentType<LucideProps>> = { on: Star, hold: Hand, battle: Swords, claim: Gift };
 
@@ -331,6 +307,7 @@ function HomeToday({ now, notify, memberId }: { now: Date; notify: (message: str
         <h2 id="home-today-title" className="home-kicker"><Swords size={19} />{t("Today")} · {t("Day {day} of 7", { day: war.day })}</h2>
         <span className="home-card-tail">
           {badge && BadgeIcon && <span className={`home-badge ${badge.tone}`}><BadgeIcon size={14} aria-hidden="true" />{badge.text}</span>}
+          {(badge?.tone === "on" || badge?.tone === "hold") && <TermHelp term={badge.tone === "on" ? "clanDay" : "hold"} />}
           <FoldButton open={todayFold.open} onClick={todayFold.toggle} label={t("Today")} controls="home-today-body" />
         </span>
       </div>
@@ -339,7 +316,7 @@ function HomeToday({ now, notify, memberId }: { now: Date; notify: (message: str
       {sub && <p className="home-today-sub">{sub}</p>}
       <p className="home-race">
         <VialIcon size={22} />
-        <span><strong>{t("Clan Tech Race")}</strong> · {t("Knock-out in {time}", { time: countdown(war.nextDay, now) })}<br />{t("In clan missions, pick Clan Tech Vials first.")}</span>
+        <span><strong>{t("Clan Tech Race")}</strong><TermHelp term="techRace" /> · {t("Knock-out in {time}", { time: countdown(war.nextDay, now) })}<br />{t("In clan missions, pick Clan Tech Vials first.")}</span>
       </p>
       <div className="home-today-foot">
         {war.day < 7
@@ -354,39 +331,3 @@ function HomeToday({ now, notify, memberId }: { now: Date; notify: (message: str
   </>;
 }
 
-const MORE_KEY = "turmoil-home-totals";
-
-/** The clan's totals and every member's numbers, folded away so Home stays short on a phone. */
-export function HomeMore({ children }: { children: ReactNode }) {
-  const t = useT();
-  // Folded on phones and open on wide screens, unless this device chose otherwise. It renders
-  // after sign-in, so never on the server.
-  const [open, setOpen] = useState(() => {
-    try {
-      const stored = window.localStorage.getItem(MORE_KEY);
-      if (stored) return stored === "open";
-    } catch { /* storage blocked: use the default */ }
-    try { return window.matchMedia("(min-width: 900px)").matches; } catch { return false; }
-  });
-  const ref = useRef<HTMLDetailsElement>(null);
-  const asked = useRef(false);
-  useEffect(() => {
-    const show = () => {
-      asked.current = true;
-      setOpen(true);
-      requestAnimationFrame(() => ref.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
-    };
-    window.addEventListener(OPEN_TOTALS, show);
-    return () => window.removeEventListener(OPEN_TOTALS, show);
-  }, []);
-  return <details ref={ref} id="clan-totals" className="home-more" open={open} onToggle={(event) => {
-    const next = event.currentTarget.open;
-    setOpen(next);
-    // Opening from the arsenal card is a one-off; only the fold's own button is remembered.
-    if (asked.current) { asked.current = false; return; }
-    try { window.localStorage.setItem(MORE_KEY, next ? "open" : "closed"); } catch { /* private mode */ }
-  }}>
-    <summary><BarChart3 size={17} /><span>{t("Clan totals")} · {t("Member contributions")}</span><ChevronDown size={16} className="home-more-chevron" /></summary>
-    <div className="home-more-body">{children}</div>
-  </details>;
-}

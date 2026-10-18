@@ -979,8 +979,10 @@ body {
 .topbar-clan-points:focus-visible { outline: 2px solid #eed08b; outline-offset: 3px; }
 .topbar-clan-points svg { flex-shrink: 0; color: #f6c95a; filter: drop-shadow(0 0 4px #f6c95a66); }
 .topbar-clan-points strong { color: #ffd56b; font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
-/* The signed-in member's picture, ringed in the clan's green. */
-.topbar-actions > .avatar { box-shadow: 0 0 0 2px #0c120e, 0 0 0 3.5px #2fe46c, 0 0 12px #2fe46c66; }
+/* The signed-in member's picture, ringed in the clan's green: it opens Me. */
+.topbar-me { display: grid; place-items: center; flex-shrink: 0; min-width: 40px; min-height: 40px; border-radius: 50%; }
+.topbar-me:focus-visible { outline: 2px solid #ffd56b; outline-offset: 2px; }
+.topbar-actions > .topbar-me .avatar { box-shadow: 0 0 0 2px #0c120e, 0 0 0 3.5px #2fe46c, 0 0 12px #2fe46c66; }
 @media (max-width: 1100px) {
   .topbar-actions .connection, .topbar-actions .demo-pill { display: none; }
 }
@@ -993,7 +995,7 @@ body {
   .topbar-clan-points strong { font-size: 15px; }
   /* The page's own title sits right under the bar on phones. */
   .topbar .breadcrumb strong { display: none; }
-  .topbar-actions > .avatar { width: 32px; height: 32px; }
+  .topbar-actions > .topbar-me .avatar { width: 32px; height: 32px; }
   .topbar-actions .notification-wrap { display: none; }
 }
 

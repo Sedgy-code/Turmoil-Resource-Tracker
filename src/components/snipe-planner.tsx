@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { errorText } from "@/lib/error-text";
 import { Archive, CalendarDays, Check, Crosshair, LoaderCircle, Pencil, Plus, RefreshCw, RotateCcw, X } from "lucide-react";
 import { numberFormat } from "@/lib/resources";
 import { WAR_ACTIVITIES } from "@/lib/war";
@@ -56,6 +57,7 @@ const REWARD_WINDOW_MS = 8 * 24 * 60 * 60 * 1000;
 type PlanDraft = { title: string; startsAt: string; activities: WarActivity[] };
 
 function PlanForm({ plan, busy, onCancel, onSave }: { plan?: SnipePlan; busy: boolean; onCancel: () => void; onSave: (draft: PlanDraft) => Promise<void> }) {
+  const { t } = useLanguage();
   const [title, setTitle] = useState(plan?.title || "");
   const [startsAt, setStartsAt] = useState(plan ? utcInputDate(plan.startsAt) : startingDate);
   const [activities, setActivities] = useState<WarActivity[]>(plan?.activities || ["skillSummons"]);
@@ -64,22 +66,22 @@ function PlanForm({ plan, busy, onCancel, onSave }: { plan?: SnipePlan; busy: bo
     event.preventDefault();
     const date = fromUtcInput(startsAt);
     if (!title.trim() || !Number.isFinite(date.getTime()) || !activities.length) {
-      setError("Add a title, date and time, and at least one scoring activity.");
+      setError(t("Add a title, date and time, and at least one scoring activity."));
       return;
     }
     if (date.getTime() <= Date.now()) {
-      setError("Choose a future date and time for this snipe.");
+      setError(t("Choose a future date and time for this snipe."));
       return;
     }
     setError("");
     await onSave({ title: title.trim(), startsAt: date.toISOString(), activities });
   }
   return <form className="planning-form planning-plan-form" onSubmit={submit}>
-    <h3>{plan ? "Edit snipe plan" : "Create a snipe plan"}</h3>
-    <div className="planning-form-grid"><label className="planning-field"><span>Snipe title</span><input aria-label="Snipe title" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={120} placeholder="Day 1 · Skills" required /></label><label className="planning-field"><span>Start date and time (UTC)</span><input aria-label="Start date and time (UTC)" type="datetime-local" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} required /><small>Enter it in UTC, the clan’s clock. Members see it in UTC with a countdown.</small></label></div>
-    <fieldset className="planning-activities"><legend>Scoring activities</legend>{WAR_ACTIVITIES.map(({ key, label }) => { const Picture = ACTIVITY_ICONS[key]; return <label className="planning-check planning-check-compact" key={key}><input type="checkbox" checked={activities.includes(key)} onChange={() => setActivities((selected) => selected.includes(key) ? selected.filter((activity) => activity !== key) : [...selected, key])} /><Picture size={22} className="planning-check-icon" /><span>{label}</span></label>; })}</fieldset>
+    <h3>{plan ? t("Edit snipe plan") : t("Create a snipe plan")}</h3>
+    <div className="planning-form-grid"><label className="planning-field"><span>{t("Snipe title")}</span><input aria-label={t("Snipe title")} value={title} onChange={(event) => setTitle(event.target.value)} maxLength={120} placeholder={t("Day 1 · Skills")} required /></label><label className="planning-field"><span>{t("Start date and time (UTC)")}</span><input aria-label={t("Start date and time (UTC)")} type="datetime-local" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} required /><small>{t("Enter it in UTC, the clan’s clock. Members see it in UTC with a countdown.")}</small></label></div>
+    <fieldset className="planning-activities"><legend>{t("Scoring activities")}</legend>{WAR_ACTIVITIES.map(({ key, label }) => { const Picture = ACTIVITY_ICONS[key]; return <label className="planning-check planning-check-compact" key={key}><input type="checkbox" checked={activities.includes(key)} onChange={() => setActivities((selected) => selected.includes(key) ? selected.filter((activity) => activity !== key) : [...selected, key])} /><Picture size={22} className="planning-check-icon" /><span>{t(label)}</span></label>; })}</fieldset>
     {error && <p className="planning-notice" role="alert">{error}</p>}
-    <div className="planning-form-actions"><button type="button" className="planning-button planning-button-subtle" disabled={busy} onClick={onCancel}>Cancel</button><button type="submit" className="planning-button" disabled={busy}>{busy && <LoaderCircle size={15} className="spin" />}{plan ? "Save plan" : "Create snipe"}</button></div>
+    <div className="planning-form-actions"><button type="button" className="planning-button planning-button-subtle" disabled={busy} onClick={onCancel}>{t("Cancel")}</button><button type="submit" className="planning-button" disabled={busy}>{busy && <LoaderCircle size={15} className="spin" />}{plan ? t("Save plan") : t("Create snipe")}</button></div>
   </form>;
 }
 
@@ -91,7 +93,7 @@ function ParticipantsTable({ plan, activityLabels }: { plan: SnipePlan; activity
   };
   for (const activity of activityLabels) getters[activity.key] = ({ estimate }) => estimate.rows.find((row) => row.activity === activity.key)?.minimum ?? 0;
   const { sorted, header } = useSortable(plan.participants, getters, { key: "total", direction: "desc" });
-  return <div className="planning-table-wrap"><table className="planning-table planning-participants"><caption className="planning-sr-only">{plan.title} participating members and war point estimates</caption><thead><tr>{header("member", t("Member"))}{activityLabels.map((activity) => { const Picture = ACTIVITY_ICONS[activity.key]; return header(activity.key, t(activity.label), { icon: <Picture size={18} /> }); })}{header("total", t("Total points"))}</tr></thead><tbody>{sorted.map(({ member, estimate }) => <tr key={member.id}><th scope="row">{member.username}</th>{activityLabels.map((activity) => { const row = estimate.rows.find((row) => row.activity === activity.key); return <td key={activity.key}>{row ? points(row.minimum, row.maximum) : "0"}</td>; })}<td className="planning-gold">{points(estimate.minimum, estimate.maximum)}</td></tr>)}{plan.participants.length === 0 && <tr><td colSpan={activityLabels.length + 2} className="planning-table-empty">{t("Members who answer Yes will appear here.")}</td></tr>}</tbody></table></div>;
+  return <div className="planning-table-wrap"><table className="planning-table planning-participants"><caption className="planning-sr-only">{t("{title}: who’s joining and their war point estimates", { title: plan.title })}</caption><thead><tr>{header("member", t("Member"))}{activityLabels.map((activity) => { const Picture = ACTIVITY_ICONS[activity.key]; return header(activity.key, t(activity.label), { icon: <Picture size={18} /> }); })}{header("total", t("Total points"))}</tr></thead><tbody>{sorted.map(({ member, estimate }) => <tr key={member.id}><th scope="row">{member.username}</th>{activityLabels.map((activity) => { const row = estimate.rows.find((row) => row.activity === activity.key); return <td key={activity.key}>{row ? points(row.minimum, row.maximum) : "0"}</td>; })}<td className="planning-gold">{points(estimate.minimum, estimate.maximum)}</td></tr>)}{plan.participants.length === 0 && <tr><td colSpan={activityLabels.length + 2} className="planning-table-empty">{t("Members who answer Yes will appear here.")}</td></tr>}</tbody></table></div>;
 }
 
 export function SnipePlanner({ data, notify }: Props) {
@@ -125,7 +127,7 @@ export function SnipePlanner({ data, notify }: Props) {
       }
     } catch (error) {
       if (generation === requestGeneration.current && !controller.signal.aborted) {
-        setLoadError(error instanceof Error ? error.message : "Unable to load snipe plans.");
+        setLoadError(error instanceof Error ? error.message : "Please try again.");
       }
     } finally {
       if (loadingGeneration.current === generation) {
@@ -177,8 +179,8 @@ export function SnipePlanner({ data, notify }: Props) {
       const result = await request<{ plan: SnipePlan }>(id ? `/api/snipes/${id}` : "/api/snipes", { method: id ? "PATCH" : "POST", body: JSON.stringify(draft) });
       replacePlan(result.plan);
       setCreating(false); setEditing(null); setTab("open");
-      notify(id ? "Snipe plan updated." : "Snipe plan created.");
-    } catch (error) { notify(error instanceof Error ? error.message : "Unable to save the snipe plan.", true); }
+      notify(id ? t("Snipe plan updated.") : t("Snipe plan created."));
+    } catch (error) { notify(t(errorText(error)), true); }
     finally { finishMutation(); }
   }
   async function respond(plan: SnipePlan, answer: "yes" | "no") {
@@ -187,15 +189,15 @@ export function SnipePlanner({ data, notify }: Props) {
       const result = await request<{ plan: SnipePlan }>(`/api/snipes/${plan.id}/response`, { method: "POST", body: JSON.stringify({ answer }) });
       replacePlan(result.plan);
       notify(t(answer === "yes" ? "You’re on the list for this snipe." : "Your response was saved."));
-    } catch (error) { notify(error instanceof Error ? error.message : "Unable to save your response.", true); }
+    } catch (error) { notify(t(errorText(error)), true); }
     finally { finishMutation(); }
   }
   async function archive(plan: SnipePlan) {
     if (!beginMutation(plan.id)) return;
     try {
       const result = await request<{ plan: SnipePlan }>(`/api/snipes/${plan.id}`, { method: "PATCH", body: JSON.stringify({ archived: true }) });
-      replacePlan(result.plan); setEditing(null); notify("Snipe archived with its attendance and point estimates.");
-    } catch (error) { notify(error instanceof Error ? error.message : "Unable to archive the snipe.", true); }
+      replacePlan(result.plan); setEditing(null); notify(t("Snipe archived with its attendance and point estimates."));
+    } catch (error) { notify(t(errorText(error)), true); }
     finally { finishMutation(); }
   }
   async function setAttendance(plan: SnipePlan, memberIds: string[], attended: boolean) {
@@ -212,29 +214,29 @@ export function SnipePlanner({ data, notify }: Props) {
       }
       replacePlan(latest);
       const rewarded = Date.now() - new Date(plan.startsAt).getTime() <= REWARD_WINDOW_MS;
-      notify(!attended ? "Attendance removed. Any Clan Points from it were taken back."
-        : rewarded ? (memberIds.length > 1 ? `${memberIds.length} members ticked. Each gets 10 Clan Points (once per week).` : "Ticked. They get 10 Clan Points (once per week).")
-          : "Attendance saved. This snipe is too old to give Clan Points.");
-    } catch (error) { notify(error instanceof Error ? error.message : "Unable to confirm attendance.", true); }
+      notify(!attended ? t("Attendance removed. Any Clan Points from it were taken back.")
+        : rewarded ? (memberIds.length > 1 ? t("{count} members ticked. Each gets 10 Clan Points (once per week).", { count: memberIds.length }) : t("Ticked. They get 10 Clan Points (once per week)."))
+          : t("Attendance saved. This snipe is too old to give Clan Points."));
+    } catch (error) { notify(t(errorText(error)), true); }
     finally { finishMutation(); }
   }
   async function reopen(plan: SnipePlan) {
     if (!beginMutation(plan.id)) return;
     try {
       const result = await request<{ plan: SnipePlan }>(`/api/snipes/${plan.id}`, { method: "PATCH", body: JSON.stringify({ archived: false }) });
-      replacePlan(result.plan); setTab("open"); notify("Snipe moved back to Open.");
-    } catch (error) { notify(error instanceof Error ? error.message : "Unable to reopen the snipe.", true); }
+      replacePlan(result.plan); setTab("open"); notify(t("Snipe moved back to Open."));
+    } catch (error) { notify(t(errorText(error)), true); }
     finally { finishMutation(); }
   }
   const visible = plans.filter((plan) => plan.archived === (tab === "history")).sort((a, b) => tab === "history" ? b.startsAt.localeCompare(a.startsAt) : a.startsAt.localeCompare(b.startsAt));
   return <div className="planning-stack">
     <section className="planning-panel">
-      <div className="planning-heading"><div><h2>{t("Snipe Plans")}</h2><p>{t("Tell the clan if you can join each snipe.")}</p></div><div className="planning-inline-actions"><button className="planning-button planning-button-subtle" aria-label={t("Refresh")} onClick={() => void load()} disabled={refreshing || busy !== null}><RefreshCw size={15} className={refreshing ? "spin" : undefined} />{t("Refresh")}</button>{isAdmin && <button className="planning-button" onClick={() => { setCreating((open) => !open); setEditing(null); }} disabled={!loaded || busy !== null} aria-expanded={creating}><Plus size={16} />New snipe</button>}</div></div>
+      <div className="planning-heading"><div><h2>{t("Snipe Plans")}</h2><p>{t("Tell the clan if you can join each snipe.")}</p></div><div className="planning-inline-actions"><button className="planning-button planning-button-subtle" aria-label={t("Refresh")} onClick={() => void load()} disabled={refreshing || busy !== null}><RefreshCw size={15} className={refreshing ? "spin" : undefined} />{t("Refresh")}</button>{isAdmin && <button className="planning-button" onClick={() => { setCreating((open) => !open); setEditing(null); }} disabled={!loaded || busy !== null} aria-expanded={creating}><Plus size={16} />{t("New snipe")}</button>}</div></div>
       <div className="planning-controls"><div className="planning-tabs" aria-label={t("Snipe Plans")}><button aria-pressed={tab === "open"} onClick={() => setTab("open")}>{t("Open")} <span aria-hidden="true">{plans.filter((plan) => !plan.archived).length}</span></button><button aria-pressed={tab === "history"} onClick={() => setTab("history")}>{t("History")} <span aria-hidden="true">{plans.filter((plan) => plan.archived).length}</span></button></div></div>
       {loaded && loadError && <p className="planning-notice" role="status">{t("The latest plans could not be loaded. Press Refresh to try again.")}</p>}
       {creating && isAdmin && <PlanForm busy={busy !== null} onCancel={() => setCreating(false)} onSave={(draft) => savePlan(draft)} />}
     </section>
-    {!loaded ? <section className="planning-panel planning-state" aria-live="polite">{loadError ? <><h2>{t("Snipe plans are unavailable")}</h2><p>{t(loadError)}</p><button className="planning-button" onClick={() => void load()}>{t("Try again")}</button></> : <><LoaderCircle size={24} className="spin" /><p>{t("Loading…")}</p></>}</section> : visible.length === 0 ? <section className="planning-panel planning-state"><Crosshair size={32} className="planning-gold" /><h2>{t(tab === "history" ? "No archived snipes yet" : "No open snipe plans")}</h2><p>{tab === "history" ? t("Finished snipes will show here.") : isAdmin ? "Create a plan to collect attendance and prepare the clan." : t("Clan leadership will add the next snipe here.")}</p></section> : visible.map((plan) => {
+    {!loaded ? <section className="planning-panel planning-state" aria-live="polite">{loadError ? <><h2>{t("Snipe plans are unavailable")}</h2><p>{t(loadError)}</p><button className="planning-button" onClick={() => void load()}>{t("Try again")}</button></> : <><LoaderCircle size={24} className="spin" /><p>{t("Loading…")}</p></>}</section> : visible.length === 0 ? <section className="planning-panel planning-state"><Crosshair size={32} className="planning-gold" /><h2>{t(tab === "history" ? "No archived snipes yet" : "No open snipe plans")}</h2><p>{tab === "history" ? t("Finished snipes will show here.") : isAdmin ? t("Create a plan to collect attendance and prepare the clan.") : t("Clan leadership will add the next snipe here.")}</p></section> : visible.map((plan) => {
       const answer = plan.responses.find((response) => response.memberId === data.currentUser.id)?.answer;
       const activityLabels = plan.activities.map((activity) => WAR_ACTIVITIES.find(({ key }) => key === activity)).filter((activity) => activity !== undefined);
       const unavailable = data.members.filter((member) => member.active && plan.responses.some((response) => response.memberId === member.id && response.answer === "no"));
@@ -251,33 +253,33 @@ export function SnipePlanner({ data, notify }: Props) {
       const confirmedName = (memberId: string) => attendees.find((attendee) => attendee.memberId === memberId)?.member?.username
         || data.members.find((member) => member.id === memberId)?.username
         || plan.participants.find(({ member }) => member.id === memberId)?.member.username
-        || "Former clan member";
+        || t("Former clan member");
       return <section className="planning-panel planning-snipe snipe-card" key={plan.id} aria-label={plan.title}>
-        <div className="planning-heading"><div><h2>{plan.title}</h2><p className="planning-date"><CalendarDays size={14} /><time dateTime={plan.startsAt}>{utcDateTime(plan.startsAt, language)}</time>{!started && <span className="planning-countdown">{t("in {time}", { time: countdown(new Date(plan.startsAt)) })}</span>}</p></div>{isAdmin && !plan.archived && <div className="planning-inline-actions">{needsAttendance && <span className="planning-chip snipe-needs-attendance">Needs attendance</span>}<button className="planning-button planning-button-subtle" onClick={() => { setEditing(editing === plan.id ? null : plan.id); setCreating(false); }} disabled={busy !== null} aria-expanded={editing === plan.id}><Pencil size={14} />Edit plan</button><button className="planning-button planning-button-subtle" onClick={() => void archive(plan)} disabled={busy !== null}><Archive size={14} />Archive snipe</button></div>}{plan.archived && <div className="planning-inline-actions"><span className="planning-chip">{t("Archived")}</span>{isAdmin && <button className="planning-button planning-button-subtle" onClick={() => void reopen(plan)} disabled={busy !== null}><RotateCcw size={14} />Move back to Open</button>}</div>}</div>
+        <div className="planning-heading"><div><h2>{plan.title}</h2><p className="planning-date"><CalendarDays size={14} /><time dateTime={plan.startsAt}>{utcDateTime(plan.startsAt, language)}</time>{!started && <span className="planning-countdown">{t("in {time}", { time: countdown(new Date(plan.startsAt)) })}</span>}</p></div>{isAdmin && !plan.archived && <div className="planning-inline-actions">{needsAttendance && <span className="planning-chip snipe-needs-attendance">{t("Needs attendance")}</span>}<button className="planning-button planning-button-subtle" onClick={() => { setEditing(editing === plan.id ? null : plan.id); setCreating(false); }} disabled={busy !== null} aria-expanded={editing === plan.id}><Pencil size={14} />{t("Edit plan")}</button><button className="planning-button planning-button-subtle" onClick={() => void archive(plan)} disabled={busy !== null}><Archive size={14} />{t("Archive snipe")}</button></div>}{plan.archived && <div className="planning-inline-actions"><span className="planning-chip">{t("Archived")}</span>{isAdmin && <button className="planning-button planning-button-subtle" onClick={() => void reopen(plan)} disabled={busy !== null}><RotateCcw size={14} />{t("Move back to Open")}</button>}</div>}</div>
         {editing === plan.id && isAdmin && !plan.archived && <PlanForm key={plan.id} plan={plan} busy={busy !== null} onCancel={() => setEditing(null)} onSave={(draft) => savePlan(draft, plan.id)} />}
         <div className="planning-attendance" aria-label={t("Attendance")}><span className="planning-yes"><Check size={15} />{t("Yes")}: {plan.counts.yes}</span><span className="planning-no"><X size={15} />{t("No")}: {plan.counts.no}</span><span>{t("No answer")}: {plan.counts.unanswered}</span></div>
         {!plan.archived && <details className="planning-response-details"><summary>{t("See who said No or hasn’t answered")}</summary><div className="planning-response-grid"><div><h3>{t("Can’t join")}</h3><p>{unavailable.length ? unavailable.map((member) => member.username).join(", ") : t("Nobody has said No.")}</p></div><div><h3>{t("No answer yet")}</h3><p>{unanswered.length ? unanswered.map((member) => member.username).join(", ") : t("Everyone has answered.")}</p></div></div></details>}
         {!plan.archived && <div className="planning-rsvp"><p>{t(started ? "This snipe has started. Answers are closed." : "Can you join this snipe?")}</p>{!started && <div className="planning-tabs"><button aria-pressed={answer === "yes"} disabled={busy !== null} onClick={() => void respond(plan, "yes")}><Check size={14} />{t("Yes")}</button><button aria-pressed={answer === "no"} disabled={busy !== null} onClick={() => void respond(plan, "no")}><X size={14} />{t("No")}</button></div>}{busy === plan.id && <LoaderCircle size={16} className="spin" aria-label={t("Saving…")} />}</div>}
-        <section className="snipe-confirmed-attendance" aria-label={`Confirmed attendance for ${plan.title}`}>
+        <section className="snipe-confirmed-attendance" aria-label={t("Confirmed attendance for {title}", { title: plan.title })}>
           <div className="snipe-attendance-heading"><h3>{t("Confirmed attendance")}</h3><span className="planning-chip">{t("{count} attended", { count: attendees.length })}</span></div>
           <p className="snipe-attendance-copy">{t("Get 10 Clan Points a week for joining a snipe. When it starts, type /checkin in Discord or press the Check in button there.")}</p>
           {attendees.length > 0 ? <ul className="snipe-confirmed-list">{attendees.map((attendee) => <li key={attendee.memberId}><Check size={14} aria-hidden="true" /><span>{confirmedName(attendee.memberId)}</span>{attendee.memberId === data.currentUser.id && <small>{t("You attended")}</small>}</li>)}</ul> : <p className="snipe-attendance-empty">{t(started || plan.archived ? "No attendance has been confirmed." : "Admins confirm attendance after the snipe starts.")}</p>}
           {started && isAdmin && <div className="snipe-attendance-management">
-            <h4 className="snipe-checklist-title">Who took part? Tick each member who joined.</h4>
+            <h4 className="snipe-checklist-title">{t("Who took part? Tick each member who joined.")}</h4>
             <p className="snipe-attendance-copy">{rewardOpen
-              ? "Each ticked member gets 10 Clan Points for that week (once per week, even across several snipes). Untick to undo — the points are taken back."
-              : "This snipe is more than 8 days old, so ticks are saved for the record but don’t give Clan Points."}</p>
+              ? t("Each ticked member gets 10 Clan Points for that week (once per week, even across several snipes). Untick to undo, and the points are taken back.")
+              : t("This snipe is more than 8 days old, so ticks are saved for the record but don’t give Clan Points.")}</p>
             {yesNotTicked.length > 0 && <button className="planning-button snipe-tick-yes" disabled={busy !== null} onClick={() => void setAttendance(plan, yesNotTicked, true)}>
-              {busy === `attendance:${plan.id}:all` ? <LoaderCircle size={14} className="spin" /> : <Check size={14} />}Tick everyone who said Yes ({yesNotTicked.length})
+              {busy === `attendance:${plan.id}:all` ? <LoaderCircle size={14} className="spin" /> : <Check size={14} />}{t("Tick everyone who said Yes ({count})", { count: yesNotTicked.length })}
             </button>}
             <ul className="snipe-checklist">{checklist.map((member) => {
               const ticked = attendedIds.has(member.id);
               return <li key={member.id} className={ticked ? "ticked" : undefined}>
                 <label>
-                  <input type="checkbox" checked={ticked} disabled={busy !== null} aria-label={`${member.username} attended`} onChange={() => void setAttendance(plan, [member.id], !ticked)} />
+                  <input type="checkbox" checked={ticked} disabled={busy !== null} aria-label={t("{name} attended", { name: member.username })} onChange={() => void setAttendance(plan, [member.id], !ticked)} />
                   <span>{member.username}</span>
                 </label>
-                {promisedIds.has(member.id) && <small className="snipe-said-yes">said Yes</small>}
+                {promisedIds.has(member.id) && <small className="snipe-said-yes">{t("said Yes")}</small>}
                 {busy === `attendance:${plan.id}:${member.id}` && <LoaderCircle size={13} className="spin" />}
               </li>;
             })}</ul>

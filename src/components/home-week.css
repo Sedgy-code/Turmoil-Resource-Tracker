@@ -217,14 +217,6 @@
 .home-chips button[aria-pressed="true"] svg { color: var(--hw-gold-bright); }
 .home-choice button:disabled { opacity: 0.6; cursor: wait; }
 
-/* The clan's arsenal */
-.home-arsenal { border: 1.5px solid #e2ad3c99; background: radial-gradient(90% 90% at 100% 0%, #2a210b77, transparent 60%), linear-gradient(180deg, #0b1311, #070c0b); box-shadow: 0 0 22px -9px #e2ad3c88, inset 0 0 24px -14px #e2ad3c55; }
-.home-arsenal-range { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin: 0; font-variant-numeric: tabular-nums; }
-.home-arsenal-range strong { color: #fccf5e; font-family: var(--heading); font-size: 25px; font-weight: 800; letter-spacing: -0.4px; text-shadow: 0 0 18px #f6c95a40; }
-.home-arsenal-range span { color: #8a97a8; font-size: 20px; }
-.home-arsenal-label { color: #8fb0e0; font-size: 14px; }
-.home-arsenal .home-today-foot { margin-top: 2px; }
-
 /* Today in the war: the card takes the colour of the day. */
 .home-today .home-kicker svg { color: var(--hw-cool); }
 .home-today.tone-battle {
@@ -300,24 +292,6 @@
 .home-link { display: inline-flex; align-items: center; gap: 5px; min-height: 38px; color: var(--hw-gold-bright); font-size: 14.5px; font-weight: 700; }
 button.home-link { padding: 0; border: 0; background: none; font: inherit; font-size: 14.5px; font-weight: 700; cursor: pointer; }
 
-/* Clan totals, folded away under the cards */
-.home-more { margin-top: 18px; }
-.home-more > summary {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 52px;
-  padding: 12px 14px;
-  font-weight: 650;
-  color: var(--hw-ink);
-  list-style: none;
-  cursor: pointer;
-}
-.home-more > summary::-webkit-details-marker { display: none; }
-.home-more > summary > svg:first-child { flex-shrink: 0; color: var(--hw-gold); }
-.home-more-chevron { flex-shrink: 0; margin-left: auto; color: var(--hw-cool); transition: transform 0.2s; }
-.home-more[open] .home-more-chevron { transform: rotate(180deg); }
-.home-more-body { min-width: 0; padding: 4px 16px 16px; }
 .home-history { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 16px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); color: var(--muted); font-size: 13.5px; }
 
 @media (min-width: 900px) {
@@ -337,7 +311,6 @@ button.home-link { padding: 0; border: 0; background: none; font: inherit; font-
 }
 @media (max-width: 650px) {
   .workspace.home-sky .main-content { padding-top: 18px; }
-  .home-more-body { padding: 4px 10px 12px; }
 }
 @media (max-width: 380px) {
     }
@@ -347,7 +320,6 @@ button.home-link { padding: 0; border: 0; background: none; font: inherit; font-
   .home-hero-faces .avatar:nth-child(n + 4) { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .home-more-chevron,
   .home-fold svg { transition: none; }
 }
 

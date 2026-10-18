@@ -11,6 +11,7 @@ import { PILLAR_LABELS } from "@/lib/ascension";
 import { estimateWar, WAR_ACTIVITIES } from "@/lib/war";
 import { useLanguage, useT, type Translate } from "@/lib/i18n";
 import type { AscensionPillar, AscensionsResponse, ClanDayVotes, ClanDaysResponse, DashboardResponse, WarRates } from "@/lib/types";
+import { TermHelp } from "./first-visit";
 import { NextWarVote } from "./next-war-vote";
 import "./war-week.css";
 
@@ -148,7 +149,7 @@ export function WarWeek({ data, rates, admin = false, notify }: { data: Dashboar
       <div>
         <span className="war-week-kicker">{t("Today")}</span>
         <h2>{t("War Day {day} of 7", { day: current.day })}</h2>
-        <p className="war-week-verdict">{advice.main}</p>
+        <p className="war-week-verdict">{advice.main}{(advice.tone === "on" || advice.tone === "hold") && <TermHelp term={advice.tone === "on" ? "clanDay" : "hold"} />}</p>
         {advice.sub && <p>{advice.sub}</p>}
       </div>
       <div className="war-week-timer"><Clock size={18} />{current.day < 7 ? t("Day {day} starts in {time}", { day: current.day + 1, time: countdown(current.nextDay, now) }) : t("Next war starts in {time}", { time: countdown(current.weekEnd, now) })}</div>

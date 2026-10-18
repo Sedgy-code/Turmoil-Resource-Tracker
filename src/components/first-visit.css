@@ -1,0 +1,128 @@
+/* First visit: the welcome card, "?" explanations of clan words, and the after-save sheet. */
+
+/* The "?" after a clan word: small to look at, 44 px to tap. */
+.term-help {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  margin-inline-start: 6px;
+  padding: 0;
+  border: 1.5px solid #7f93b3;
+  border-radius: 50%;
+  background: #0d1820;
+  color: #dbe4f0;
+  font: 800 12px/1 var(--font);
+  vertical-align: 0.1em;
+  cursor: pointer;
+}
+.term-help::before { content: ""; position: absolute; inset: -12px; }
+.term-help[aria-expanded="true"] { border-color: #ffd56b; color: #ffd56b; }
+.term-help:focus-visible { outline: 2px solid #ffd56b; outline-offset: 2px; }
+
+/* The explanation sits at the bottom of the screen, above the tab bar, where a thumb can close it. */
+.term-sheet {
+  position: fixed;
+  inset-inline: 12px;
+  bottom: calc(88px + env(safe-area-inset-bottom));
+  z-index: 80;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 14px 52px 14px 16px;
+  border: 1.5px solid #4a6273;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #13222a, #0c161c);
+  box-shadow: 0 18px 40px -12px #000d, 0 0 0 1px #00000066;
+  color: #f2f5f8;
+  font-size: 15px;
+  font-weight: 450;
+  letter-spacing: 0;
+  line-height: 1.45;
+  text-align: start;
+  text-transform: none;
+}
+.term-sheet p { margin: 0; }
+.term-sheet strong { color: #ffd56b; font-weight: 750; }
+.term-sheet-close {
+  position: absolute;
+  top: 4px;
+  inset-inline-end: 4px;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #a9bde6;
+  cursor: pointer;
+}
+@media (min-width: 801px) {
+  .term-sheet { bottom: 24px; }
+}
+
+/* Welcome: the three weekly jobs, once. */
+.welcome-card {
+  border: 1.5px solid #e2ad3cb0;
+  background: radial-gradient(100% 70% at 0% 0%, #3a2b0a66, transparent 62%), linear-gradient(180deg, #121710, #0b100d);
+  box-shadow: 0 0 22px -9px #e2ad3c88;
+}
+.welcome-card .home-card-head { margin-bottom: 4px; }
+.welcome-close {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: -10px -10px -10px auto;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #a9bde6;
+  cursor: pointer;
+}
+.welcome-lead { margin: 0 0 12px; color: #c9d4e3; font-size: 15px; line-height: 1.45; }
+.welcome-jobs { display: grid; gap: 10px; margin: 0 0 14px; padding: 0; list-style: none; }
+.welcome-jobs li { display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: 12px; }
+.welcome-jobs strong { display: block; color: #f2f5f8; font-size: 16px; font-weight: 750; line-height: 1.3; }
+.welcome-jobs small { display: block; margin-top: 2px; color: #a9bde6; font-size: 14px; line-height: 1.4; }
+.welcome-mark { display: grid; place-items: center; width: 40px; height: 40px; border: 1.5px solid #4a6273; border-radius: 50%; background: radial-gradient(circle at 50% 30%, #203241, #0b141b 70%); color: #c7d5e8; }
+.welcome-mark.gold { --coin-edge: #6b4a0b; border-color: #e2ad3c; background: radial-gradient(circle at 50% 30%, #4b3709, #1a1305 70%); color: #f6c95a; }
+.welcome-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.welcome-actions .home-hero-cta { min-height: 48px; }
+
+/* Adding the Hub to the home screen */
+.install-steps ol { display: grid; gap: 8px; margin: 0; padding-inline-start: 22px; color: #dce5f0; font-size: 15px; line-height: 1.45; }
+.install-steps li::marker { color: #ffd56b; font-weight: 800; }
+.install-button { width: 100%; }
+.install-done { display: flex; align-items: center; gap: 8px; margin: 0; color: #4cf08a; font-size: 15px; font-weight: 650; }
+
+/* After a save: a sheet from the bottom on phones, a card in the middle on wide screens. */
+.after-save {
+  display: grid;
+  gap: 14px;
+  width: min(100%, 480px);
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  padding: 20px 18px calc(18px + env(safe-area-inset-bottom));
+  border: 1.5px solid #2fe46c99;
+  border-radius: 22px;
+  background: linear-gradient(180deg, #0d1a15, #08110e);
+  box-shadow: 0 0 30px -10px #2fe46c88;
+  color: #f2f5f8;
+}
+.after-save h2 { display: flex; align-items: center; gap: 10px; margin: 0; font-family: var(--heading); font-size: 21px; font-weight: 800; }
+.after-save-tick { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: #2fe46c; color: #03140a; box-shadow: 0 0 12px #2fe46c99; }
+.after-save-part { display: grid; gap: 8px; padding: 14px; border: 1px solid #22302c; border-radius: 16px; background: #0f1916; }
+.after-save-part h3 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 16px; font-weight: 750; }
+.after-save-part h3 svg { color: #ffd56b; }
+.after-save-part > p { margin: 0; color: #a9bde6; font-size: 14.5px; line-height: 1.45; }
+.after-save-part .button { justify-self: start; }
+.after-save-done { justify-self: stretch; }
+@media (max-width: 800px) {
+  .after-save-backdrop { align-items: flex-end; padding: 0; }
+  .after-save { width: 100%; border-radius: 22px 22px 0 0; border-bottom: 0; }
+}
