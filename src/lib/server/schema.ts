@@ -200,6 +200,13 @@ CREATE TABLE IF NOT EXISTS member_auto_removals (
   removed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ALTER TABLE war_results ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'war';
+ALTER TABLE war_results ADD COLUMN IF NOT EXISTS war_day SMALLINT CHECK (war_day IS NULL OR war_day BETWEEN 1 AND 7);
+CREATE TABLE IF NOT EXISTS clan_war_days (
+  war_week DATE PRIMARY KEY CHECK (EXTRACT(ISODOW FROM war_week) = 1),
+  days TEXT NOT NULL DEFAULT '' CHECK (days ~ '^([1-5](,[1-5])*)?$'),
+  updated_by TEXT REFERENCES app_members(id),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 CREATE TABLE IF NOT EXISTS hoarding_rules (
   id TEXT PRIMARY KEY,
   large_multiple NUMERIC NOT NULL CHECK (large_multiple >= 1 AND large_multiple <= 20),

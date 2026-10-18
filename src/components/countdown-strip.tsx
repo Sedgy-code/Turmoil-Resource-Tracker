@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Backpack, FlaskConical, Swords, Target } from "lucide-react";
-import { countdown, raceEnd, warDay, WAR_DAYS } from "@/lib/war-calendar";
+import { countdown, raceEnd, warDay, warWeekOf, WAR_DAYS } from "@/lib/war-calendar";
 import { currentWeek } from "@/lib/resources";
 import { useT } from "@/lib/i18n";
 import type { SnipePlan, SnipesResponse } from "@/lib/types";
-import { useNow } from "./war-week";
+import { useClanDays, useNow } from "./war-week";
 import "./war-week.css";
 
 /** Today at a glance: war day, next snipe, tech race and the weekly save deadline (all in UTC). */
@@ -30,6 +30,8 @@ export function CountdownStrip({ lastSavedAt }: { lastSavedAt: string | null }) 
     return () => { cancelled = true; };
   }, []);
   const war = warDay(now);
+  const clan = useClanDays(warWeekOf(now));
+  const clanToday = war.day <= 5 && clan.days.length > 0 ? clan.days.includes(war.day) : null;
   const savedThisWeek = !!lastSavedAt && currentWeek(new Date(lastSavedAt)) === currentWeek(now);
   const snipeStarts = snipe ? new Date(snipe.startsAt) : null;
   const activities = WAR_DAYS[war.day - 1].activities.map((activity) => t(activity)).join(" · ");
@@ -38,7 +40,7 @@ export function CountdownStrip({ lastSavedAt }: { lastSavedAt: string | null }) 
       <Swords size={20} />
       <div>
         <span>{t("Clan war")}</span>
-        <strong>{t("Day {day} of 7", { day: war.day })}</strong>
+        <strong>{t("Day {day} of 7", { day: war.day })}{clanToday !== null && <em className={`countdown-clan-day${clanToday ? " on" : ""}`}>{t(clanToday ? "Clan day" : "Hold")}</em>}</strong>
         <small title={activities}>{war.day < 7 ? t("Day {day} starts in {time}", { day: war.day + 1, time: countdown(war.nextDay, now) }) : t("Next war starts in {time}", { time: countdown(war.weekEnd, now) })}</small>
       </div>
     </Link>

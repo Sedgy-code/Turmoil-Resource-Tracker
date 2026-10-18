@@ -160,7 +160,7 @@ const screenshotSchema = z.object({
   // Base64 only, at most about 1.5 MB per screenshot after the browser shrinks it.
   data: z.string().min(16).max(2_000_000).regex(/^[A-Za-z0-9+/=]+$/),
 }).strict();
-export const recordKindSchema = z.enum(["war", "vials"]);
+export const recordKindSchema = z.enum(["war", "vials", "warday"]);
 export const readWarSchema = z.object({ images: z.array(screenshotSchema).min(1).max(6), kind: recordKindSchema.optional() }).strict();
 const warRowsSchema = z.array(z.object({
   gameName: z.string().trim().min(1).max(80),
@@ -169,6 +169,7 @@ const warRowsSchema = z.array(z.object({
 }).strict()).max(200);
 export const saveWarSchema = z.object({
   kind: recordKindSchema.optional(),
+  warDay: z.number().int().min(1).max(5).nullable().optional(),
   week: weekSchema,
   label: z.string().max(120),
   clanTotal: z.number().int().min(0).max(1e15).nullable(),
@@ -182,6 +183,7 @@ export const updateWarSchema = z.object({
   rows: warRowsSchema,
 }).strict();
 export const addScreenshotsSchema = z.object({ images: z.array(screenshotSchema).min(1).max(3) }).strict();
+export const clanDaysSchema = z.object({ week: weekSchema, days: z.array(z.number().int().min(1).max(5)).max(5) }).strict();
 export const hoardingRulesSchema = z.object({
   largeMultiple: z.number().min(1).max(20),
   spendPercent: z.number().min(0).max(100),

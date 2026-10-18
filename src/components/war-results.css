@@ -90,3 +90,12 @@
 .war-missing-chip { display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font: inherit; font-size: 12.5px; cursor: pointer; }
 .war-missing-chip svg { color: var(--gold); }
 .war-missing-chip:hover, .war-missing-chip:focus-visible { border-color: var(--gold); color: #f8d67d; }
+/* Daily war points: who scored on which day. */
+.war-daily header { flex-wrap: wrap; }
+.war-daily-week { min-height: 38px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); background: #0c1510; color: var(--text); font: inherit; font-size: 12.5px; }
+.war-daily-days { display: flex; flex-wrap: wrap; gap: 8px; }
+.war-daily-day { display: inline-flex; align-items: center; gap: 2px; }
+.war-daily-day .button small { margin-inline-start: 4px; color: var(--muted); font-weight: 400; }
+.war-daily-table th.war-daily-clan { color: var(--gold); }
+.war-daily-table th small { display: block; margin-top: 2px; font-size: 9.5px; color: var(--gold); }
+.war-daily-table td.war-offday { color: #f19a91; font-weight: 700; }

@@ -2,27 +2,32 @@ import { currentWeek, shiftWeek } from "../resources";
 import type { ContributionRankingResponse, ContributionRow, Member, RankingMetric } from "../types";
 import { database, type Database } from "./db";
 import { ApiError } from "./errors";
-import { hoardingReport, warSpending } from "./hoarding";
+import { hoardingReport } from "./hoarding";
 import { memberFromRow } from "./mappers";
 import { snipeRecognition } from "./war-results";
 import { strikeCounts } from "./leadership";
+import { hasBlackMark, weekBreakdown } from "./war-days";
 
 const DAY = 86_400_000;
 const RECENT_WEEKS = 8;
 const RECENT_RECORDS = 4;
 const NEW_MEMBER_DAYS = 14;
 export const NEVER_SIGNED_IN_PENALTY = 40;
+/** Points off for each recent war with a black mark (spending on days that weren't clan days), up to BLACK_MARK_CAP. */
+export const BLACK_MARK_PENALTY = 5;
+export const BLACK_MARK_CAP = 15;
 
 /**
  * How much each part counts towards the score (out of 100). Parts with no data yet are left out.
  * Snipes count only a little: not everyone can be online for them, and time zones decide a lot.
  * Clan Tech Vials and weekly Clan Hub updates count more, as the clan rules ask of everyone.
+ * "Clan days" is the share of a member's war points scored on the days leadership picked.
  */
 export const RANKING_WEIGHTS: Record<RankingMetric, number> = {
   warPoints: 30,
   vials: 30,
   updates: 20,
-  warSpending: 15,
+  clanDays: 15,
   snipes: 5,
 };
 
@@ -73,12 +78,28 @@ export async function contributionRanking(actor: Member, db?: Database, now = ne
     WHERE reason = 'resources' AND week_start >= $1 GROUP BY member_id`, [sinceWeek]);
   const updateCounts = new Map(updates.map((row) => [String(row.member_id), Number(row.count)]));
 
-  // Spending during the recent war weeks (positive = used resources in the war).
-  const spending = new Map<string, number>();
-  for (const week of [...new Set(wars.weeks)]) {
-    const report = await warSpending(actor, week, connection, now);
-    for (const row of report.rows) if (row.spent !== null) spending.set(row.member.id, (spending.get(row.member.id) ?? 0) + row.spent);
+  // Spending on the clan's chosen days, from the daily war-point uploads of recent wars that had clan days picked.
+  const dayWeeks = (await connection.query(`SELECT DISTINCT result.week_start::text AS week FROM war_results result
+    JOIN clan_war_days chosen ON chosen.war_week = result.week_start AND chosen.days <> ''
+    WHERE result.kind = 'warday' ORDER BY week DESC LIMIT $1`, [RECENT_RECORDS])).map((row) => String(row.week).slice(0, 10));
+  const onDays = new Map<string, { on: number; other: number; marks: number }>();
+  for (const week of dayWeeks) {
+    const breakdown = await weekBreakdown(connection, week);
+    for (const row of breakdown.rows) {
+      if (!row.memberId) continue;
+      const current = onDays.get(row.memberId) ?? { on: 0, other: 0, marks: 0 };
+      onDays.set(row.memberId, {
+        on: current.on + row.onClanDays,
+        other: current.other + row.otherDays,
+        marks: current.marks + (hasBlackMark(row, breakdown.clanDays) ? 1 : 0),
+      });
+    }
   }
+  // Nothing scored at all counts as 0: they didn't spend on the clan days either.
+  const clanDayShare = (memberId: string) => {
+    const totals = onDays.get(memberId);
+    return totals && totals.on + totals.other > 0 ? totals.on / (totals.on + totals.other) : 0;
+  };
   const hoarding = new Map((await hoardingReport(actor, connection, now)).rows.map((row) => [row.member.id, row.level]));
 
   const raw = members.map((member) => ({
@@ -89,13 +110,15 @@ export async function contributionRanking(actor: Member, db?: Database, now = ne
     snipes: snipes.recent[member.id] ?? 0,
     noShows: noShows.get(member.id) ?? 0,
     updates: updateCounts.get(member.id) ?? 0,
-    warSpending: wars.weeks.length ? spending.get(member.id) ?? 0 : null,
+    clanDays: dayWeeks.length ? clanDayShare(member.id) : null,
+    clanDayShare: dayWeeks.length ? clanDayShare(member.id) : null,
+    blackMarks: onDays.get(member.id)?.marks ?? 0,
     hoarding: hoarding.get(member.id) ?? "ok",
     daysInClan: Math.max(0, Math.floor((now.getTime() - new Date(member.joinedAt).getTime()) / DAY)),
     lastSavedAt: member.lastUpdatedAt,
   }));
   const available: RankingMetric[] = (Object.keys(RANKING_WEIGHTS) as RankingMetric[]).filter((metric) =>
-    metric === "warPoints" ? wars.count > 0 : metric === "vials" ? vials.count > 0 : metric === "warSpending" ? wars.weeks.length > 0 : true);
+    metric === "warPoints" ? wars.count > 0 : metric === "vials" ? vials.count > 0 : metric === "clanDays" ? dayWeeks.length > 0 : true);
   const totalWeight = available.reduce((sum, metric) => sum + RANKING_WEIGHTS[metric], 0);
   const values = (metric: RankingMetric) => raw.map((row) => Number(row[metric] ?? 0));
 
@@ -106,7 +129,8 @@ export async function contributionRanking(actor: Member, db?: Database, now = ne
     const parts = Object.fromEntries(available.map((metric) => [metric, percentile(Number(row[metric] ?? 0), values(metric))])) as Partial<Record<RankingMetric, number>>;
     const base = totalWeight ? available.reduce((sum, metric) => sum + (parts[metric] ?? 0) * RANKING_WEIGHTS[metric], 0) / totalWeight * 100 : 50;
     // Never signing in to the Clan Hub at all is the biggest red flag.
-    const penalty = (row.member.neverSignedIn ? NEVER_SIGNED_IN_PENALTY : 0) + (row.hoarding === "high" ? 15 : row.hoarding === "watch" ? 5 : 0) + Math.min(15, row.noShows * 5);
+    const penalty = (row.member.neverSignedIn ? NEVER_SIGNED_IN_PENALTY : 0) + (row.hoarding === "high" ? 15 : row.hoarding === "watch" ? 5 : 0) + Math.min(15, row.noShows * 5)
+      + Math.min(BLACK_MARK_CAP, row.blackMarks * BLACK_MARK_PENALTY);
     // Good savers who spend when it counts get a small bonus.
     const bonus = row.hoarding === "saver" ? 3 : 0;
     return { ...row, parts, penalty, score: Math.min(100, Math.max(0, Math.round(base - penalty + bonus))), isNew: row.daysInClan < NEW_MEMBER_DAYS && joinedAfterLaunch(row.member), rank: 0 };

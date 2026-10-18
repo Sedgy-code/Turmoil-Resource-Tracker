@@ -16,6 +16,9 @@ export const INDIRECT_KEYS = [
   "Dungeon keys", "Skill summons", "Forge upgrades", "Tech upgrades", "Mount summons", "Egg hatching", "Pet merges", "Battle", "Claim rewards",
   "Use hammers and skill tickets today.", "Summon and merge mounts today.", "Hammers, skills, eggs and pets all count today.", "Second mount day.",
   "Last day for hammers, eggs and pets.", "Fight the other clans. Spending doesn't score today.", "Claim your war rewards. You only have today.",
+  // Daily war points (src/components/record-editor.tsx TEXT.warday)
+  "Add daily war points", "Add the clan war screenshot for this day (each member’s points for the day).", "Daily war points saved.",
+  "Upload deleted.", "Delete this day’s upload? This can’t be undone.", "Save daily points",
   // Leadership tabs and server messages
   "Settings", "Clan Hub settings for leadership.", "Power", "Something went wrong. Please try again.",
   // Clan Tech tree (src/lib/clan-tech.ts)
@@ -27,7 +30,7 @@ export const INDIRECT_KEYS = [
   "Dashboard", "My Resources", "Manage Members", "Weekly History", "Estimated War Points", "Snipe Plans", "Reward Shop", "Hoarding Watch",
   "Spot members who hold a lot but don’t spend it. Only admins can see this page.",
   "War Results", "Final clan war scores, read from the end-of-war screenshots.",
-  "Vial Donations", "Contribution Ranking", "Snipes joined", "War points", "Vials donated", "Weekly updates", "Spent in wars", "Clan tech vial donations, read from the donation screenshots.",
+  "Vial Donations", "Contribution Ranking", "Snipes joined", "War points", "Vials donated", "Weekly updates", "Spent in wars", "Spent on clan days", "Clan tech vial donations, read from the donation screenshots.",
   "Everyone ranked by how much they contribute. The bottom of the list is who to talk to first when space is needed.",
   // War and vial record wording (src/components/war-results.tsx TEXT)
   "Add war results", "Add the end-of-war screenshots (clan total and the member list).", "Clan total", "Points", "War results saved.", "War result deleted.", "Delete this war result? This can’t be undone.", "Save war results", "No war results yet. An admin can add them from the end-of-war screenshots.", "Clan total over time", "Clan war totals", "Final clan scores from each war.", "War Results", "Top scorer", "e.g. Season 30 · War 4", "War date", "War", "Add vial donations", "Add the clan tech donation screenshots (the member list with vials).", "Total vials", "Vials", "Vial donations saved.", "Vial record deleted.", "Delete this vial record? This can’t be undone.", "Save vial donations", "No vial donations yet. An admin can add them from the clan tech screenshots.", "Vials donated over time", "Tech vial donations", "Vials donated to clan tech, from each upload.", "Vial Donations", "Top donor", "e.g. Week 4 donations", "Date", "Record",

@@ -198,8 +198,33 @@ export interface WarResult {
   createdBy: string;
   points: WarResultPoint[];
   imageIds: string[];
+  /** Daily war-point uploads only: which war day (1–5) the points are for. */
+  warDay: number | null;
 }
 export interface WarResultsResponse { results: WarResult[] }
+/** The days leadership picked for the clan to spend in one war (Day 6 is always the battle). */
+export interface ClanDaysResponse { week: string; days: number[] }
+export interface WarDayRow {
+  member: Member | null;
+  /** In-game name, for players not matched to a clan member. */
+  name: string;
+  /** War points on Days 1–5 (index 0 = Day 1); null when that day has no upload or the player isn't on it. */
+  days: (number | null)[];
+  onClanDays: number;
+  otherDays: number;
+  /** More than offDayLimit of their points came on days that weren't clan days. */
+  blackMark: boolean;
+}
+export interface WarDayReport {
+  /** The war (Monday before its Day 1) this report is for. */
+  week: string;
+  /** Wars with daily uploads, newest first. */
+  weeks: string[];
+  clanDays: number[];
+  uploads: WarResult[];
+  rows: WarDayRow[];
+  offDayLimit: number;
+}
 /** What the screenshot reader found, before an admin checks and saves it. */
 export interface WarReading {
   clanTotal: number | null;
@@ -236,7 +261,7 @@ export interface WarSpendingRow {
 }
 export interface WarSpendingResponse { week: string; warWeeks: string[]; rows: WarSpendingRow[] }
 
-export type RankingMetric = "warPoints" | "vials" | "snipes" | "updates" | "warSpending";
+export type RankingMetric = "warPoints" | "vials" | "snipes" | "updates" | "clanDays";
 export interface ContributionRow {
   member: Member;
   rank: number;
@@ -252,8 +277,10 @@ export interface ContributionRow {
   noShows: number;
   /** Weeks with a complete resource save, out of the last 8. */
   updates: number;
-  /** Holdings used during recent war weeks (estimated war points). */
-  warSpending: number | null;
+  /** Share (0–1) of their war points scored on the clan's chosen days, over recent wars. */
+  clanDayShare: number | null;
+  /** Recent wars where too much of their spending was on other days. */
+  blackMarks: number;
   hoarding: HoardingLevel;
   penalty: number;
   parts: Partial<Record<RankingMetric, number>>;
