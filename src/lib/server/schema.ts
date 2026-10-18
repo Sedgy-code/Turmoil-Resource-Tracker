@@ -264,4 +264,11 @@ CREATE TABLE IF NOT EXISTS discord_applications (
 );
 CREATE INDEX IF NOT EXISTS discord_applications_discord_idx ON discord_applications(discord_id, created_at DESC);
 ALTER TABLE discord_applications ADD COLUMN IF NOT EXISTS agreed BOOLEAN NOT NULL DEFAULT FALSE;
+CREATE TABLE IF NOT EXISTS member_ascensions (
+  member_id TEXT NOT NULL REFERENCES app_members(id),
+  week_start DATE NOT NULL CHECK (EXTRACT(ISODOW FROM week_start) = 1),
+  pillars TEXT NOT NULL DEFAULT '' CHECK (pillars ~ '^((forge|skills|mounts|pets)(,(forge|skills|mounts|pets))*)?$'),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (member_id, week_start)
+);
 `;

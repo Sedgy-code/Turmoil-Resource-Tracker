@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowRight, Backpack, BarChart3, Check, CheckCircle2, ChevronDown, Clock, FlaskConical, Swords, Target, X } from "lucide-react";
+import { ArrowRight, Backpack, BarChart3, Check, CheckCircle2, ChevronDown, ChevronsUp, Clock, FlaskConical, Swords, Target, X } from "lucide-react";
+import { ASCENSION_PILLARS, ASCENSIONS_UPDATED, PILLAR_LABELS } from "@/lib/ascension";
 import { countdown, raceEnd, warDay, warWeekOf, WAR_DAYS } from "@/lib/war-calendar";
 import { currentWeek } from "@/lib/resources";
 import { useT } from "@/lib/i18n";
-import type { DashboardResponse, DewResponse, SnipePlan, SnipesResponse } from "@/lib/types";
+import type { AscensionPillar, AscensionsResponse, DashboardResponse, DewResponse, SnipePlan, SnipesResponse } from "@/lib/types";
 import { useClanDays, useNow } from "./war-week";
 import "./home-week.css";
 
@@ -22,9 +23,17 @@ async function load<T>(url: string): Promise<T | null> {
   }
 }
 
+/** Sends JSON to the hub; throws the hub's own message when it says no. */
+async function send<T>(url: string, method: string, body: unknown): Promise<T> {
+  const response = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || "Please try again.");
+  return result as T;
+}
+
 /**
- * Home, built for phones: the jobs every member has each week (save resources, answer the next
- * snipe), then what to do in the war today. Everything else on the hub is there for the curious.
+ * Home, built for phones: the jobs every member has each week (save resources, say whether they're
+ * ascending, answer the next snipe), then what to do in the war today. The rest is for the curious.
  */
 export function HomeWeek({ data, notify }: { data: DashboardResponse; notify: (message: string, error?: boolean) => void }) {
   const t = useT();
@@ -32,11 +41,15 @@ export function HomeWeek({ data, notify }: { data: DashboardResponse; notify: (m
   const me = data.currentUser;
   const [earned, setEarned] = useState<boolean | null>(null);
   const [plans, setPlans] = useState<SnipePlan[] | null>(null);
+  const [ascension, setAscension] = useState<AscensionPillar[] | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const refresh = useCallback(async () => {
-    const [dew, snipes] = await Promise.all([load<DewResponse>("/api/dew"), load<SnipesResponse>("/api/snipes")]);
+    const [dew, snipes, ascensions] = await Promise.all([
+      load<DewResponse>("/api/dew"), load<SnipesResponse>("/api/snipes"), load<AscensionsResponse>("/api/ascensions"),
+    ]);
     if (dew) setEarned(dew.resourceRewardEarned);
     if (snipes) setPlans(snipes.plans);
+    if (ascensions) setAscension(ascensions.mine);
   }, []);
   useEffect(() => {
     void refresh();
@@ -45,22 +58,48 @@ export function HomeWeek({ data, notify }: { data: DashboardResponse; notify: (m
     document.addEventListener("visibilitychange", again);
     return () => document.removeEventListener("visibilitychange", again);
   }, [refresh]);
+  const fail = (e: unknown) => {
+    const text = e instanceof Error ? e.message : "Please try again.";
+    notify(t(text), true);
+  };
 
   // Job 1: a complete save this clan week (Monday to Monday, UTC) earns the weekly Clan Points.
   const week = currentWeek(now);
   const ownEntry = data.entries.find((entry) => entry.memberId === me.id);
   const saved = earned ?? (!!ownEntry && currentWeek(new Date(ownEntry.updatedAt)) === week);
   const war = warDay(now);
-  const gapDay = war.day === 7;
   const saveHint = saved
-    ? t("You earned 20 Clan Points. You can update your resources any time.")
-    : gapDay
+    ? t("You earned 20 Clan Points.")
+    : war.day === 7
       ? t("Earn 20 Clan Points. Please save before Day 1 starts, in {time}.", { time: countdown(war.nextDay, now) })
       : t("Earn 20 Clan Points. The week closes in {time}.", { time: countdown(raceEnd(now), now) });
   const savedThisWeek = data.entries.filter((entry) => currentWeek(new Date(entry.updatedAt)) === week).length;
   const total = data.stats.totalMembers;
 
-  // Job 2: answer the next snipe (the first one still waiting for an answer).
+  // Job 2: are you ascending this week, and what? (No is an answer too.)
+  const answered = ascension !== undefined && ascension !== null;
+  const ascensionTitle = !answered
+    ? t("Are you ascending this week?")
+    : ascension.length
+      ? t("Ascending: {what}", { what: ascension.map((pillar) => t(PILLAR_LABELS[pillar])).join(", ") })
+      : t("Not ascending this week");
+  async function ascend(next: AscensionPillar[]) {
+    const before = ascension;
+    setAscension(next);
+    try {
+      setAscension((await send<AscensionsResponse>("/api/ascensions", "PUT", { pillars: next })).mine);
+      window.dispatchEvent(new Event(ASCENSIONS_UPDATED));
+    } catch (e) {
+      setAscension(before);
+      fail(e);
+    }
+  }
+  const togglePillar = (pillar: AscensionPillar) => {
+    const current = ascension ?? [];
+    return current.includes(pillar) ? current.filter((item) => item !== pillar) : [...current, pillar];
+  };
+
+  // Job 3: answer the next snipe (the first one still waiting for an answer).
   const upcoming = (plans ?? [])
     .filter((plan) => !plan.archived && new Date(plan.startsAt).getTime() > now.getTime())
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
@@ -71,45 +110,49 @@ export function HomeWeek({ data, notify }: { data: DashboardResponse; notify: (m
   async function respond(plan: SnipePlan, value: "yes" | "no") {
     setBusy(true);
     try {
-      const response = await fetch(`/api/snipes/${plan.id}/response`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answer: value }),
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error || "Please try again.");
-      const updated = (result as { plan: SnipePlan }).plan;
+      const updated = (await send<{ plan: SnipePlan }>(`/api/snipes/${plan.id}/response`, "POST", { answer: value })).plan;
       setPlans((current) => current?.map((item) => item.id === updated.id ? updated : item) ?? current);
       notify(t("Answer saved."));
     } catch (e) {
-      const text = e instanceof Error ? e.message : "Please try again.";
-      notify(t(text), true);
+      fail(e);
     } finally {
       setBusy(false);
     }
   }
-  const allDone = earned === true && (!snipe || !!answer);
+  const allDone = earned === true && answered && (!snipe || !!answer);
 
   return <div className="home-week">
     <section className="home-card home-jobs-card" aria-labelledby="home-jobs-title">
       <div className="home-card-head">
         <h2 id="home-jobs-title">{t("Your jobs this week")}</h2>
-        {allDone && <span className="home-done"><CheckCircle2 size={15} />{t("All done this week. Thank you!")}</span>}
+        {allDone && <span className="home-done"><CheckCircle2 size={15} />{t("All done!")}</span>}
       </div>
       <ol className="home-jobs">
-        <li className={`home-job${saved ? " done" : ""}`}>
-          <span className="home-job-mark" aria-hidden="true">{saved ? <Check size={18} /> : <Backpack size={17} />}</span>
+        <li className={`home-job${saved ? " done with-side" : ""}`}>
+          <span className="home-job-mark" aria-hidden="true">{saved ? <Check size={17} /> : <Backpack size={16} />}</span>
           <div className="home-job-text">
             <strong>{saved ? t("Resources saved") : t("Save your resources")}</strong>
             <small>{saveHint}</small>
           </div>
-          <Link className={`button ${saved ? "subtle" : "primary"} home-job-action`} href="/resources">
-            {saved || ownEntry ? t("Update my resources") : t("Add my resources")}
-            {!saved && <ArrowRight size={16} />}
-          </Link>
+          {saved
+            ? <Link className="home-job-side" href="/resources">{t("Change")}</Link>
+            : <Link className="button primary home-job-action" href="/resources">{ownEntry ? t("Update my resources") : t("Add my resources")}<ArrowRight size={16} /></Link>}
         </li>
+        {ascension !== undefined && <li className={`home-job${answered ? " done" : ""}`}>
+          <span className="home-job-mark" aria-hidden="true">{answered ? <Check size={17} /> : <ChevronsUp size={17} />}</span>
+          <div className="home-job-text">
+            <strong>{ascensionTitle}</strong>
+            {!answered && <small>{t("Tap what you’re ascending, or No.")}</small>}
+          </div>
+          <div className="home-chips" role="group" aria-label={t("Are you ascending this week?")}>
+            <button aria-pressed={answered && ascension.length === 0} onClick={() => void ascend([])}>{t("No")}</button>
+            {ASCENSION_PILLARS.map((pillar) => <button key={pillar} aria-pressed={!!ascension?.includes(pillar)} onClick={() => void ascend(togglePillar(pillar))}>
+              {t(PILLAR_LABELS[pillar])}
+            </button>)}
+          </div>
+        </li>}
         {snipe && <li className={`home-job${answer ? " done" : ""}`}>
-          <span className="home-job-mark" aria-hidden="true">{answer ? <Check size={18} /> : <Target size={17} />}</span>
+          <span className="home-job-mark" aria-hidden="true">{answer ? <Check size={17} /> : <Target size={16} />}</span>
           <div className="home-job-text">
             <strong>{snipeTitle}</strong>
             <small>{snipe.title} · {t("Starts in {time}", { time: countdown(new Date(snipe.startsAt), now) })}</small>
@@ -166,14 +209,16 @@ function HomeToday({ now }: { now: Date }) {
     </div>
     <p className="home-today-main">{main}</p>
     {sub && <p className="home-today-sub">{sub}</p>}
-    <p className="home-today-time"><Clock size={14} />{war.day < 7
-      ? t("Day {day} starts in {time}", { day: war.day + 1, time: countdown(war.nextDay, now) })
-      : t("Next war starts in {time}", { time: countdown(war.weekEnd, now) })}</p>
     <p className="home-race">
-      <FlaskConical size={16} />
+      <FlaskConical size={15} />
       <span><strong>{t("Clan Tech Race")}</strong> · {t("Knock-out in {time}", { time: countdown(war.nextDay, now) })}<br />{t("In clan missions, pick Clan Tech Vials first.")}</span>
     </p>
-    <Link className="home-link" href="/war">{t("See the war plan")}<ArrowRight size={15} /></Link>
+    <div className="home-today-foot">
+      <span className="home-today-time"><Clock size={13} />{war.day < 7
+        ? t("Day {day} starts in {time}", { day: war.day + 1, time: countdown(war.nextDay, now) })
+        : t("Next war starts in {time}", { time: countdown(war.weekEnd, now) })}</span>
+      <Link className="home-link" href="/war">{t("See the war plan")}<ArrowRight size={14} /></Link>
+    </div>
   </section>;
 }
 

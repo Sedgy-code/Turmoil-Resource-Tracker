@@ -202,6 +202,16 @@ export interface WarResult {
   warDay: number | null;
 }
 export interface WarResultsResponse { results: WarResult[] }
+/** The four pillars a member can ascend. */
+export type AscensionPillar = "forge" | "skills" | "mounts" | "pets";
+export interface AscensionsResponse {
+  /** The clan week (Monday to Monday, UTC). */
+  week: string;
+  /** Your answer this week: null until you answer, [] when you're not ascending. */
+  mine: AscensionPillar[] | null;
+  /** Members ascending this week and what (members who said No aren't listed). */
+  ascending: { memberId: string; pillars: AscensionPillar[] }[];
+}
 /** The days leadership picked for the clan to spend in one war (Day 6 is always the battle). */
 export interface ClanDaysResponse { week: string; days: number[] }
 export interface WarDayRow {

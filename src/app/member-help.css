@@ -587,6 +587,22 @@
   margin-top: 1px;
 }
 
+/* What a member is ascending this week, under their name */
+.row-ascending {
+  display: flex !important;
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+  color: #8fdc6a !important;
+  font-size: 10.5px;
+  line-height: 1.4;
+  white-space: normal;
+  max-width: 190px;
+}
+.row-ascending svg {
+  flex-shrink: 0;
+}
+
 /* 🎯 snipe badge next to names */
 .snipe-badge {
   display: inline-flex;

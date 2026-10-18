@@ -18,6 +18,7 @@ import { MonthlyAwardsPanel } from "./monthly-awards";
 import { LeadershipSettings } from "./leadership-settings";
 import { downloadRows } from "@/lib/csv";
 import { HomeMore, HomeWeek } from "./home-week";
+import { ASCENSIONS_UPDATED, PILLAR_LABELS } from "@/lib/ascension";
 import { useSortable } from "./sortable";
 import { ClanPointsBalance } from "./clan-points-balance";
 import { announceClanPointsUpdate } from "@/lib/clan-points";
@@ -56,6 +57,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronsUp,
   CircleHelp,
   CircleAlert,
   Clipboard,
@@ -100,6 +102,8 @@ import {
   type SummoningCosts,
 } from "@/lib/resources";
 import type {
+  AscensionPillar,
+  AscensionsResponse,
   ClanSettings,
   DashboardResponse,
   EntryResponse,
@@ -655,13 +659,13 @@ function TrackerApp({ view }: { view: View }) {
               ))}
             </nav>
           )}
-          <div className="page-heading">
+          <div className={`page-heading${view === "dashboard" && !pastHome ? " home-heading" : ""}`}>
             <div>
               <h1>
                 {view !== "dashboard" ? t(viewNames[view]) : pastHome ? t("Resource Dashboard") : t("Hi, {name}", { name: user.username })}
               </h1>
-              <p>
-                {view === "dashboard" && !pastHome ? t("Here’s what to do this week.") : t(view === "dashboard"
+              {(view !== "dashboard" || pastHome) && <p>
+                {t(view === "dashboard"
                   ? "Saved weekly totals for the clan."
                   : view === "resources"
                     ? "Copy your numbers from the game, then press Save."
@@ -678,7 +682,7 @@ function TrackerApp({ view }: { view: View }) {
                         : view === "snipes" ? "Plan events and say when you can join."
                           : view === "store" ? "Earn Clan Points by saving your resources each week and joining snipes."
                             : "Saved weekly totals for the clan.")}
-              </p>
+              </p>}
             </div>
             {(["resources", "weeks"].includes(view) || (view === "dashboard" && pastHome)) && (
               <div className="week-control">
@@ -1048,6 +1052,23 @@ const CELL_ISSUES: Partial<Record<ResourceKey, PlanningIssueKey[]>> = {
   eggshellsTotal: ["extraPetSummonPercent"],
 };
 
+/** Who is ascending in a clan week (memberId → what), for the member table. */
+function useAscending(week: string): Map<string, AscensionPillar[]> {
+  const [state, setState] = useState<{ week: string; members: Map<string, AscensionPillar[]> } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => fetch(`/api/ascensions?week=${week}`, { cache: "no-store" })
+      .then((response) => response.ok ? response.json() as Promise<AscensionsResponse> : Promise.reject())
+      .then((result) => { if (!cancelled) setState({ week, members: new Map(result.ascending.map((item) => [item.memberId, item.pillars])) }); })
+      .catch(() => { if (!cancelled) setState((current) => current?.week === week ? current : { week, members: new Map() }); });
+    void load();
+    // Your own answer on Home changes the list straight away.
+    window.addEventListener(ASCENSIONS_UPDATED, load);
+    return () => { cancelled = true; window.removeEventListener(ASCENSIONS_UPDATED, load); };
+  }, [week]);
+  return state?.week === week ? state.members : new Map();
+}
+
 function MemberResources({
   data,
   week,
@@ -1062,6 +1083,7 @@ function MemberResources({
   const t = useT();
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("all");
+  const ascending = useAscending(week);
   type ContributionSort = "username" | "updatedAt" | "snipes" | "war" | ResourceKey;
   const { data: recognitionData } = useRecognition();
   const snipeCount = (memberId: string) => recognitionData?.snipes.recent[memberId] ?? 0;
@@ -1080,7 +1102,7 @@ function MemberResources({
     : <ArrowUpDown size={12} aria-hidden="true" />;
   const members = data.members
     .filter((member) => member.username.toLowerCase().includes(search.toLowerCase()))
-    .filter((member) => tab === "all" || (tab === "submitted" ? entries.has(member.id) : !entries.has(member.id)))
+    .filter((member) => tab === "all" || (tab === "ascending" ? ascending.has(member.id) : tab === "submitted" ? entries.has(member.id) : !entries.has(member.id)))
     .sort((a, b) => {
       const value = (member: Member) => sort.key === "username" ? member.username : sort.key === "updatedAt"
         ? new Date(entries.get(member.id)?.updatedAt ?? 0).getTime()
@@ -1131,6 +1153,12 @@ function MemberResources({
           onClick={() => setTab("pending")}
         >
           {t("Pending")}<span>{data.stats.pendingMembers}</span>
+        </button>
+        <button
+          className={tab === "ascending" ? "active" : ""}
+          onClick={() => setTab("ascending")}
+        >
+          <ChevronsUp size={13} aria-hidden="true" />{t("Ascending")}<span>{ascending.size}</span>
         </button>
         <span className="table-scroll-hint">
           {t("Scroll sideways to see all resources")}
@@ -1190,6 +1218,7 @@ function MemberResources({
                           />
                           {t(entry ? "Resources saved" : member.neverSignedIn ? "Never signed in" : "Not saved yet")}
                         </span>
+                        {ascending.has(member.id) && <small className="row-ascending"><ChevronsUp size={12} aria-hidden="true" />{t("Ascending: {what}", { what: ascending.get(member.id)!.map((pillar) => t(PILLAR_LABELS[pillar])).join(", ") })}</small>}
                         {missingInformation && <small className="row-missing"><CircleAlert size={12} aria-hidden="true" />{t("Missing:")} {missingInformation.issues.map((issue) => t(issue.label)).join(", ")}</small>}
                       </div>
                     </div>

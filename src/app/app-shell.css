@@ -72,7 +72,8 @@ body::before {
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .resource-table td.sticky-member .row-missing {
+  .resource-table td.sticky-member .row-missing,
+  .resource-table td.sticky-member .row-ascending {
     max-width: none;
   }
   .resource-table th:not(.sticky-member),

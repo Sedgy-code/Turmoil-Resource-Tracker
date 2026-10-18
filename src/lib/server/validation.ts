@@ -183,6 +183,7 @@ export const updateWarSchema = z.object({
   rows: warRowsSchema,
 }).strict();
 export const addScreenshotsSchema = z.object({ images: z.array(screenshotSchema).min(1).max(3) }).strict();
+export const ascensionSchema = z.object({ pillars: z.array(z.enum(["forge", "skills", "mounts", "pets"])).max(4) }).strict();
 export const clanDaysSchema = z.object({ week: weekSchema, days: z.array(z.number().int().min(1).max(5)).max(5) }).strict();
 export const hoardingRulesSchema = z.object({
   largeMultiple: z.number().min(1).max(20),
