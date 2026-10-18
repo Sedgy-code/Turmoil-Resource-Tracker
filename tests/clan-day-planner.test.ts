@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { dayPoints, pillarCounts, rankPairs } from "../src/lib/clan-day-planner";
+import { dayPoints, pillarCounts, rankPairs, twinDays } from "../src/lib/clan-day-planner";
 
 // Hammers 100, skills 50, mounts 60 (summons, bonus and existing merges), eggs/pets 60.
 const POINTS = { hammers: 100, skillSummons: 50, mountSummons: 30, newMountMerges: 10, mountMerges: 20, eggMerges: 40, eggSummonMerges: 20 };
@@ -23,10 +23,16 @@ test("pairs are ranked by their weaker day, with shared resources split between 
   assert.deepEqual(find(1, 3).ascending, { skills: 1 });
   // Strongest first; ties go to the pair with more votes.
   assert.deepEqual(pairs.slice(0, 3).map((pair) => pair.days), [[1, 3], [1, 5], [3, 5]]);
+  // Same weaker day (a mount day): the pair with the stronger other day comes first.
+  assert.deepEqual(pairs.slice(3, 7).map((pair) => pair.days), [[2, 3], [3, 4], [2, 5], [4, 5]]);
   assert.equal(pairs.at(-1)!.days.join(","), "2,4");
   assert.equal(pairs.length, 10);
 });
 
 test("ascending answers are counted per pillar", () => {
   assert.deepEqual(pillarCounts([{ pillars: ["skills", "pets"] }, { pillars: ["skills"] }, { pillars: [] }]), { skills: 2, pets: 1 });
+});
+
+test("Days 2 and 4 score with the same resources", () => {
+  assert.deepEqual(twinDays(), [[2, 4]]);
 });

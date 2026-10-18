@@ -1,4 +1,6 @@
-/* Filled, game-style pictures for Home: a stack of coins, and the four things members ascend. */
+/* Filled, game-style pictures: a stack of coins, the four things members ascend, and a rainbow egg. */
+
+import { useId } from "react";
 
 type IconProps = { size?: number };
 
@@ -44,4 +46,23 @@ export function PetPaw({ size }: IconProps) {
     <ellipse cx="14.8" cy="6.5" rx="2" ry="2.6" transform="rotate(8 14.8 6.5)" />
     <ellipse cx="18.6" cy="10.9" rx="1.9" ry="2.4" transform="rotate(22 18.6 10.9)" />
   </Svg>;
+}
+
+/** An egg in the colours of the game's egg rarities (it keeps its own colours). */
+export function RainbowEgg({ size }: IconProps) {
+  const id = useId();
+  return <svg width={size ?? 18} height={size ?? 18} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <defs>
+      <linearGradient id={`${id}-egg`} x1="5" y1="3" x2="19" y2="21" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stopColor="#4ff08a" />
+        <stop offset=".3" stopColor="#4fc8ff" />
+        <stop offset=".55" stopColor="#b98cff" />
+        <stop offset=".8" stopColor="#ff6fae" />
+        <stop offset="1" stopColor="#ffd56b" />
+      </linearGradient>
+    </defs>
+    <path d="M12 2.6c-3.6 0-6.8 5.5-6.8 10.5 0 4.6 3 7.9 6.8 7.9s6.8-3.3 6.8-7.9c0-5-3.2-10.5-6.8-10.5Z" fill={`url(#${id}-egg)`} stroke="#0b1418" strokeOpacity=".55" strokeWidth="1" />
+    <path d="M5.9 13.2 8.4 11l2.4 2.2 2.4-2.2 2.4 2.2 2.6-2.2" fill="none" stroke="#fff" strokeOpacity=".55" strokeWidth="1.3" strokeLinejoin="round" />
+    <ellipse cx="9.6" cy="7.4" rx="1.3" ry="2" fill="#fff" fillOpacity=".55" transform="rotate(-22 9.6 7.4)" />
+  </svg>;
 }

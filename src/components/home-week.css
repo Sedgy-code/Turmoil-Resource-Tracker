@@ -119,9 +119,36 @@
 /* Cards */
 .home-card { min-width: 0; padding: 14px; border: 1px solid #22302c; border-radius: 18px; background: linear-gradient(180deg, #0a1311, #060c0b); }
 .home-card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; margin-bottom: 11px; }
+.home-card-head > .home-fold { margin-inline-start: auto; }
 .home-card-head h2 { display: flex; align-items: center; gap: 10px; margin: 0; font-family: var(--heading); font-size: 19px; font-weight: 800; letter-spacing: -0.2px; color: var(--hw-ink); }
 .home-card-head .home-kicker { gap: 9px; font-family: var(--font); font-size: 12.5px; font-weight: 650; letter-spacing: 1.2px; text-transform: uppercase; color: var(--hw-cool); }
 .home-kicker svg { flex-shrink: 0; color: var(--hw-gold); }
+
+/* Folding: the ⌄ at the end of a card's heading. Cards that need an answer only fold once it's given. */
+.home-card-tail { display: inline-flex; align-items: center; gap: 8px; margin-inline-start: auto; }
+.home-fold {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  margin: -6px -6px -6px 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--hw-cool);
+  cursor: pointer;
+}
+.home-fold svg { transition: transform 0.2s; }
+.home-fold.open svg { transform: rotate(180deg); }
+.home-card.folded .home-card-head { margin-bottom: 0; }
+.home-fold-summary { margin: 8px 0 0; color: var(--hw-cool); font-size: 13.5px; }
+.home-hero.folded .home-hero-progress { border-top: 0; }
+.home-hero-progress .home-fold { margin: -6px -8px -6px -2px; }
+.recognition-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.recognition-body { display: flex; flex-direction: column; gap: 8px; }
+.recognition-panel.folded { padding-top: 12px; padding-bottom: 12px; }
 
 /* Your jobs this week */
 .home-jobs-card {
@@ -131,7 +158,9 @@
   box-shadow: 0 0 24px -6px #2fe46c77, inset 0 0 28px -12px #2fe46c99;
 }
 .home-jobs-icon { flex-shrink: 0; color: var(--hw-glow); filter: drop-shadow(0 0 6px #2fe46c88); }
-.home-done { display: inline-flex; align-items: center; gap: 7px; color: #4cf08a; font-size: 15px; font-weight: 750; }
+.home-done { display: flex; align-items: center; gap: 7px; margin: -4px 0 10px 38px; color: #4cf08a; font-size: 15px; font-weight: 750; }
+.home-jobs-card.folded .home-done { margin-bottom: 0; }
+[dir="rtl"] .home-done { margin: -4px 38px 10px 0; }
 .home-done-tick { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--hw-glow); color: #03140a; box-shadow: 0 0 10px #2fe46c99; }
 .home-jobs { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; }
 .home-job {
@@ -332,5 +361,6 @@ button.home-link { padding: 0; border: 0; background: none; font: inherit; font-
   .home-hero-faces .avatar:nth-child(n + 4) { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .home-more-chevron { transition: none; }
+  .home-more-chevron,
+  .home-fold svg { transition: none; }
 }

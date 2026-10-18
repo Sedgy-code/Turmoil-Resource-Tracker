@@ -5,6 +5,7 @@ import { AWARDS } from "@/lib/awards";
 import { numberFormat } from "@/lib/resources";
 import { useT } from "@/lib/i18n";
 import type { Member } from "@/lib/types";
+import { FoldButton, useFold } from "./home-fold";
 import { MemberName } from "./member-identity";
 import { useRecognition } from "./recognition";
 
@@ -12,13 +13,19 @@ import { useRecognition } from "./recognition";
 export function MonthlyAwardsPanel({ members }: { members: Member[] }) {
   const t = useT();
   const { data } = useRecognition();
+  // Starts folded on Home; each member opens it if they want.
+  const fold = useFold("awards", { folded: true });
   const awards = data?.awards;
   if (!awards?.items.length) return null;
   const byId = new Map(members.map((member) => [member.id, member]));
   const month = new Date(`${awards.month}-01T00:00:00Z`).toLocaleDateString(undefined, { month: "long", year: "numeric", timeZone: "UTC" });
-  return <section className="panel recognition-panel monthly-awards">
-    <h2><Medal size={17} />{t("Awards for {month}", { month })}</h2>
-    <ul>{awards.items.map((item) => {
+  const title = t("Awards for {month}", { month });
+  return <section className={`panel recognition-panel monthly-awards${fold.open ? "" : " folded"}`}>
+    <div className="recognition-head">
+      <h2><Medal size={17} />{title}</h2>
+      <FoldButton open={fold.open} onClick={fold.toggle} label={title} controls="home-awards-list" />
+    </div>
+    {fold.open && <ul id="home-awards-list">{awards.items.map((item) => {
       const award = AWARDS[item.award];
       const winners = item.memberIds.map((id) => byId.get(id)).filter((member): member is Member => !!member);
       return <li key={item.award}>
@@ -29,6 +36,6 @@ export function MonthlyAwardsPanel({ members }: { members: Member[] }) {
           {item.award !== "saver" && <small>{numberFormat(item.value)} {t(award.unit)}</small>}
         </div>
       </li>;
-    })}</ul>
+    })}</ul>}
   </section>;
 }

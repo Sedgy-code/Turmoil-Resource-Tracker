@@ -11,6 +11,7 @@ import { currentWeek, numberFormat, type ResourceKey } from "@/lib/resources";
 import { useLanguage, useT } from "@/lib/i18n";
 import type { AscensionPillar, AscensionsResponse, DashboardResponse, DewResponse, Member, SnipePlan, SnipesResponse } from "@/lib/types";
 import { CrownShield } from "./crown-shield";
+import { FoldButton, useFold } from "./home-fold";
 import { CoinStack, ForgeHammer, MountHorse, PetPaw, SkillStar } from "./home-icons";
 import { MemberAvatar } from "./member-identity";
 import { useClanDayVotes, useClanDays, useNow } from "./war-week";
@@ -78,6 +79,8 @@ export function HomeWeek({ data, notify, between }: { data: DashboardResponse; n
   const [plans, setPlans] = useState<SnipePlan[] | null>(null);
   const [ascension, setAscension] = useState<AscensionPillar[] | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
+  // The job rows wait for the first answers, so a finished week can start folded without a jump.
+  const [ready, setReady] = useState(false);
   const refresh = useCallback(async () => {
     const [dew, snipes, ascensions] = await Promise.all([
       load<DewResponse>("/api/dew"), load<SnipesResponse>("/api/snipes"), load<AscensionsResponse>("/api/ascensions"),
@@ -85,6 +88,7 @@ export function HomeWeek({ data, notify, between }: { data: DashboardResponse; n
     if (dew) setEarned(dew.resourceRewardEarned);
     if (snipes) setPlans(snipes.plans);
     if (ascensions) setAscension(ascensions.mine);
+    setReady(true);
   }, []);
   useEffect(() => {
     void refresh();
@@ -161,15 +165,23 @@ export function HomeWeek({ data, notify, between }: { data: DashboardResponse; n
     }
   }
   const allDone = earned === true && answered && (!snipe || !!answer);
+  // The jobs can only fold once they're all done. Done already when Home opened: start folded.
+  // Finished just now: stay open, so the member sees it worked.
+  const [doneOnArrival, setDoneOnArrival] = useState<boolean | null>(null);
+  if (ready && doneOnArrival === null) setDoneOnArrival(allDone);
+  const jobsFold = useFold(`jobs:${week}`, { canFold: allDone, folded: doneOnArrival === true });
+  const jobsOpen = ready && jobsFold.open;
 
   return <div className="home-week">
-    <HomeHero update={update} saved={savedEntries.length} total={data.stats.totalMembers} faces={faces} />
-    <section className="home-card home-jobs-card" aria-labelledby="home-jobs-title">
+    <HomeHero update={update} saved={savedEntries.length} total={data.stats.totalMembers} faces={faces} mine={saved} week={week} />
+    <section className={`home-card home-jobs-card${jobsOpen ? "" : " folded"}`} aria-labelledby="home-jobs-title">
       <div className="home-card-head">
         <h2 id="home-jobs-title"><ShieldCheck className="home-jobs-icon" size={28} strokeWidth={2.2} aria-hidden="true" />{t("Your jobs this week")}</h2>
-        {allDone && <span className="home-done"><span className="home-done-tick" aria-hidden="true"><Check size={13} strokeWidth={3.4} /></span>{t("All done!")}</span>}
+        {ready && jobsFold.canFold && <FoldButton open={jobsFold.open} onClick={jobsFold.toggle} label={t("Your jobs this week")} controls="home-jobs-list" />}
       </div>
-      <ol className="home-jobs">
+      {/* Under the heading, so it fits beside the ⌄ on a phone. */}
+      {allDone && <p className="home-done"><span className="home-done-tick" aria-hidden="true"><Check size={13} strokeWidth={3.4} /></span>{t("All done!")}</p>}
+      {jobsOpen && <ol className="home-jobs" id="home-jobs-list">
         <li className={`home-job with-side${saved ? " done" : ""}`}>
           <JobMark tone="gold" done={saved}><CoinStack size={24} /></JobMark>
           <div className="home-job-text">
@@ -207,7 +219,7 @@ export function HomeWeek({ data, notify, between }: { data: DashboardResponse; n
             <button aria-pressed={answer === "no"} disabled={busy} onClick={() => void respond(snipe, "no")}><X size={16} />{t("No")}</button>
           </div>
         </li>}
-      </ol>
+      </ol>}
     </section>
     {between}
     <HomeToday now={now} notify={notify} memberId={me.id} />
@@ -215,17 +227,19 @@ export function HomeWeek({ data, notify, between }: { data: DashboardResponse; n
 }
 
 /** The banner at the top of Home: the clan crest, the one thing to do, and how many have done it. */
-function HomeHero({ update, saved, total, faces }: { update: string; saved: number; total: number; faces: Member[] }) {
+function HomeHero({ update, saved, total, faces, mine, week }: { update: string; saved: number; total: number; faces: Member[]; mine: boolean; week: string }) {
   const t = useT();
   const { language } = useLanguage();
+  // Folds down to the progress line once this member has saved this week.
+  const fold = useFold(`hero:${week}`, { canFold: mine });
   // In English the painted lettering from the clan's design; other languages get the brush font,
   // in two lines: the first word in green, the rest in white.
   const title = t("Stronger together");
   const space = title.search(/\s/);
   const first = space < 0 ? title : title.slice(0, space);
   const rest = space < 0 ? "" : title.slice(space + 1);
-  return <section className="home-hero" aria-labelledby="home-hero-title">
-    <div className="home-hero-main">
+  return <section className={`home-hero${fold.open ? "" : " folded"}`} aria-label={title}>
+    {fold.open && <div className="home-hero-main" id="home-hero-main">
       <img className="home-hero-art" src="/home/banner-art.webp" alt="" width={367} height={370} decoding="async" />
       <div className="home-hero-copy">
         <h2 id="home-hero-title" className="home-hero-title">
@@ -251,13 +265,14 @@ function HomeHero({ update, saved, total, faces }: { update: string; saved: numb
           <feMerge><feMergeNode in="streaks" /><feMergeNode in="text" /></feMerge>
         </filter>
       </svg>
-    </div>
+    </div>}
     <div className="home-hero-progress">
       {faces.length > 0 && <span className="home-hero-faces" aria-hidden="true">{faces.map((member) => <MemberAvatar key={member.id} member={member} small />)}</span>}
       <p><strong>{t("{count} of {total} members", { count: saved, total })}</strong><small>{t("saved this week")}</small></p>
       <div className="home-track" role="progressbar" aria-label={t("{count} of {total} members saved this week", { count: saved, total })} aria-valuemin={0} aria-valuemax={total} aria-valuenow={saved}>
         <i style={{ width: `${total ? Math.min(100, (saved / total) * 100) : 0}%` }} />
       </div>
+      {fold.canFold && <FoldButton open={fold.open} onClick={fold.toggle} label={title} controls="home-hero-main" />}
     </div>
   </section>;
 }
@@ -269,16 +284,22 @@ const OPEN_TOTALS = "turmoil-open-totals";
 export function HomeArsenal({ minimum, maximum }: { minimum: number | null; maximum: number | null }) {
   const t = useT();
   const amount = (value: number | null) => value === null ? "--" : numberFormat(Math.round(value));
-  return <section className="home-card home-arsenal" aria-labelledby="home-arsenal-title">
+  const fold = useFold("arsenal");
+  return <section className={`home-card home-arsenal${fold.open ? "" : " folded"}`} aria-labelledby="home-arsenal-title">
     <div className="home-card-head">
       <h2 id="home-arsenal-title" className="home-kicker"><CrownShield size={19} />{t("Clan arsenal")}</h2>
-      <span className="live-badge"><i />{t("LIVE TOTALS")}</span>
+      <span className="home-card-tail">
+        <span className="live-badge"><i />{t("LIVE TOTALS")}</span>
+        <FoldButton open={fold.open} onClick={fold.toggle} label={t("Clan arsenal")} controls="home-arsenal-body" />
+      </span>
     </div>
-    <p className="home-arsenal-range"><strong>{amount(minimum)}</strong><span aria-hidden="true">–</span><strong>{amount(maximum)}</strong></p>
-    <div className="home-today-foot">
-      <span className="home-arsenal-label">{t("Total Potential War Points")}</span>
-      <button type="button" className="home-link" onClick={() => window.dispatchEvent(new Event(OPEN_TOTALS))}>{t("Clan totals")}<ChevronDown size={16} /></button>
-    </div>
+    {fold.open && <div id="home-arsenal-body">
+      <p className="home-arsenal-range"><strong>{amount(minimum)}</strong><span aria-hidden="true">–</span><strong>{amount(maximum)}</strong></p>
+      <div className="home-today-foot">
+        <span className="home-arsenal-label">{t("Total Potential War Points")}</span>
+        <button type="button" className="home-link" onClick={() => window.dispatchEvent(new Event(OPEN_TOTALS))}>{t("Clan totals")}<ChevronDown size={16} /></button>
+      </div>
+    </div>}
   </section>;
 }
 
@@ -345,13 +366,24 @@ function HomeToday({ now, notify, memberId }: { now: Date; notify: (message: str
     if (clan.days.length) sub = t("Next war’s clan days: {days}.", { days: clan.days.map((day) => t("Day {day}", { day })).join(", ") });
   }
   const BadgeIcon = badge ? TONE_ICONS[badge.tone] : null;
+  const todayFold = useFold("today");
+  // The vote can only fold once the member has voted; voted for both days before Home opened:
+  // start folded, with the days they picked underneath.
+  const mine = votes?.mine ?? [];
+  const [votedOnArrival, setVotedOnArrival] = useState<boolean | null>(null);
+  if (votes && votedOnArrival === null) setVotedOnArrival(mine.length >= 2);
+  const voteFold = useFold(`vote:${votes?.week ?? ""}`, { canFold: mine.length > 0, folded: votedOnArrival === true });
   const needName = (need: Need) => need === "hammers" ? t("Hammers") : need === "skills" ? t("Skills") : need === "mounts" ? t("Mounts") : t("Eggs and pets");
   return <>
-    <section className={`home-card home-today${badge ? ` tone-${badge.tone}` : ""}`} aria-labelledby="home-today-title">
+    <section className={`home-card home-today${badge ? ` tone-${badge.tone}` : ""}${todayFold.open ? "" : " folded"}`} aria-labelledby="home-today-title">
       <div className="home-card-head">
         <h2 id="home-today-title" className="home-kicker"><Swords size={19} />{t("Today")} · {t("Day {day} of 7", { day: war.day })}</h2>
-        {badge && BadgeIcon && <span className={`home-badge ${badge.tone}`}><BadgeIcon size={14} aria-hidden="true" />{badge.text}</span>}
+        <span className="home-card-tail">
+          {badge && BadgeIcon && <span className={`home-badge ${badge.tone}`}><BadgeIcon size={14} aria-hidden="true" />{badge.text}</span>}
+          <FoldButton open={todayFold.open} onClick={todayFold.toggle} label={t("Today")} controls="home-today-body" />
+        </span>
       </div>
+      {todayFold.open && <div id="home-today-body">
       <p className="home-today-main">{main}</p>
       {sub && <p className="home-today-sub">{sub}</p>}
       <p className="home-race">
@@ -364,13 +396,19 @@ function HomeToday({ now, notify, memberId }: { now: Date; notify: (message: str
           : !votes?.open && <span className="home-today-time"><Clock size={14} />{t("Next war starts in {time}", { time: countdown(war.weekEnd, now) })}</span>}
         <Link className="home-link" href="/war">{t("See the war plan")}<ArrowRight size={15} /></Link>
       </div>
+      </div>}
     </section>
     {/* Its own card, so the vote is clearly about the next war and not today's. */}
-    {votes?.open && <section className="home-card home-next-war" aria-labelledby="home-next-war-title">
+    {votes?.open && <section className={`home-card home-next-war${voteFold.open ? "" : " folded"}`} aria-labelledby="home-next-war-title">
       <div className="home-card-head">
         <h2 id="home-next-war-title" className="home-kicker"><CalendarDays size={19} />{t("Next war starts in {time}", { time: countdown(war.weekEnd, now) })}</h2>
-        <em className="home-vote-reward">{t("+10 points")}</em>
+        {/* Before voting: the reward. After voting: the ⌄ to fold it away. */}
+        {voteFold.canFold
+          ? <FoldButton open={voteFold.open} onClick={voteFold.toggle} label={t("Pick 2 days to win next war (plus Day 6)")} controls="home-next-war-body" />
+          : <em className="home-vote-reward">{t("+10 points")}</em>}
       </div>
+      {!voteFold.open && <p className="home-fold-summary">{t("Your vote: {days}", { days: mine.map((day) => t("Day {day}", { day })).join(" + ") })}</p>}
+      {voteFold.open && <div id="home-next-war-body">
       <p className="home-today-main">{t("Pick 2 days to win next war (plus Day 6)")}</p>
       <div className="home-vote-days" role="group" aria-label={t("Pick 2 days to win next war (plus Day 6)")}>
         {[1, 2, 3, 4, 5].map((day) => <button key={day} aria-pressed={!!votes.mine?.includes(day)} disabled={voting} onClick={() => void toggleVote(day)}>
@@ -384,6 +422,7 @@ function HomeToday({ now, notify, memberId }: { now: Date; notify: (message: str
       </div>
       <p className="home-vote-key" aria-hidden="true">{NEEDS.map((need) => { const Icon = NEED_ICONS[need]; return <span key={need}><Icon size={13} />{needName(need)}</span>; })}</p>
       <small className="home-vote-voters">{t("Members voted so far: {count}. Leadership makes the final pick.", { count: votes.voters })}</small>
+      </div>}
     </section>}
   </>;
 }

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowRight, Check, CheckCircle2, Clock, Plus } from "lucide-react";
 import { numberFormat } from "@/lib/resources";
 import { WAR_DAYS, countdown, nextWarWeek, warDay, warStart, warWeekOf } from "@/lib/war-calendar";
-import { activityPoints, dayPoints, pillarCounts, rankPairs, type DayPair } from "@/lib/clan-day-planner";
+import { activityPoints, dayPoints, pillarCounts, rankPairs, twinDays, type DayPair } from "@/lib/clan-day-planner";
 import { PILLAR_LABELS } from "@/lib/ascension";
 import { estimateWar, WAR_ACTIVITIES } from "@/lib/war";
 import { useT } from "@/lib/i18n";
@@ -197,7 +197,8 @@ function ClanDayPlanner({ data, rates, votes, target, week, notify }: {
   const mostVoted = pairs.reduce<DayPair | null>((best, pair) => pair.votes > (best?.votes ?? 0) ? pair : best, null);
   const shown = pairs.slice(0, 4);
   if (mostVoted && !shown.includes(mostVoted)) shown.push(mostVoted);
-  const strongest = Math.max(1, pairs[0]?.weaker ?? 1);
+  // Bars are measured against the strongest single day, so both days of every pair compare.
+  const strongest = Math.max(1, ...shown.flatMap((pair) => pair.perDay));
   const day = (value: number) => t("Day {day}", { day: value });
   async function pick(pair: DayPair) {
     if (await target.save(pair.days)) notify?.(t("Clan days saved."));
@@ -205,24 +206,34 @@ function ClanDayPlanner({ data, rates, votes, target, week, notify }: {
   }
   return <section className="panel war-planner" aria-labelledby="war-planner-title">
     <h2 id="war-planner-title">🧮 {t("Pick the next war’s clan days")}</h2>
-    <p className="war-week-note">{t("Day 6 is always fought, so the clan needs 2 more days. Pairs are ranked by the clan’s saved resources, with shared resources (like hammers) split between the two days.")}</p>
+    <p className="war-week-note">{t("Day 6 is always fought, so the clan needs 2 more days. Both have to be won, so pairs are ranked by their weaker day, then by the stronger one. Resources that score on both days (like hammers) are split between them.")}</p>
     <ol className="war-pairs">{shown.map((pair, index) => {
       const chosen = target.days.length === 2 && target.days[0] === pair.days[0] && target.days[1] === pair.days[1];
       const boosts = (Object.entries(pair.ascending) as [AscensionPillar, number][]).map(([pillar, count]) => `${t(PILLAR_LABELS[pillar])} ${count}`).join(", ");
       return <li key={pair.days.join(",")} className={chosen ? "on" : undefined}>
         <div className="war-pair-head">
-          <strong>{day(pair.days[0])} + {day(pair.days[1])}</strong>
-          {index === 0 && <span className="war-pair-tag">★ {t("Strongest")}</span>}
-          {pair === mostVoted && <span className="war-pair-tag vote">🗳️ {t("Most votes")}</span>}
+          <div className="war-pair-title">
+            <strong>{day(pair.days[0])} + {day(pair.days[1])}</strong>
+            {index === 0 && <span className="war-pair-tag">★ {t("Strongest")}</span>}
+            {pair === mostVoted && <span className="war-pair-tag vote">🗳️ {t("Most votes")}</span>}
+          </div>
           <button className={`button ${chosen ? "primary" : "secondary"} small-button war-pair-pick`} disabled={!target.loaded || target.saving || chosen} onClick={() => void pick(pair)}>{chosen && <Check size={13} />}{chosen ? t("Picked") : t("Pick")}</button>
         </div>
-        <div className="war-pair-bar" aria-hidden="true"><i style={{ width: `${Math.max(2, (pair.weaker / strongest) * 100)}%` }} /></div>
+        {/* Each day's points in this pair: the shorter bar is the day the clan is most likely to lose. */}
+        <dl className="war-pair-days">
+          {pair.days.map((value, side) => <div key={value} className={pair.perDay[side] === pair.weaker ? "weaker" : undefined}>
+            <dt>{day(value)}</dt>
+            <dd className="war-pair-bar" aria-hidden="true"><i style={{ width: `${Math.max(2, (pair.perDay[side] / strongest) * 100)}%` }} /></dd>
+            <dd>{t("about {points}", { points: compact(pair.perDay[side]) })}</dd>
+          </div>)}
+        </dl>
         <small>
-          {t("Weaker day: about {points} points", { points: compact(pair.weaker) })} · {t("Votes: {count}", { count: pair.votes })}
+          {t("Votes: {count}", { count: pair.votes })}
           {boosts && <> · {t("Ascending: {what}", { what: boosts })}</>}
         </small>
       </li>;
     })}</ol>
+    {twinDays().map(([a, b]) => <p key={`${a},${b}`} className="war-week-note">{t("Days {a} and {b} use the same resources, so pairs with either one score the same.", { a, b })}</p>)}
     <p className="war-week-note">{t("Each day on its own: {days}", { days: dayPoints(points).map((value, index) => `${day(index + 1)} ${compact(value)}`).join(" · ") })}</p>
     <p className="war-week-note">{t("Counts hammers, skills, mounts and pets from saved resources. Forge, tech and dungeon points aren’t tracked.")}</p>
   </section>;

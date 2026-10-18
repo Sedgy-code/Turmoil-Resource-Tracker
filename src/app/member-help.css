@@ -496,6 +496,21 @@
 .arsenal-row .war-point-range strong {
   font-size: clamp(15px, 1.25vw, 18px);
 }
+/* Each resource in its colour from the game, with a soft glow: green skills, gold keys,
+   rainbow eggs, purple mounts, icy hammers. Used by the picture buttons and the cards. */
+.arsenal-tile.green, .arsenal-grid .resource-icon.green { color: #5cf08f; --glow: #2fe46caa; }
+.arsenal-tile.gold, .arsenal-grid .resource-icon.gold { color: #ffd56b; --glow: #f2b33caa; }
+.arsenal-tile.eggs, .arsenal-grid .resource-icon.eggs { color: #e3c2ff; --glow: #b98cffaa; }
+.arsenal-tile.purple, .arsenal-grid .resource-icon.purple { color: #c69bff; --glow: #a26bffaa; }
+.arsenal-tile.ice, .arsenal-grid .resource-icon.ice { color: #6fd8ff; --glow: #3fbfffaa; }
+.arsenal-tile svg,
+.arsenal-grid .resource-icon svg { filter: drop-shadow(0 0 5px var(--glow, transparent)); }
+.arsenal-grid .resource-icon.green,
+.arsenal-grid .resource-icon.gold,
+.arsenal-grid .resource-icon.eggs,
+.arsenal-grid .resource-icon.purple,
+.arsenal-grid .resource-icon.ice { background: #0d1a20; border-color: #2a4552; }
+
 /* Phones and tablets: five small picture buttons instead of five wide cards. The tapped one
    opens its card underneath; tapping it again closes it. Wide screens show all five cards. */
 .arsenal-tiles,
@@ -520,16 +535,28 @@
     background: linear-gradient(180deg, #11222b, #0b171d);
     cursor: pointer;
   }
-  .arsenal-tile.amber,
-  .arsenal-tile.gold { color: #edce7e; }
-  .arsenal-tile.blue { color: #8eb6d0; }
-  .arsenal-tile.purple { color: #c3a8dc; }
-  .arsenal-tile.orange { color: #e9b665; }
+  /* Chosen: a gold frame; the picture keeps its own colour. */
   .arsenal-tile[aria-pressed="true"] {
     border-color: #f2bf4b;
     background: linear-gradient(180deg, #3b2c0a, #1c1505);
-    color: #ffd56b;
     box-shadow: 0 0 0 1px #f2bf4b55, 0 0 16px -2px #f2bf4b88;
+  }
+  /* The card that opens: centred under the buttons. */
+  .arsenal-grid.arsenal-row .arsenal-card.shown {
+    text-align: center;
+  }
+  .arsenal-grid.arsenal-row .arsenal-card.shown .stat-label,
+  .arsenal-grid.arsenal-row .arsenal-card.shown .war-point-range > div {
+    justify-content: center;
+  }
+  .arsenal-grid.arsenal-row .arsenal-card.shown .stat-number {
+    align-self: center;
+    text-align: center;
+  }
+  /* The "members missing…" warning (its own button). */
+  .arsenal-grid.arsenal-row .arsenal-card.shown [class*="indicator"] {
+    align-self: center;
+    text-align: center;
   }
   .arsenal-tap-hint {
     display: block;

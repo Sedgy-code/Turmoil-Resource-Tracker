@@ -22,6 +22,7 @@ import { ASCENSIONS_UPDATED, PILLAR_LABELS } from "@/lib/ascension";
 import { useSortable } from "./sortable";
 import { ClanPointsBalance } from "./clan-points-balance";
 import { PullToRefresh } from "./pull-to-refresh";
+import { MountHorse, RainbowEgg } from "./home-icons";
 import { announceClanPointsUpdate } from "@/lib/clan-points";
 import { MemberAvatar as Avatar, MemberName, MemberTitle } from "./member-identity";
 import { DEFAULT_WAR_RATES, WAR_ACTIVITIES, estimateWar } from "@/lib/war";
@@ -174,19 +175,20 @@ const essentials: {
   label: string;
   color: string;
 }[] = [
-  { key: "skillTickets", icon: Ticket, label: "Skill Tickets", color: "amber" },
-  { key: "mountKeys", icon: KeyRound, label: "Mount Keys", color: "blue" },
+  // Colours as in the game: green skills, gold keys, purple mounts, icy hammers.
+  { key: "skillTickets", icon: Ticket, label: "Skill Tickets", color: "green" },
+  { key: "mountKeys", icon: KeyRound, label: "Mount Keys", color: "gold" },
   {
     key: "mountsToMerge",
-    icon: Swords,
+    icon: MountHorse,
     label: "Mounts to Merge",
     color: "purple",
   },
-  { key: "hammers", icon: Hammer, label: "Hammers", color: "orange" },
+  { key: "hammers", icon: Hammer, label: "Hammers", color: "ice" },
 ];
 const dashboardResources = [
   ...essentials.slice(0, 2),
-  { key: "eggsPetsTotal", icon: Egg, label: "Total eggs/pets", color: "gold" },
+  { key: "eggsPetsTotal", icon: RainbowEgg, label: "Total eggs/pets", color: "eggs" },
   ...essentials.slice(2),
 ] satisfies typeof essentials;
 /** Potions came back to the form on this date; older saves never asked for them. */

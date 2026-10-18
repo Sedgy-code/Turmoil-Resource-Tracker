@@ -68,9 +68,20 @@ button.war-clan-day:hover, button.war-clan-day:focus-visible { border-color: var
 .war-pairs { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .war-pairs li { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: #0f1612; }
 .war-pairs li.on { border-color: var(--gold); background: #1d1a10; }
-.war-pair-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
-.war-pair-head strong { font-size: 15px; }
-.war-pair-pick { margin-inline-start: auto; min-width: 64px; min-height: 32px; justify-content: center; }
+.war-pair-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.war-pair-title { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; }
+.war-pair-title strong { font-size: 15px; }
+.war-pair-pick { flex-shrink: 0; min-width: 64px; min-height: 32px; justify-content: center; }
+/* One row per day: name, bar, points. The weaker day (the one that decides the pair) is brighter. */
+.war-pair-days { display: grid; gap: 5px; margin: 2px 0 0; }
+.war-pair-days > div { display: grid; grid-template-columns: 52px minmax(0, 1fr) 6.6em; align-items: center; gap: 8px; }
+.war-pair-days dd:last-child { text-align: end; }
+.war-pair-days dt { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.war-pair-days dd { margin: 0; color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.war-pair-days .weaker dt,
+.war-pair-days .weaker dd { color: var(--text); font-weight: 650; }
+.war-pair-days .war-pair-bar i { opacity: 0.55; }
+.war-pair-days .weaker .war-pair-bar i { opacity: 1; }
 .war-pair-pick:disabled { opacity: 1; }
 .war-pair-tag { padding: 2px 8px; border: 1px solid #e6bd5977; border-radius: 999px; background: #2a2614; color: var(--gold); font-size: 11px; font-weight: 700; white-space: nowrap; }
 .war-pair-tag.vote { border-color: #69d58b66; background: #1b3624; color: var(--emerald); }

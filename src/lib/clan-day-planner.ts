@@ -46,7 +46,8 @@ export interface DayPair {
 /**
  * Every pair of spending days, strongest first. Resources that count on both days (hammers on Days
  * 1, 3 and 5, for example) can only be spent once, so they're split to make the weaker day as strong
- * as possible: winning a pair means winning both days.
+ * as possible: winning a pair means winning both days. Pairs with the same weaker day go by the
+ * stronger day, then by members' votes.
  */
 export function rankPairs(points: Record<WarActivity, number>, pairVotes: Record<string, number> = {}, ascending: Partial<Record<AscensionPillar, number>> = {}): DayPair[] {
   const pairs: DayPair[] = [];
@@ -67,7 +68,16 @@ export function rankPairs(points: Record<WarActivity, number>, pairVotes: Record
       .filter(([pillar, count]) => count && PILLAR_DAYS[pillar as AscensionPillar].some((day) => day === a || day === b)));
     pairs.push({ days: [a, b], weaker: Math.min(...perDay), perDay, votes: pairVotes[`${a},${b}`] ?? 0, ascending: boosts });
   }
-  return pairs.sort((x, y) => y.weaker - x.weaker || y.votes - x.votes || x.days[0] - y.days[0]);
+  const total = (pair: DayPair) => pair.perDay[0] + pair.perDay[1];
+  return pairs.sort((x, y) => y.weaker - x.weaker || total(y) - total(x) || y.votes - x.votes || x.days[0] - y.days[0] || x.days[1] - y.days[1]);
+}
+
+/** Spending days that score with exactly the same resources (Days 2 and 4 are both mount days). */
+export function twinDays(): [number, number][] {
+  const twins: [number, number][] = [];
+  const key = (day: number) => [...DAY_ACTIVITIES[day]].sort().join(",");
+  for (const a of SPENDING_DAYS) for (const b of SPENDING_DAYS) if (b > a && key(a) === key(b)) twins.push([a, b]);
+  return twins;
 }
 
 /** Members ascending each pillar, from the week's answers. */
