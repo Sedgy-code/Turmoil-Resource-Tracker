@@ -17,7 +17,7 @@ import { ClanTech } from "./clan-tech";
 import { MonthlyAwardsPanel } from "./monthly-awards";
 import { LeadershipSettings } from "./leadership-settings";
 import { downloadRows } from "@/lib/csv";
-import { CountdownStrip } from "./countdown-strip";
+import { HomeMore, HomeWeek } from "./home-week";
 import { useSortable } from "./sortable";
 import { ClanPointsBalance } from "./clan-points-balance";
 import { announceClanPointsUpdate } from "@/lib/clan-points";
@@ -477,13 +477,42 @@ function TrackerApp({ view }: { view: View }) {
       : session.user;
   const denied = ADMIN_VIEWS.includes(view) && user.role !== "ADMIN";
   const dataMatches = !!data && data.week === week && loadedSnapshotId === snapshotId;
-  const ownEntry = data?.entries.find((entry) => entry.memberId === user.id);
+  // Home normally shows this week; a link from Weekly History opens an earlier week instead.
+  const pastHome = snapshotId !== null || week !== currentWeek();
   let dashboardWar: ReturnType<typeof estimateWar> | null = null;
   let warEstimateError = "";
   if (data) {
     try { dashboardWar = estimateWar(data.entries, warRates, WAR_ACTIVITIES.map(({ key }) => key), data.live === false ? "historical" : "current"); }
     catch (e) { warEstimateError = (e as Error).message; }
   }
+  /** The clan's totals and every member's numbers: folded away on Home, open when looking at a past week. */
+  const renderClanTotals = (current: DashboardResponse) => <>
+    <div className="section-heading">
+      <div>
+        <h2>
+          {t(current.live === false ? "Saved weekly arsenal" : "The clan’s current arsenal")}{" "}
+          <span className="live-badge">
+            <i />
+            {t(current.live === false ? "READ-ONLY HISTORY" : "LIVE TOTALS")}
+          </span>
+        </h2>
+        <p>{t(current.live === false ? "Totals as they were saved that week." : "Everyone’s saved resources added together.")}</p>
+      </div>
+      {user.role === "ADMIN" && <div className="section-actions">
+        <button className="button subtle" onClick={copyTotals}>
+          <Clipboard size={15} />
+          <span>{t("Copy totals")}</span>
+        </button>
+        <button className="button secondary" onClick={downloadCsv}>
+          <ArrowDownToLine size={15} />
+          {t("Export CSV")}
+        </button>
+      </div>}
+    </div>
+    {warEstimateError && <div className="error-banner" role="alert">{t("War estimate unavailable:")} {t(warEstimateError)}</div>}
+    <ClanArsenal data={current} estimate={dashboardWar} rates={warRates} estimateError={warEstimateError} snapshotId={snapshotId} />
+    <MemberResources data={current} week={week} admin={user.role === "ADMIN"} snapshotId={snapshotId} />
+  </>;
   return (
     <RecognitionProvider enabled={!!sessionUserId}>
     <div className="app-shell">
@@ -629,11 +658,11 @@ function TrackerApp({ view }: { view: View }) {
           <div className="page-heading">
             <div>
               <h1>
-                {view === "dashboard" ? t("Resource Dashboard") : t(viewNames[view])}
+                {view !== "dashboard" ? t(viewNames[view]) : pastHome ? t("Resource Dashboard") : t("Hi, {name}", { name: user.username })}
               </h1>
               <p>
-                {t(view === "dashboard"
-                  ? "All the clan’s resources in one place."
+                {view === "dashboard" && !pastHome ? t("Here’s what to do this week.") : t(view === "dashboard"
+                  ? "Saved weekly totals for the clan."
                   : view === "resources"
                     ? "Copy your numbers from the game, then press Save."
                     : view === "members"
@@ -651,7 +680,7 @@ function TrackerApp({ view }: { view: View }) {
                             : "Saved weekly totals for the clan.")}
               </p>
             </div>
-            {["dashboard", "resources", "weeks"].includes(view) && (
+            {(["resources", "weeks"].includes(view) || (view === "dashboard" && pastHome)) && (
               <div className="week-control">
                 <button
                   className="icon-button"
@@ -701,70 +730,25 @@ function TrackerApp({ view }: { view: View }) {
           ) : !dataMatches && loading ? (
             <DashboardSkeleton />
           ) : data && dataMatches && view === "dashboard" ? (
-            <>
-              {data.live !== false && <CountdownStrip lastSavedAt={ownEntry?.updatedAt ?? null} />}
-              <section className="welcome-strip">
-                <ClanBrand variant="full" className="welcome-crest" size={84} sizes="84px" decorative />
-                <div className="welcome-copy">
-                  <h2>{t("Welcome to Turmoil Clan Hub")}</h2>
-                  <p>{t("Save your resources so the clan can plan the next war.")}</p>
-                </div>
-                <div className="welcome-progress">
-                  <div>
-                    <strong>
-                      {t("{count} of {total} members", { count: data.stats.submittedMembers, total: data.stats.totalMembers })}
-                    </strong>
-                    <span>{t(data.live === false ? "had resources in this saved week" : "have saved their resources")}</span>
-                  </div>
-                  <div className="welcome-track">
-                    <i
-                      style={{
-                        width: `${data.stats.totalMembers ? (data.stats.submittedMembers / data.stats.totalMembers) * 100 : 0}%`,
-                      }}
-                    />
+            data.live === false ? (
+              <>
+                <div className="home-history">
+                  <span>{t("{count} of {total} members", { count: data.stats.submittedMembers, total: data.stats.totalMembers })} {t("had resources in this saved week")}</span>
+                  <div className="section-actions">
+                    <Link className="button subtle" href={`/resources?week=${week}${snapshotId ? `&snapshot=${encodeURIComponent(snapshotId)}` : ""}`}>{t("View saved resources")}</Link>
+                    <Link className="button secondary" href="/">{t("Back to this week")}<ArrowRight size={15} /></Link>
                   </div>
                 </div>
-                <Link
-                  href={`/resources?week=${week}${snapshotId ? `&snapshot=${encodeURIComponent(snapshotId)}` : ""}`}
-                  className="button primary"
-                >
-                  {t(data.live === false ? "View saved resources" : ownEntry ? "Update my resources" : "Add my resources")}
-                  <ArrowRight size={16} />
-                </Link>
-              </section>
-              <div className="section-heading">
-                <div>
-                  <h2>
-                    {t(data.live === false ? "Saved weekly arsenal" : "The clan’s current arsenal")}{" "}
-                    <span className="live-badge">
-                      <i />
-                      {t(data.live === false ? "READ-ONLY HISTORY" : "LIVE TOTALS")}
-                    </span>
-                  </h2>
-                  <p>{t(data.live === false ? "Totals as they were saved that week." : "Everyone’s saved resources added together.")}</p>
-                </div>
-                <div className="section-actions">
-                  <button className="button subtle" onClick={copyTotals}>
-                    <Clipboard size={15} />
-                    <span>{t("Copy totals")}</span>
-                  </button>
-                  <button className="button secondary" onClick={downloadCsv}>
-                    <ArrowDownToLine size={15} />
-                    {t("Export CSV")}
-                  </button>
-                </div>
-              </div>
-              {warEstimateError && <div className="error-banner" role="alert">{t("War estimate unavailable:")} {t(warEstimateError)}</div>}
-              <ClanArsenal data={data} estimate={dashboardWar} rates={warRates} estimateError={warEstimateError} snapshotId={snapshotId} />
-              <MonthlyAwardsPanel members={data.members} />
-              <SnipeChampions members={data.members} />
-              <MemberResources
-                data={data}
-                week={week}
-                admin={user.role === "ADMIN"}
-                snapshotId={snapshotId}
-              />
-            </>
+                {renderClanTotals(data)}
+              </>
+            ) : (
+              <>
+                <HomeWeek data={data} notify={notify} />
+                <MonthlyAwardsPanel members={data.members} />
+                <SnipeChampions members={data.members} />
+                <HomeMore>{renderClanTotals(data)}</HomeMore>
+              </>
+            )
           ) : data && dataMatches && view === "resources" ? (
             <ResourceForm
               data={data}

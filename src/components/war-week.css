@@ -1,4 +1,4 @@
-/* War Week planner, Home countdown strip, section tabs and phone bottom bar */
+/* War Week planner, section tabs and phone bottom bar */
 .war-week { display: flex; flex-direction: column; gap: 14px; }
 .war-week-now { padding: 18px 20px; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; border-color: #d9a52b66; background: linear-gradient(120deg, #1d1a10, var(--panel)); }
 .war-week-now h2 { margin: 2px 0 4px; font-size: 20px; font-family: var(--heading); }
@@ -22,20 +22,6 @@
 .war-day-clan dd { margin: 0; display: flex; justify-content: space-between; gap: 8px; color: var(--muted); }
 .war-day-clan b { color: var(--text); }
 .war-week-link { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; color: var(--gold); font-size: 13px; }
-
-/* Countdown strip on Home */
-.countdown-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-bottom: 18px; }
-.countdown-item { display: flex; gap: 11px; align-items: center; padding: 12px 14px; border-radius: 10px; background: var(--panel); border: 1px solid var(--border); color: inherit; min-width: 0; }
-a.countdown-item:hover { background: var(--panel-hover); }
-.countdown-item > svg { flex-shrink: 0; color: var(--gold); }
-.countdown-item div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.countdown-item span { font-size: 10.5px; color: var(--subtle); text-transform: uppercase; letter-spacing: 0.9px; }
-.countdown-item strong { font-size: 13.5px; }
-.countdown-item small { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-@media (max-width: 650px) {
-  .countdown-strip { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; margin-inline: -16px; padding-inline: 16px; }
-  .countdown-item { flex: 0 0 78%; scroll-snap-align: start; }
-}
 
 /* Tabs inside a section */
 .section-tabs { display: flex; gap: 6px; margin: -6px 0 18px; overflow-x: auto; border-bottom: 1px solid var(--border); }
@@ -69,5 +55,3 @@ button.war-clan-day:hover, button.war-clan-day:focus-visible { border-color: var
 .war-day-badge { align-self: flex-start; font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; }
 .war-day-badge.clan { color: #1a1406; background: var(--gold); }
 .war-day-badge.hold { color: var(--muted); border: 1px solid var(--border); }
-.countdown-clan-day { margin-inline-start: 6px; font-style: normal; font-size: 9.5px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; vertical-align: 2px; padding: 2px 6px; border-radius: 999px; color: var(--muted); border: 1px solid var(--border); }
-.countdown-clan-day.on { color: #1a1406; background: var(--gold); border-color: var(--gold); }

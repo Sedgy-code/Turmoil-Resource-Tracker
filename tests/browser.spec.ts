@@ -165,9 +165,10 @@ test("desktop resources persist, update live totals, preserve history, and expor
     expect((await dashboard(request)).entries.find((entry) => entry.memberId === ownEntry.memberId)).toEqual(afterLegacy);
     expect((await (await request.get("/api/dew")).json() as DewResponse).balance).toBe(walletBeforeInvalid.balance);
     await page.goto("/");
-    await expect(
-      page.getByRole("heading", { name: "Resource Dashboard" }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: /^Hi, / })).toBeVisible();
+    await expect(page.locator(".home-jobs-card")).toBeVisible();
+    // Wide screens open the clan totals on Home; phones fold them away.
+    await expect(page.locator(".home-more")).toHaveJSProperty("open", true);
     await expect(page.getByRole("table")).toBeVisible();
     await expect(page.getByText("Potions", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("columnheader", { name: "Potions", exact: true })).toHaveCount(0);
@@ -226,7 +227,7 @@ test("desktop resources persist, update live totals, preserve history, and expor
     );
     const saved = await dashboard(request, original.week);
     expect(saved.totals.hammers).toBe(original.totals.hammers - ownEntry.resources.hammers + 12345);
-    await page.getByRole("link", { name: "Dashboard", exact: true }).click();
+    await page.getByRole("link", { name: "Home", exact: true }).click();
     const hammerCard = page.locator(".stat-card").filter({ hasText: "Hammers" });
     const format = new Intl.NumberFormat("en-US");
     await expect(hammerCard.locator(".war-point-range strong")).toHaveText([format.format(saved.totals.hammers * 2), format.format(saved.totals.hammers * 5)]);
@@ -497,7 +498,7 @@ test("personal summoning costs persist and enforce required decimal ranges", asy
       ? Math.floor(entry.resources.mountKeys / entry.summoningCosts.mount) : 0), 0);
     expect(saved.summons.skills).toBe(baselineSkills + 40);
     expect(saved.summons.mounts).toBe(baselineMounts + 4);
-    await page.getByRole("link", { name: "Dashboard", exact: true }).click();
+    await page.getByRole("link", { name: "Home", exact: true }).click();
     const skillCard = page.locator(".stat-card").filter({ hasText: "Skill Tickets" });
     const mountCard = page.locator(".arsenal-mountKeys");
     await expect(skillCard.locator(".arsenal-metric").filter({ hasText: "Total skill summons" }).locator("strong")).toHaveText(new Intl.NumberFormat("en-US").format(saved.summons.skills));
@@ -537,7 +538,7 @@ test("personal summoning costs persist and enforce required decimal ranges", asy
     await expect(page.getByLabel(skillCostLabel, { exact: true })).toHaveValue("200");
     await expect(page.getByLabel(mountCostLabel, { exact: true })).toHaveValue("50");
     await expect(page.getByLabel("Total eggs/pets", { exact: true })).toHaveValue("0");
-    await page.getByRole("link", { name: "Dashboard", exact: true }).click();
+    await page.getByRole("link", { name: "Home", exact: true }).click();
     if (cleared.summons.missingSkillCosts > 0) {
       await expect(skillCard.locator(".summon-warning").filter({ hasText: "summon cost" })).toContainText(String(cleared.summons.missingSkillCosts));
     } else {
@@ -727,9 +728,10 @@ test("mobile dashboard, menu, complete resource form, and week navigation fit th
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/");
-  await expect(
-    page.getByRole("heading", { name: "Resource Dashboard" }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^Hi, / })).toBeVisible();
+  await expect(page.locator(".home-jobs-card")).toBeVisible();
+  await expect(page.locator(".home-more")).toHaveJSProperty("open", false);
+  await page.locator(".home-more > summary").click();
   await expect(page.getByRole("table")).toBeVisible();
   const mobileCards = page.locator(".stat-grid > article");
   await expect(mobileCards).toHaveCount(6);
@@ -785,7 +787,7 @@ test("mobile dashboard, menu, complete resource form, and week navigation fit th
   await expect(page.getByLabel("Skill summon cost (×5)", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Mount summon cost (×1)", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Open navigation", exact: true }).click();
-  await page.getByRole("link", { name: "Dashboard", exact: true }).click();
+  await page.locator(".sidebar").getByRole("link", { name: "Home", exact: true }).click();
   await expect(page.locator(".arsenal-card")).toHaveCount(6);
   await expect(page.locator(".stat-war-points")).toHaveCount(5);
   await expect(page.locator(".arsenal-summary .war-point-range strong")).toHaveCount(2);
