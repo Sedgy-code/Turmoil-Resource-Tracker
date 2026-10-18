@@ -1205,7 +1205,7 @@ function MemberResources({
           <ChevronsUp size={20} strokeWidth={2.6} aria-hidden="true" />{t("Ascending")}<span>{ascending.size}</span>
         </button>
       </div>
-      {incompleteMembers.length > 0 && <p className={missingDataStyles.legend}><CircleAlert size={13} aria-hidden="true" />{view === "cards" ? t("Amber numbers show what a member still needs to add.") : t("Amber boxes show numbers a member still needs to add.")}</p>}
+      {incompleteMembers.length > 0 && <p className={missingDataStyles.legend}><CircleAlert size={13} aria-hidden="true" />{view === "cards" ? t("Dashed boxes show what a member still needs to add.") : t("Dashed boxes show numbers a member still needs to add.")}</p>}
       {view === "cards" ? (members.length ? <ContributionCards
         members={members}
         everyone={data.members}
