@@ -5,7 +5,7 @@ import { Pencil, Plus, Trash2 } from "lucide-react";
 import { formatWeek, numberFormat } from "@/lib/resources";
 import { useT } from "@/lib/i18n";
 import type { Member, WarDayReport, WarDayRow, WarResult } from "@/lib/types";
-import { MemberName } from "./member-identity";
+import { MemberAvatar, MemberName } from "./member-identity";
 import { RecordEditor, request, TEXT } from "./record-editor";
 import { useSortable } from "./sortable";
 
@@ -101,7 +101,9 @@ function WarDayTable({ report, admin }: { report: WarDayReport; admin: boolean }
         {admin && <th>{t("Black mark")}</th>}
       </tr></thead>
       <tbody>{sorted.map((row) => <tr key={row.member?.id ?? `name:${row.name}`}>
-        <td>{row.member ? <MemberName member={row.member} /> : <span className="war-guest">{row.name}</span>}</td>
+        <td>{row.member
+          ? <div className="table-member"><MemberAvatar member={row.member} small /><strong><MemberName member={row.member} /></strong></div>
+          : <span className="war-guest">{row.name}</span>}</td>
         {row.days.map((value, index) => <td key={index} className={value && picked && !clanDays.includes(index + 1) ? "war-offday" : undefined}>
           {value === null ? "—" : numberFormat(value)}
         </td>)}

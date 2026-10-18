@@ -6,7 +6,9 @@ import { LoaderCircle, Pencil, Plus, Trash2, Trophy } from "lucide-react";
 import { formatWeek, numberFormat } from "@/lib/resources";
 import { useT } from "@/lib/i18n";
 import type { Member, WarResult, WarResultsResponse } from "@/lib/types";
-import { MemberName } from "./member-identity";
+import { MemberAvatar, MemberName } from "./member-identity";
+import { RankBadge } from "./contribution-cards";
+import { VialIcon } from "./resource-icons";
 import { useRecognition } from "./recognition";
 import { VialDaily } from "./vial-daily";
 import { useSortable } from "./sortable";
@@ -37,13 +39,15 @@ function WarPlayersTable({ kind, result, byId }: { kind: RecordKind; result: War
     member: name,
     points: (point) => point.points,
   }, { key: "points", direction: "desc" });
-  return <div className="table-scroll"><table className="resource-table war-table">
-    <thead><tr>{header("rank", "#")}{header("member", t("Member"))}{header("points", t(TEXT[kind].points))}</tr></thead>
+  return <div className={`table-scroll${kind === "vials" ? " tone-teal" : ""}`}><table className="resource-table war-table">
+    <thead><tr>{header("rank", "#")}{header("member", t("Member"))}{header("points", t(TEXT[kind].points), { icon: kind === "vials" ? <VialIcon size={20} /> : <Trophy size={16} aria-hidden="true" /> })}</tr></thead>
     <tbody>{sorted.map((point) => {
       const member = point.memberId ? byId.get(point.memberId) : undefined;
       return <tr key={point.position}>
-        <td>{point.rank < 3 ? ["🥇", "🥈", "🥉"][point.rank] : point.rank + 1}</td>
-        <td>{member ? <MemberName member={member} /> : <span className="war-guest">{point.gameName}</span>}</td>
+        <td><RankBadge rank={point.rank + 1} /></td>
+        <td>{member
+          ? <div className="table-member"><MemberAvatar member={member} small /><strong><MemberName member={member} /></strong></div>
+          : <span className="war-guest">{point.gameName}</span>}</td>
         <td className="war-points">{numberFormat(point.points)}</td>
       </tr>;
     })}</tbody>
@@ -139,8 +143,8 @@ export function WarTotalsHistory({ kind = "war" }: { kind?: RecordKind }) {
   return <section className="panel war-history">
     <div className="table-section-heading"><div><h2>{t(words.history)}</h2><p>{t(words.historySub)}</p></div>
       <Link className="text-link" href={kind === "war" ? "/war-results" : "/vial-donations"}>{t(words.link)}</Link></div>
-    <div className="table-scroll"><table className="resource-table">
-      <thead><tr>{header("war", t(words.column))}{header("total", t(words.total))}{header("change", t("Change"))}{header("top", t(words.top))}</tr></thead>
+    <div className={`table-scroll${kind === "vials" ? " tone-teal" : ""}`}><table className="resource-table">
+      <thead><tr>{header("war", t(words.column))}{header("total", t(words.total), { icon: kind === "vials" ? <VialIcon size={20} /> : <Trophy size={16} aria-hidden="true" /> })}{header("change", t("Change"))}{header("top", t(words.top))}</tr></thead>
       <tbody>{sorted.map(({ result, change, top }) => <tr key={result.id}>
         <td><strong>{result.label || t("Week of {date}", { date: formatWeek(result.week) })}</strong></td>
         <td>{result.clanTotal === null ? "—" : numberFormat(result.clanTotal)}</td>

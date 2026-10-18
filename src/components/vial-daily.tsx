@@ -4,7 +4,8 @@ import { numberFormat } from "@/lib/resources";
 import { useT } from "@/lib/i18n";
 import { currentWeek } from "@/lib/resources";
 import type { Member, WarResult } from "@/lib/types";
-import { MemberName } from "./member-identity";
+import { MemberAvatar, MemberName } from "./member-identity";
+import { VialIcon } from "./resource-icons";
 import { useSortable } from "./sortable";
 
 type Row = { key: string; member?: Member; name: string; values: (number | null)[]; total: number };
@@ -56,14 +57,16 @@ export function VialDaily({ results, byId }: { results: WarResult[]; byId: Map<s
       </div>
       {uploads.length > 1 && <div className="war-card-total"><span>{t("No donation since the last upload")}</span><strong>{quiet}</strong></div>}
     </header>
-    <div className="table-scroll"><table className="resource-table war-table">
+    <div className="table-scroll tone-teal"><table className="resource-table war-table">
       <thead><tr>
         {header("member", t("Member"))}
         {uploads.map((upload, index) => index === uploads.length - 1 ? header("latest", label(upload.createdAt)) : <th key={upload.id}>{label(upload.createdAt)}</th>)}
-        {header("total", t("This week"))}
+        {header("total", t("This week"), { icon: <VialIcon size={20} /> })}
       </tr></thead>
       <tbody>{sorted.map((row) => <tr key={row.key}>
-        <td>{row.member ? <MemberName member={row.member} /> : <span className="war-guest">{row.name}</span>}</td>
+        <td>{row.member
+          ? <div className="table-member"><MemberAvatar member={row.member} small /><strong><MemberName member={row.member} /></strong></div>
+          : <span className="war-guest">{row.name}</span>}</td>
         {row.deltas.map((delta, index) => <td key={index} className={delta === 0 && index > 0 ? "vial-zero" : undefined}>{delta === null ? "—" : `${index > 0 ? "+" : ""}${numberFormat(delta)}`}</td>)}
         <td className="war-points">{numberFormat(row.total)}</td>
       </tr>)}</tbody>

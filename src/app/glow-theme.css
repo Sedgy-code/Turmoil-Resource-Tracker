@@ -262,42 +262,68 @@
   box-shadow: 0 0 6px var(--glow-green);
 }
 
-/* Tables, the same on every page (like the Member contributions cards): a gold header band,
-   readable numbers, and striped rows. Cells are solid so pinned columns stay readable. */
+/* Tables, the same on every page and built like the Member contributions cards: a glowing frame
+   in the table's colour (gold, or teal for vials), a tinted header band, readable rows, and the
+   gold row for first place. Cells are solid so pinned columns stay readable when scrolled. */
+.app-shell .table-scroll,
+.app-shell .planning-table-wrap {
+  --table-tone: #f2b33c;
+  border: 1.5px solid color-mix(in srgb, var(--table-tone) 70%, transparent);
+  border-radius: 16px;
+  background: #060b0b;
+  box-shadow: 0 0 22px -8px color-mix(in srgb, var(--table-tone) 60%, transparent), inset 0 0 22px -12px color-mix(in srgb, var(--table-tone) 45%, transparent);
+}
+.app-shell .table-scroll.tone-teal,
+.app-shell .vial-daily .table-scroll { --table-tone: #2fe4a8; }
+/* Inside a card, the table sits inset like the resource cards do. */
+.app-shell .panel > .table-scroll,
+.app-shell .panel > .planning-table-wrap,
+.app-shell .planning-panel > .planning-table-wrap {
+  width: auto;
+  margin: 4px 16px 16px;
+}
 .app-shell .resource-table thead th,
 .app-shell .management-table thead th,
 .app-shell .planning-table thead th {
-  height: 46px;
+  --table-tone: inherit;
+  height: 48px;
   padding: 10px 14px;
-  border-bottom: 1px solid #e2ad3c66;
-  background: linear-gradient(180deg, #33270b, #1a150a);
-  color: #f2e6c4;
-  font-size: 12.5px;
+  border-bottom: 1px solid color-mix(in srgb, var(--table-tone, #f2b33c) 45%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--table-tone, #f2b33c) 30%, #0a0d0c), color-mix(in srgb, var(--table-tone, #f2b33c) 10%, #0a0d0c));
+  color: #eef3f8;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0;
   text-transform: none;
 }
 .app-shell .resource-table thead th svg:not(.res-icon),
-.app-shell .planning-table thead th svg:not(.res-icon) { color: #ffd56b; }
+.app-shell .planning-table thead th svg:not(.res-icon) { color: color-mix(in srgb, var(--table-tone, #f2b33c) 80%, #fff); }
 .app-shell .resource-table td,
 .app-shell .management-table td,
 .app-shell .planning-table td,
 .app-shell .planning-table tbody th {
-  padding: 11px 14px;
+  padding: 10px 14px;
   border-bottom: 1px solid #ffffff0d;
-  background: #070e0d;
-  color: #dbe5f1;
-  font-size: 13.5px;
+  background: #060b0b;
+  color: #eef3f8;
+  font-size: 14px;
   font-variant-numeric: tabular-nums;
 }
 .app-shell .resource-table tbody tr:nth-child(even) td,
 .app-shell .management-table tbody tr:nth-child(even) td,
 .app-shell .planning-table tbody tr:nth-child(even) td,
-.app-shell .planning-table tbody tr:nth-child(even) th { background: #0b1514; }
+.app-shell .planning-table tbody tr:nth-child(even) th { background: #0a100f; }
 .app-shell .resource-table tbody tr:hover td,
 .app-shell .management-table tbody tr:hover td,
 .app-shell .planning-table tbody tr:hover td,
 .app-shell .planning-table tbody tr:hover th { background: #10201f; }
+/* First place: the row glows in the table's colour, as on the cards. */
+.app-shell .resource-table tbody tr:has(.contrib-rank.m1) td {
+  background: color-mix(in srgb, var(--table-tone, #f2b33c) 16%, #070d0c);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--table-tone, #f2b33c) 35%, transparent), inset 0 -1px 0 color-mix(in srgb, var(--table-tone, #f2b33c) 35%, transparent);
+}
+.app-shell .resource-table td:has(> .contrib-rank) { width: 52px; padding-top: 12px; text-align: center; }
+.app-shell .war-points { color: #ffd56b; }
 .app-shell .resource-table td.sticky-member { border-right-color: #ffffff14; }
 .app-shell .table-member strong { color: #eef3f8; font-size: 13.5px; }
 .app-shell .table-member > div > span,
