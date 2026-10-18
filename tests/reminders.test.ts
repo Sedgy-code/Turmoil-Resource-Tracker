@@ -86,7 +86,9 @@ test("leadership reminders ping the Clan Hub admins, only when a job is still un
 
     // Monday (Day 7): results of the war that ran 13–19 October, and the clan days for the war starting on the 20th.
     const monday = "2026-10-19T10:00:00Z";
+    await db.query("INSERT INTO clan_day_votes (member_id, war_week, days) VALUES ($1, '2026-10-19', '1,3')", [admin]);
     assert.deepEqual((await send(monday, ["war", "clanDays"])).missing, ["clanDays", "war"]);
+    assert.match(last().content, /Members voted for: Day 1 \(1\), Day 3 \(1\)\./);
     assert.match(last().content, /Clan days for the next war\*\*: pick them before Day 1 starts \(Tuesday 00:00 UTC\) → https:\/\/tracker\.example\/war\n[\s\S]*Clan war results/);
     await db.query("INSERT INTO war_results (id, week_start, label, created_by, kind) VALUES ($1, '2026-10-12', '', $2, 'war')", [randomUUID(), admin]);
     assert.deepEqual((await send(monday, ["war", "clanDays"])).missing, ["clanDays"]);

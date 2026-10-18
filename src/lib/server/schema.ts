@@ -264,6 +264,13 @@ CREATE TABLE IF NOT EXISTS discord_applications (
 );
 CREATE INDEX IF NOT EXISTS discord_applications_discord_idx ON discord_applications(discord_id, created_at DESC);
 ALTER TABLE discord_applications ADD COLUMN IF NOT EXISTS agreed BOOLEAN NOT NULL DEFAULT FALSE;
+CREATE TABLE IF NOT EXISTS clan_day_votes (
+  member_id TEXT NOT NULL REFERENCES app_members(id),
+  war_week DATE NOT NULL CHECK (EXTRACT(ISODOW FROM war_week) = 1),
+  days TEXT NOT NULL DEFAULT '' CHECK (days ~ '^([1-5](,[1-5])*)?$'),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (member_id, war_week)
+);
 CREATE TABLE IF NOT EXISTS member_ascensions (
   member_id TEXT NOT NULL REFERENCES app_members(id),
   week_start DATE NOT NULL CHECK (EXTRACT(ISODOW FROM week_start) = 1),

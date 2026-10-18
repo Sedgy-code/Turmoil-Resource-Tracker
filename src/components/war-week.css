@@ -55,3 +55,7 @@ button.war-clan-day:hover, button.war-clan-day:focus-visible { border-color: var
 .war-day-badge { align-self: flex-start; font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; }
 .war-day-badge.clan { color: #1a1406; background: var(--gold); }
 .war-day-badge.hold { color: var(--muted); border: 1px solid var(--border); }
+
+/* Members' votes for the next war's clan days */
+.war-clan-day-votes { margin-inline-start: 6px; min-width: 20px; padding: 0 6px; border-radius: 999px; background: #2a2614; color: var(--gold); font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
+.war-clan-votes { color: var(--text) !important; }

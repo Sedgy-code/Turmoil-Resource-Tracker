@@ -8,7 +8,7 @@ import { countdown, raceEnd, warDay, warWeekOf, WAR_DAYS } from "@/lib/war-calen
 import { currentWeek, numberFormat } from "@/lib/resources";
 import { useT } from "@/lib/i18n";
 import type { AscensionPillar, AscensionsResponse, DashboardResponse, DewResponse, SnipePlan, SnipesResponse } from "@/lib/types";
-import { useClanDays, useNow } from "./war-week";
+import { useClanDayVotes, useClanDays, useNow } from "./war-week";
 import "./home-week.css";
 
 const DAY = 86_400_000;
@@ -169,7 +169,7 @@ export function HomeWeek({ data, notify, between }: { data: DashboardResponse; n
       </div>
     </section>
     {between}
-    <HomeToday now={now} />
+    <HomeToday now={now} notify={notify} />
   </div>;
 }
 
@@ -193,10 +193,19 @@ export function HomeArsenal({ minimum, maximum }: { minimum: number | null; maxi
   </section>;
 }
 
-/** What the clan is doing in the war today: spend, hold, fight or claim. */
-function HomeToday({ now }: { now: Date }) {
+/** What the clan is doing in the war today: spend, hold, fight or claim; on Days 6–7, vote for next war's days. */
+function HomeToday({ now, notify }: { now: Date; notify: (message: string, error?: boolean) => void }) {
   const t = useT();
   const war = warDay(now);
+  const { votes, vote } = useClanDayVotes(war.day >= 6);
+  const [voting, setVoting] = useState(false);
+  async function toggleVote(day: number) {
+    const mine = votes?.mine ?? [];
+    setVoting(true);
+    const problem = await vote(mine.includes(day) ? mine.filter((item) => item !== day) : [...mine, day]);
+    setVoting(false);
+    if (problem) notify(t(problem), true);
+  }
   // On Day 7 the war is over, so the clan days shown are the next war's (as on War → This Week).
   const clan = useClanDays(warWeekOf(war.day === 7 ? new Date(now.getTime() + DAY) : now));
   let badge: { tone: "on" | "hold" | "battle" | "claim"; text: string } | null = null;
@@ -230,6 +239,15 @@ function HomeToday({ now }: { now: Date }) {
     </div>
     <p className="home-today-main">{main}</p>
     {sub && <p className="home-today-sub">{sub}</p>}
+    {votes?.open && <div className="home-vote">
+      <p className="home-vote-title">🗳️ {t("Which days should we fight next war?")}</p>
+      <div className="home-vote-days" role="group" aria-label={t("Which days should we fight next war?")}>
+        {[1, 2, 3, 4, 5].map((day) => <button key={day} aria-pressed={!!votes.mine?.includes(day)} disabled={voting} onClick={() => void toggleVote(day)}>
+          <span>{t("Day {day}", { day })}</span><strong>{votes.counts[day - 1]}</strong>
+        </button>)}
+      </div>
+      <small>{t("Members voted so far: {count}. Leadership makes the final pick.", { count: votes.voters })}</small>
+    </div>}
     <p className="home-race">
       <FlaskConical size={15} />
       <span><strong>{t("Clan Tech Race")}</strong> · {t("Knock-out in {time}", { time: countdown(war.nextDay, now) })}<br />{t("In clan missions, pick Clan Tech Vials first.")}</span>

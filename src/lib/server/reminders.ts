@@ -5,6 +5,7 @@ import { database, type Database } from "./db";
 import { webhookLook } from "./discord-branding";
 import { ApiError } from "./errors";
 import { clanDays } from "./war-days";
+import { voteCounts } from "./war-votes";
 import { snipeRecognition } from "./war-results";
 
 export interface ReminderResult {
@@ -140,6 +141,8 @@ export interface LeadershipDue {
   warDay?: { day: number; endsAt: Date };
   /** On Day 7 the clan days are for the war that starts the next day (as on War → This Week). */
   nextWar: boolean;
+  /** Members' votes for that war's days (index 0 = Day 1), when the clan days still need picking. */
+  votes?: number[];
 }
 
 /**
@@ -156,7 +159,10 @@ export async function leadershipDue(db: Database, now = new Date(), tasks: reado
       if (!rows.length) { due.tasks.push(task); due.warDay = { day: today.day, endsAt: today.nextDay }; }
     } else if (task === "clanDays") {
       const week = warWeekOf(due.nextWar ? new Date(now.getTime() + DAY) : now);
-      if (!(await clanDays(db, week)).length) due.tasks.push(task);
+      if (!(await clanDays(db, week)).length) {
+        due.tasks.push(task);
+        due.votes = (await voteCounts(db, week)).counts;
+      }
     } else {
       const week = task === "war" ? warWeekOf(now) : currentWeek(now);
       const rows = await db.query("SELECT 1 FROM war_results WHERE week_start = $1 AND kind = $2 LIMIT 1", [week, task]);
@@ -188,9 +194,12 @@ export function leadershipReminderMessage(due: LeadershipDue, base: string, ment
       ];
     }
     if (task === "clanDays") {
+      const voted = (due.votes ?? []).map((count, index) => ({ day: index + 1, count })).filter((item) => item.count > 0)
+        .sort((a, b) => b.count - a.count || a.day - b.day);
+      const how = voted.length ? `Members voted for: ${voted.map((item) => `Day ${item.day} (${item.count})`).join(", ")}.` : "Tap the days the clan will spend on.";
       return due.nextWar
-        ? [`🗓️ **Clan days for the next war**: pick them before Day 1 starts (Tuesday 00:00 UTC) → ${base}/war`, "Tap the days the clan will spend on."]
-        : [`🗓️ **Clan days this war**: pick them so members know when to spend → ${base}/war`, "Tap the days the clan will spend on."];
+        ? [`🗓️ **Clan days for the next war**: pick them before Day 1 starts (Tuesday 00:00 UTC) → ${base}/war`, how]
+        : [`🗓️ **Clan days this war**: pick them so members know when to spend → ${base}/war`, how];
     }
     if (task === "war") {
       return [

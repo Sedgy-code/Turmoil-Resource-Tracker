@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Coins, LoaderCircle, Sparkles } from "lucide-react";
+import { Check, ChevronDown, Coins, LoaderCircle, Sparkles } from "lucide-react";
 import { COSMETIC_CATEGORIES, COSMETIC_CATEGORY_LABELS, REWARD_TIERS } from "@/lib/dew";
 import { announceClanPointsUpdate } from "@/lib/clan-points";
 import { numberFormat } from "@/lib/resources";
@@ -208,7 +208,8 @@ export function DewStore({ data, notify, refresh }: Props) {
         ) : null;
       })}
 
-      {legacyItems.length > 0 && <section className="planning-reward-tier planning-legacy-rewards" aria-label="Original rewards"><div className="planning-tier-heading"><div><span className="planning-eyebrow">{t("The original collection")}</span><h2>{t("Classic badges")}</h2></div><span>{t("Your earlier purchases are still yours")}</span></div><div className="planning-store-grid">{legacyItems.map(rewardCard)}</div></section>}
+      {/* The original collection folds away: it's older, cheaper badges most members already know. */}
+      {legacyItems.length > 0 && <details className="planning-reward-tier planning-legacy-rewards" aria-label="Original rewards"><summary className="planning-tier-heading"><div><span className="planning-eyebrow">{t("The original collection")}</span><h2>{t("Classic badges")}</h2></div><span>{t("Your earlier purchases are still yours")}</span><ChevronDown size={18} className="planning-legacy-chevron" aria-hidden="true" /></summary><div className="planning-store-grid">{legacyItems.map(rewardCard)}</div></details>}
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { ArrowRight, Check, CheckCircle2, Clock, Plus } from "lucide-react";
 import { numberFormat } from "@/lib/resources";
 import { WAR_DAYS, countdown, warDay, warStart, warWeekOf } from "@/lib/war-calendar";
 import { useT } from "@/lib/i18n";
-import type { ClanDaysResponse, DashboardResponse } from "@/lib/types";
+import type { ClanDayVotes, ClanDaysResponse, DashboardResponse } from "@/lib/types";
 import "./war-week.css";
 
 const RESOURCE_LABELS = {
@@ -60,6 +60,40 @@ export function useClanDays(week: string) {
   return { days, loaded, saving, save };
 }
 
+/**
+ * Members' votes for the next war's clan days (open on Days 6 and 7 until leadership picks).
+ * Only loaded on those days; `vote` saves your days and returns false if it didn't work.
+ */
+export function useClanDayVotes(enabled: boolean) {
+  const [votes, setVotes] = useState<ClanDayVotes | null>(null);
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    const load = () => fetch("/api/war-days/votes", { cache: "no-store" })
+      .then((response) => response.ok ? response.json() as Promise<ClanDayVotes> : Promise.reject())
+      .then((result) => { if (!cancelled) setVotes(result); })
+      .catch(() => { /* keep what we have */ });
+    void load();
+    const again = () => { if (document.visibilityState === "visible") void load(); };
+    document.addEventListener("visibilitychange", again);
+    return () => { cancelled = true; document.removeEventListener("visibilitychange", again); };
+  }, [enabled]);
+  async function vote(days: number[]): Promise<string | null> {
+    const response = await fetch("/api/war-days/votes", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ days }) });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) return (result as { error?: string }).error || "Please try again.";
+    setVotes(result as ClanDayVotes);
+    return null;
+  }
+  return { votes: enabled ? votes : null, vote };
+}
+
+/** "Day 1 (8), Day 3 (6)": the days members voted for, most votes first. */
+export function voteSummary(counts: number[], dayLabel: (day: number) => string): string {
+  return counts.map((count, index) => ({ day: index + 1, count })).filter((item) => item.count > 0)
+    .sort((a, b) => b.count - a.count || a.day - b.day).map((item) => `${dayLabel(item.day)} (${item.count})`).join(", ");
+}
+
 export function WarWeek({ data, admin = false, notify }: { data: DashboardResponse; admin?: boolean; notify?: (message: string, error?: boolean) => void }) {
   const t = useT();
   const now = useNow();
@@ -68,6 +102,8 @@ export function WarWeek({ data, admin = false, notify }: { data: DashboardRespon
   // On Day 7 (claim rewards) the war is over, so leadership is picking days for the next one.
   const planningNext = current.day === 7;
   const clan = useClanDays(warWeekOf(planningNext ? new Date(now.getTime() + 86_400_000) : now));
+  const { votes } = useClanDayVotes(current.day >= 6);
+  const voted = votes ? voteSummary(votes.counts, (day) => t("Day {day}", { day })) : "";
   async function toggle(day: number) {
     const next = clan.days.includes(day) ? clan.days.filter((item) => item !== day) : [...clan.days, day].sort((a, b) => a - b);
     if (!(await clan.save(next))) notify?.(t("Please try again."), true);
@@ -88,11 +124,13 @@ export function WarWeek({ data, admin = false, notify }: { data: DashboardRespon
         return admin
           ? <button key={day} className={`war-clan-day${chosen ? " on" : ""}`} aria-pressed={chosen} disabled={!clan.loaded || clan.saving} onClick={() => void toggle(day)}>
             {chosen ? <Check size={14} /> : <Plus size={14} />}{t("Day {day}", { day })}
+            {planningNext && !!votes?.counts[day - 1] && <span className="war-clan-day-votes">{votes.counts[day - 1]}</span>}
           </button>
           : <span key={day} className={`war-clan-day${chosen ? " on" : ""}`}>{chosen && <Check size={14} />}{t("Day {day}", { day })}</span>;
       })}</div>
       {clan.loaded && <p>{clan.days.length ? t("Only spend on the clan days. Spending on other days earns a black mark.") : t("Leadership hasn’t picked the clan days yet. Check announcements before you spend.")}</p>}
       {admin && <p className="war-week-note">{t("Tap the days the clan will spend on. Members see them straight away.")}</p>}
+      {voted && !votes?.picked.length && <p className="war-week-note war-clan-votes">🗳️ {t("Members’ votes for the next war: {votes}", { votes: voted })}</p>}
     </section>
     <p className="war-week-note">{t("Each war day starts at 00:00 UTC. Leadership may ask you to hold resources for a snipe, so check announcements before you spend.")}</p>
     <div className="war-week-grid">

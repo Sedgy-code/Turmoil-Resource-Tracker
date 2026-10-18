@@ -112,4 +112,5 @@ export const INDIRECT_KEYS = [
   "This snipe plan could not be found.",
   "Unable to load snipe plans.", "Unable to save your response.", "Unable to load your Clan Points.",
   "Unable to unlock this reward.", "Unable to change your reward.", "Unable to load war rates.",
+  "Voting for the next war’s clan days is closed.",
 ];

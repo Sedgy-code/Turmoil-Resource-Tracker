@@ -232,6 +232,10 @@
 .planning-reward-progress-owned { visibility: hidden; }
 .planning-store-card > .planning-button { width: 100%; margin-top: 17px; white-space: normal; font-size: 11px; padding: 9px 8px; }
 .planning-legacy-rewards { border-top: 1px solid var(--border); padding-top: 24px; }
+.planning-legacy-rewards > summary { cursor: pointer; list-style: none; }
+.planning-legacy-rewards > summary::-webkit-details-marker { display: none; }
+.planning-legacy-chevron { flex-shrink: 0; align-self: center; color: var(--muted); transition: transform .2s; }
+.planning-legacy-rewards[open] .planning-legacy-chevron { transform: rotate(180deg); }
 .planning-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 @media (max-width: 1050px) {
   .planning-store-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -266,16 +270,21 @@
   .planning-weekly-rewards { padding: 0 16px; }
   .planning-weekly-reward { padding: 14px; gap: 9px; }
   .planning-equipped-profile { padding: 20px 16px; }
-  .planning-tier-heading { align-items: flex-start; flex-direction: column; gap: 7px; }
-  .planning-tier-heading h2 { font-size: 17px; }
-  .planning-tier-heading > span { text-align: left; }
-  .planning-store-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
-  .planning-store-card { padding: 20px 18px 18px; }
-  .planning-reward-preview { height: 95px; }
-  .planning-store-card h3 { min-height: 0; }
+  /* Two small reward cards side by side, so the shop is a few screens long, not eleven. */
+  .planning-tier-heading { align-items: center; gap: 7px; margin-bottom: 10px; }
+  .planning-tier-heading .planning-eyebrow { margin-bottom: 3px; }
+  .planning-tier-heading h2 { font-size: 16px; }
+  .planning-tier-heading > span { display: none; }
+  .planning-store-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .planning-store-card { padding: 12px 10px; }
+  .planning-reward-preview { height: 66px; padding: 6px 0; }
+  .planning-store-card h3 { min-height: 0; font-size: 12.5px; }
+  .planning-store-card > .planning-button { margin-top: 10px; padding: 8px 6px; font-size: 11px; }
+  .planning-badge-preview { font-size: 36px; }
+  .planning-frame-preview > .avatar { width: 50px; height: 50px; }
+  .planning-title-preview { gap: 5px; }
 }
 @media (max-width: 375px) {
-  .planning-store-grid { grid-template-columns: minmax(0, 1fr); }
   .planning-total { flex-wrap: wrap; }
   .planning-total > strong { max-width: 100%; }
 }

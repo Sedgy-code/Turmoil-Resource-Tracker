@@ -202,6 +202,21 @@ export interface WarResult {
   warDay: number | null;
 }
 export interface WarResultsResponse { results: WarResult[] }
+/** Members' votes for the days they'd like to fight in the next war. */
+export interface ClanDayVotes {
+  /** The next war, by the Monday before its Day 1. */
+  week: string;
+  /** Voting runs on Days 6 and 7 until leadership picks the days. */
+  open: boolean;
+  /** The days leadership picked for that war (empty until picked). */
+  picked: number[];
+  /** Votes for Days 1–5 (index 0 = Day 1). */
+  counts: number[];
+  /** Members who voted for at least one day. */
+  voters: number;
+  /** Your vote, or null if you haven't voted. */
+  mine: number[] | null;
+}
 /** The four pillars a member can ascend. */
 export type AscensionPillar = "forge" | "skills" | "mounts" | "pets";
 export interface AscensionsResponse {
