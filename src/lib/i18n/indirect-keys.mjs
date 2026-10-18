@@ -56,6 +56,7 @@ export const INDIRECT_KEYS = [
   "The number on the anvil on the Forge screen.", "Forge screen → the hammer number on the anvil.",
   "Open a pet’s Upgrade screen, select all, and use the “Selected” number.", "Tap a pet → Upgrade → select all spare eggs/pets → use the “Selected” number.",
   "Top left of the Pets screen.", "Pets screen → the eggshell number at the top left.",
+  "Your total potions in the game.",
   // Levels and chances
   "Skill level", "Mount level", "Egg/pet level", "Extra mount chance %", "Extra pet summon %",
   "Tap ⓘ next to the Summon button on the Skills screen.", "Tap ⓘ next to the Summon button on the Mounts screen.", "Tap ⓘ next to the Summon button on the Pets screen.",

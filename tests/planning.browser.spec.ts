@@ -174,7 +174,6 @@ test("personal bank, eggshells, levels, costs, and percentage chances survive a 
     expect(saved.resources.eggshellsTotal).toBe(1250);
     expect(saved.summoningCosts).toEqual({ fiveSkills: 150, mount: 37.5 });
     await page.goto("/");
-    await expect(page.getByText("Potions", { exact: true })).toHaveCount(0);
     await expect(page.locator(".arsenal-eggsPetsTotal")).toBeVisible();
   } finally {
     await saveBank(request, entry);

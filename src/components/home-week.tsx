@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowRight, Backpack, BarChart3, Check, CheckCircle2, ChevronDown, ChevronsUp, Clock, FlaskConical, Swords, Target, X } from "lucide-react";
+import { ArrowRight, Backpack, BarChart3, Check, CheckCircle2, ChevronDown, ChevronsUp, Clock, FlaskConical, Sparkles, Swords, Target, X } from "lucide-react";
 import { ASCENSION_PILLARS, ASCENSIONS_UPDATED, PILLAR_LABELS } from "@/lib/ascension";
 import { countdown, raceEnd, warDay, warWeekOf, WAR_DAYS } from "@/lib/war-calendar";
-import { currentWeek } from "@/lib/resources";
+import { currentWeek, numberFormat } from "@/lib/resources";
 import { useT } from "@/lib/i18n";
 import type { AscensionPillar, AscensionsResponse, DashboardResponse, DewResponse, SnipePlan, SnipesResponse } from "@/lib/types";
 import { useClanDays, useNow } from "./war-week";
@@ -35,7 +35,7 @@ async function send<T>(url: string, method: string, body: unknown): Promise<T> {
  * Home, built for phones: the jobs every member has each week (save resources, say whether they're
  * ascending, answer the next snipe), then what to do in the war today. The rest is for the curious.
  */
-export function HomeWeek({ data, notify }: { data: DashboardResponse; notify: (message: string, error?: boolean) => void }) {
+export function HomeWeek({ data, notify, between }: { data: DashboardResponse; notify: (message: string, error?: boolean) => void; between?: ReactNode }) {
   const t = useT();
   const now = useNow();
   const me = data.currentUser;
@@ -168,8 +168,29 @@ export function HomeWeek({ data, notify }: { data: DashboardResponse; notify: (m
         <div className="home-track"><i style={{ width: `${total ? Math.min(100, (savedThisWeek / total) * 100) : 0}%` }} /></div>
       </div>
     </section>
+    {between}
     <HomeToday now={now} />
   </div>;
+}
+
+/** Asks the folded clan totals further down Home to open. */
+const OPEN_TOTALS = "turmoil-open-totals";
+
+/** The clan's combined war estimate, kept short so it can sit between the jobs and today's plan. */
+export function HomeArsenal({ minimum, maximum }: { minimum: number | null; maximum: number | null }) {
+  const t = useT();
+  const amount = (value: number | null) => value === null ? "--" : numberFormat(Math.round(value));
+  return <section className="home-card home-arsenal" aria-labelledby="home-arsenal-title">
+    <div className="home-card-head">
+      <h2 id="home-arsenal-title" className="home-kicker"><Sparkles size={15} />{t("The clan’s current arsenal")}</h2>
+      <span className="live-badge"><i />{t("LIVE TOTALS")}</span>
+    </div>
+    <p className="home-arsenal-range"><strong>{amount(minimum)}</strong><span aria-hidden="true">–</span><strong>{amount(maximum)}</strong></p>
+    <div className="home-today-foot">
+      <span className="home-today-time">{t("Total Potential War Points")}</span>
+      <button type="button" className="home-link" onClick={() => window.dispatchEvent(new Event(OPEN_TOTALS))}>{t("Clan totals")}<ChevronDown size={14} /></button>
+    </div>
+  </section>;
 }
 
 /** What the clan is doing in the war today: spend, hold, fight or claim. */
@@ -236,9 +257,22 @@ export function HomeMore({ children }: { children: ReactNode }) {
     } catch { /* storage blocked: use the default */ }
     try { return window.matchMedia("(min-width: 900px)").matches; } catch { return false; }
   });
-  return <details className="home-more" open={open} onToggle={(event) => {
+  const ref = useRef<HTMLDetailsElement>(null);
+  const asked = useRef(false);
+  useEffect(() => {
+    const show = () => {
+      asked.current = true;
+      setOpen(true);
+      requestAnimationFrame(() => ref.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    };
+    window.addEventListener(OPEN_TOTALS, show);
+    return () => window.removeEventListener(OPEN_TOTALS, show);
+  }, []);
+  return <details ref={ref} id="clan-totals" className="home-more" open={open} onToggle={(event) => {
     const next = event.currentTarget.open;
     setOpen(next);
+    // Opening from the arsenal card is a one-off; only the fold's own button is remembered.
+    if (asked.current) { asked.current = false; return; }
     try { window.localStorage.setItem(MORE_KEY, next ? "open" : "closed"); } catch { /* private mode */ }
   }}>
     <summary><BarChart3 size={17} /><span>{t("Clan totals")} · {t("Member contributions")}</span><ChevronDown size={16} className="home-more-chevron" /></summary>

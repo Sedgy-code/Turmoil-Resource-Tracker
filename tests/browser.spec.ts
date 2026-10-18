@@ -170,8 +170,8 @@ test("desktop resources persist, update live totals, preserve history, and expor
     // Wide screens open the clan totals on Home; phones fold them away.
     await expect(page.locator(".home-more")).toHaveJSProperty("open", true);
     await expect(page.getByRole("table")).toBeVisible();
-    await expect(page.getByText("Potions", { exact: true })).toHaveCount(0);
-    await expect(page.getByRole("columnheader", { name: "Potions", exact: true })).toHaveCount(0);
+    // Potions are back (tracked only, no war points): a column in the member table.
+    await expect(page.getByRole("columnheader", { name: "Potions", exact: true })).toHaveCount(1);
     const topRow = [
       page.locator(".stat-grid .stat-card").filter({ hasText: "Skill Tickets" }),
       page.locator(".stat-grid .arsenal-mountKeys"),
@@ -195,7 +195,7 @@ test("desktop resources persist, update live totals, preserve history, and expor
       fullPage: true,
     });
     await page.getByRole("link", { name: "My Resources", exact: true }).click();
-    await expect(page.getByLabel("Potions", { exact: true })).toHaveCount(0);
+    await expect(page.getByLabel("Potions", { exact: true })).toHaveCount(1);
     await expect(page.getByLabel("Skill Tickets", { exact: true })).toHaveValue(
       String(ownEntry.resources.skillTickets),
     );
@@ -272,7 +272,7 @@ test("desktop resources persist, update live totals, preserve history, and expor
     expect(csv).toContain(`Eggshells total,${saved.totals.eggshellsTotal}`);
     expect(csv).toContain(`Skill Tickets,${saved.totals.skillTickets}`);
     expect(csv).toContain(`Total eggs/pets,${saved.totals.eggsPetsTotal}`);
-    expect(csv).not.toContain("Potions");
+    expect(csv).toContain("Potions");
     expect(csv).not.toMatch(/Common|Rare|Epic|Legendary|Ultimate|Mythic/);
     await expect(page.locator(".arsenal-eggsPetsTotal")).toContainText(
       new Intl.NumberFormat("en-US").format(saved.totals.eggsPetsTotal),
@@ -755,7 +755,7 @@ test("mobile dashboard, menu, complete resource form, and week navigation fit th
   await expect(page.getByLabel("Skill Tickets", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Total eggs/pets", { exact: true })).toHaveCount(1);
   await expect(page.locator('input[type="number"]')).toHaveCount(13);
-  await expect(page.getByLabel("Potions", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Potions", { exact: true })).toHaveCount(1);
   await expect(page.getByLabel("Skill summon cost (×5)", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Mount summon cost (×1)", { exact: true })).toBeVisible();
   await expect(

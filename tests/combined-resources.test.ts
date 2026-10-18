@@ -33,6 +33,7 @@ const CURRENT_KEYS = [
   "mountKeys",
   "mountsToMerge",
   "hammers",
+  "potions",
 ];
 const LEGACY = {
   eggsCommon: 1,
@@ -159,11 +160,11 @@ test("combined and legacy request values reject invalid types and respect their 
   assert.equal(resourceSchema.safeParse("12").success, false);
 });
 
-test("retired potion requests are validated and omitted while unknown resources remain rejected", () => {
+test("potions are validated and kept, while unknown resources remain rejected", () => {
   for (const potions of [0, 44, 1_000_000_000]) {
     const parsed = resourceSchema.parse({ eggsPetsTotal: 23, hammers: 19, potions });
     assertCurrentKeys(parsed);
-    assert.deepEqual(parsed, canonical({ eggsPetsTotal: 23, hammers: 19 }));
+    assert.deepEqual(parsed, canonical({ eggsPetsTotal: 23, hammers: 19, potions }));
   }
   for (const potions of [-1, 0.5, NaN, Infinity, "44", null, 1_000_000_001]) {
     assert.equal(resourceSchema.safeParse({ potions }).success, false);
@@ -188,7 +189,7 @@ test("legacy row mapping returns only combined fields for JSON objects and seria
     assertCurrentKeys(entry.resources);
     assert.deepEqual(
       entry.resources,
-      canonical({ eggsPetsTotal: 78, skillTickets: 21, mountKeys: 6 }),
+      canonical({ eggsPetsTotal: 78, skillTickets: 21, mountKeys: 6, potions: 44 }),
     );
     assert.equal(entry.week, WEEK);
     assert.deepEqual(entry.summoningCosts, { fiveSkills: 0, mount: 0 });
@@ -269,7 +270,7 @@ test("copying and editing legacy inventory writes the current shape without chan
   });
 });
 
-test("retired potions disappear from reads and new writes without changing historical stored inventory", async () => {
+test("potions saved before they were taken off the form come back, and new saves keep them", async () => {
   await withDatabase(async (db) => {
     const member = await addMember(db, "Member");
     const historicResources = { ...canonical({ eggsPetsTotal: 23, hammers: 19 }), potions: 44 };
@@ -279,8 +280,8 @@ test("retired potions disappear from reads and new writes without changing histo
     await initializeSchema(db);
     const result = await dashboard(member, WEEK, db);
     assertCurrentKeys(result.totals);
-    assert.deepEqual(result.entries[0].resources, canonical({ eggsPetsTotal: 23, hammers: 19 }));
-    assert.deepEqual(result.totals, canonical({ eggsPetsTotal: 23, hammers: 19 }));
+    assert.deepEqual(result.entries[0].resources, canonical({ eggsPetsTotal: 23, hammers: 19, potions: 44 }));
+    assert.deepEqual(result.totals, canonical({ eggsPetsTotal: 23, hammers: 19, potions: 44 }));
 
     const copied = await copyPreviousEntry(member, { week: NEXT_WEEK }, db);
     const storedCopy = await db.query("SELECT resources FROM resource_entries WHERE id=$1", [copied.id]);
@@ -293,7 +294,7 @@ test("retired potions disappear from reads and new writes without changing histo
       notes: "Saved from an already open browser",
     });
     const saved = await saveEntry(member, oldClient, db);
-    assert.deepEqual(saved.resources, canonical({ eggsPetsTotal: 23, hammers: 20 }));
+    assert.deepEqual(saved.resources, canonical({ eggsPetsTotal: 23, hammers: 20, potions: 99 }));
     const stored = await db.query("SELECT resources FROM resource_entries WHERE id=$1", [saved.id]);
     assertCurrentKeys(stored[0].resources as object);
     assert.deepEqual(stored[0].resources, saved.resources);

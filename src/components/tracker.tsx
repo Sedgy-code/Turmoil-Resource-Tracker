@@ -17,7 +17,7 @@ import { ClanTech } from "./clan-tech";
 import { MonthlyAwardsPanel } from "./monthly-awards";
 import { LeadershipSettings } from "./leadership-settings";
 import { downloadRows } from "@/lib/csv";
-import { HomeMore, HomeWeek } from "./home-week";
+import { HomeArsenal, HomeMore, HomeWeek } from "./home-week";
 import { ASCENSIONS_UPDATED, PILLAR_LABELS } from "@/lib/ascension";
 import { useSortable } from "./sortable";
 import { ClanPointsBalance } from "./clan-points-balance";
@@ -60,6 +60,7 @@ import {
   ChevronsUp,
   CircleHelp,
   CircleAlert,
+  FlaskConical,
   Clipboard,
   Egg,
   Flame,
@@ -164,8 +165,10 @@ const SECTIONS: { section: Section; label: string; short: string; icon: Icon; ta
   { section: "leadership", label: "Leadership", short: "Leadership", icon: ShieldCheck, admin: true, tabs: [{ view: "members", label: "Members" }, { view: "ranking", label: "Ranking" }, { view: "hoarding", label: "Hoarding" }, { view: "settings", label: "Settings" }] },
 ];
 const sectionOf = (view: View) => SECTIONS.find((entry) => entry.tabs.some((tab) => tab.view === view))!;
+/** Resources with a picture guide and war points on the dashboard (potions are tracked only). */
+type GuidedResource = Exclude<ResourceKey, "potions">;
 const essentials: {
-  key: ResourceKey;
+  key: GuidedResource;
   icon: Icon;
   label: string;
   color: string;
@@ -185,6 +188,8 @@ const dashboardResources = [
   { key: "eggsPetsTotal", icon: Egg, label: "Total eggs/pets", color: "gold" },
   ...essentials.slice(2),
 ] satisfies typeof essentials;
+/** Potions came back to the form on this date; older saves never asked for them. */
+const POTIONS_RETURNED = Date.parse("2026-10-18T02:30:00Z");
 /** Short help under each box, and the caption for its picture of the game screen. */
 const RESOURCE_GUIDE: Record<ResourceKey, { help: string; where: string }> = {
   skillTickets: { help: "Top left of the Skills screen.", where: "Skills screen → the green ticket number at the top left." },
@@ -193,6 +198,7 @@ const RESOURCE_GUIDE: Record<ResourceKey, { help: string; where: string }> = {
   hammers: { help: "The number on the anvil on the Forge screen.", where: "Forge screen → the hammer number on the anvil." },
   eggsPetsTotal: { help: "Open a pet’s Upgrade screen, select all, and use the “Selected” number.", where: "Tap a pet → Upgrade → select all spare eggs/pets → use the “Selected” number." },
   eggshellsTotal: { help: "Top left of the Pets screen.", where: "Pets screen → the eggshell number at the top left." },
+  potions: { help: "Your total potions in the game.", where: "" },
 };
 
 const OFFLINE_MESSAGE = "Can’t reach the tracker. Check your internet connection and try again.";
@@ -684,7 +690,7 @@ function TrackerApp({ view }: { view: View }) {
                             : "Saved weekly totals for the clan.")}
               </p>}
             </div>
-            {(["resources", "weeks"].includes(view) || (view === "dashboard" && pastHome)) && (
+            {(view === "weeks" || (view === "resources" && (user.role === "ADMIN" || week !== currentWeek())) || (view === "dashboard" && pastHome)) && (
               <div className="week-control">
                 <button
                   className="icon-button"
@@ -747,7 +753,7 @@ function TrackerApp({ view }: { view: View }) {
               </>
             ) : (
               <>
-                <HomeWeek data={data} notify={notify} />
+                <HomeWeek data={data} notify={notify} between={<HomeArsenal minimum={warEstimateError ? null : dashboardWar?.minimum ?? 0} maximum={warEstimateError ? null : dashboardWar?.maximum ?? 0} />} />
                 <MonthlyAwardsPanel members={data.members} />
                 <SnipeChampions members={data.members} />
                 <HomeMore>{renderClanTotals(data)}</HomeMore>
@@ -1175,6 +1181,7 @@ function MemberResources({
                 const FieldIcon =
                   key === "eggsPetsTotal" || key === "eggshellsTotal"
                     ? Egg
+                    : key === "potions" ? FlaskConical
                     : (essentials.find((field) => field.key === key)?.icon ??
                       Backpack);
                 return (
@@ -1321,10 +1328,12 @@ function digitsOnly(value: string, decimal: boolean): string {
 }
 
 /** One line of the resource form: what to enter on the left, small boxes on the right. */
-function EntryRow({ id, label, icon, help, guide, boxes }: {
+function EntryRow({ id, label, icon, badge, help, guide, boxes }: {
   id: string;
   label: string;
   icon?: ReactNode;
+  /** A short tag after the label, e.g. "New". */
+  badge?: string;
   help: string;
   guide?: ReactNode;
   boxes: EntryBox[];
@@ -1332,7 +1341,7 @@ function EntryRow({ id, label, icon, help, guide, boxes }: {
   return (
     <div className={`entry-row${boxes.length > 1 ? " entry-row-pair" : ""}`}>
       <div className="entry-row-text">
-        <label htmlFor={`field-${id}-0`}>{icon}{label}</label>
+        <label htmlFor={`field-${id}-0`}>{icon}{label}{badge && <span className="entry-row-badge">{badge}</span>}</label>
         <small className="field-help" id={`help-${id}`}>{help}</small>
       </div>
       <div className="entry-row-boxes">
@@ -1410,9 +1419,10 @@ function ResourceForm({
   const draftPlanning = (details: PlanningDetails) => Object.fromEntries(planningFields.map(({ key }) => [key, planningText(details, key)])) as Record<PlanningFieldKey, string>;
   const [planningValues, setPlanningValues] = useState(() => draftPlanning(savedPlanning));
   const resourceKeys = RESOURCE_FIELDS.map(({ key }) => key as ResourceKey);
+  const potionsNeverAsked = !!entry && !readOnly && entry.resources.potions === 0 && Date.parse(entry.updatedAt) < POTIONS_RETURNED;
   const draftResources = (resources: ResourceValues) =>
     Object.fromEntries(
-      resourceKeys.map((key) => [key, String(resources[key])]),
+      resourceKeys.map((key) => [key, key === "potions" && potionsNeverAsked ? "" : String(resources[key])]),
     ) as Record<ResourceKey, string>;
   const [values, setValues] = useState<Record<ResourceKey, string>>(() =>
     draftResources(savedResources),
@@ -1426,8 +1436,9 @@ function ResourceForm({
   const [notes, setNotes] = useState(entry?.notes ?? "");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+  const savedDraft = draftResources(savedResources);
   const dirty =
-    resourceKeys.some((key) => values[key] !== String(savedResources[key])) ||
+    resourceKeys.some((key) => values[key] !== savedDraft[key]) ||
     costValues.fiveSkills !== String(savedCosts.fiveSkills) ||
     costValues.mount !== String(savedCosts.mount) ||
     planningFields.some(({ key }) => planningValues[key] !== planningText(savedPlanning, key)) ||
@@ -1457,6 +1468,11 @@ function ResourceForm({
     planningDetails: { ...CHANCE_PLANNING_DETAILS, ...savedPlanning, ...Object.fromEntries(planningFields.map(({ key }) => [key, enteredNumber(planningValues[key])])), calculationVersion: 2 as const },
   };
   const completeness = assessBankCompleteness(draftBank);
+  // Levels and extra chances rarely change: once saved, show them in a short summary.
+  const [showLevels, setShowLevels] = useState(false);
+  const levelsSaved = !legacyHistory && !!entry && planningFields.every(({ key }) => planningText(savedPlanning, key) !== "");
+  const levelsFolded = !readOnly && levelsSaved && !showLevels && !planningFields.some(({ label }) => completeness.missing.includes(label));
+  const [noteOpen] = useState(() => !!entry?.notes);
   async function save(event: FormEvent) {
     event.preventDefault();
     if (readOnly) return;
@@ -1543,7 +1559,7 @@ function ResourceForm({
     }));
   return (
     <form className="resource-form" onSubmit={save} noValidate>
-      <div className="entry-profile panel">
+      {data.currentUser.role === "ADMIN" && <div className="entry-profile panel">
         <Avatar member={selected} />
         <div>
           <strong>
@@ -1585,19 +1601,22 @@ function ResourceForm({
             </select>
           </label>
         )}
-      </div>
-      <div className="entry-notice">
+      </div>}
+      {readOnly && <div className="entry-notice">
         <ShieldCheck size={17} />
-        <span>
-          {readOnly
-            ? t("These are the numbers saved for the week of {date}. They can’t be changed.", { date: formatWeek(week) })
-            : t("Your numbers are shared with the clan and stay saved until you change them.")}
-        </span>
-      </div>
+        <span>{t("These are the numbers saved for the week of {date}. They can’t be changed.", { date: formatWeek(week) })}</span>
+      </div>}
       <div className="section-heading">
         <div>
           <h2>{readOnly ? t("Saved inventory") : t("Your current inventory")}</h2>
           <p>{t("Copy each number from the game. Not sure where it is? Tap “Where do I find this?”")}</p>
+          {!readOnly && <p className="entry-saved-line">
+            <ShieldCheck size={13} />
+            <span>
+              {data.currentUser.role !== "ADMIN" && <>{entry ? t("Last saved {time} by {name}", { time: ago(entry.updatedAt, t), name: entry.updatedBy.username }) : t("Nothing saved yet.")} · </>}
+              {t("Your numbers are shared with the clan and stay saved until you change them.")}
+            </span>
+          </p>}
         </div>
         {readOnly && <Link className="button primary" href={`/resources${selected.id !== data.currentUser.id ? `?member=${selected.id}` : ""}`}>{t("Back to this week")} <ArrowRight size={15} /></Link>}
       </div>
@@ -1645,6 +1664,14 @@ function ResourceForm({
               />
             );
           })}
+          <EntryRow
+            id="resource-potions"
+            label={t("Potions")}
+            icon={<FlaskConical size={15} />}
+            badge={potionsNeverAsked ? t("New") : undefined}
+            help={t(RESOURCE_GUIDE.potions.help)}
+            boxes={[{ label: t("Potions"), placeholder: "0", value: values.potions, onChange: (value) => update("potions", value) }]}
+          />
         </div>
       </section>
       <section className="panel form-section">
@@ -1665,26 +1692,34 @@ function ResourceForm({
         </div>
       </section>
       <section className="panel form-section">
-        <h3><Swords size={19} />{legacyHistory ? t("Saved levels and planned actions") : t("Levels and extra chances")}</h3>
-        <p className="form-section-subtitle">{legacyHistory ? t("This week keeps its original saved counts.") : t("Copy these from the game. The tracker does the maths for you.")}</p>
-        <div className="entry-list">
-          {planningFields.map(({ key, label, help, picture, where }) => (
-            <EntryRow
-              key={key}
-              id={`planning-${key}`}
-              label={t(label)}
-              help={t(help)}
-              guide={!readOnly && picture && where && <FieldGuide field={picture} hint={t(where)} />}
-              boxes={[{ label: t(label), decimal: isChance(key), placeholder: isChance(key) ? t("Enter 0 if none") : t("e.g. 100"), value: planningValues[key], onChange: (value) => setPlanningValues((old) => ({ ...old, [key]: value })), suffix: isChance(key) ? "%" : undefined }]}
-            />
-          ))}
+        <div className="form-section-head">
+          <h3><Swords size={19} />{legacyHistory ? t("Saved levels and planned actions") : t("Levels and extra chances")}</h3>
+          {levelsFolded && <button type="button" className="button subtle small-button" onClick={() => setShowLevels(true)}>{t("Change")}</button>}
         </div>
+        {levelsFolded ? <dl className="levels-summary">
+          {planningFields.map(({ key, label }) => <div key={key}><dt>{t(label)}</dt><dd>{planningValues[key]}{isChance(key) ? "%" : ""}</dd></div>)}
+        </dl> : <>
+          <p className="form-section-subtitle">{legacyHistory ? t("This week keeps its original saved counts.") : t("Copy these from the game. The tracker does the maths for you.")}</p>
+          <div className="entry-list">
+            {planningFields.map(({ key, label, help, picture, where }) => (
+              <EntryRow
+                key={key}
+                id={`planning-${key}`}
+                label={t(label)}
+                help={t(help)}
+                guide={!readOnly && picture && where && <FieldGuide field={picture} hint={t(where)} />}
+                boxes={[{ label: t(label), decimal: isChance(key), placeholder: isChance(key) ? t("Enter 0 if none") : t("e.g. 100"), value: planningValues[key], onChange: (value) => setPlanningValues((old) => ({ ...old, [key]: value })), suffix: isChance(key) ? "%" : undefined }]}
+              />
+            ))}
+          </div>
+        </>}
       </section>
-      <section className="panel form-section">
-        <h3>
+      <details className="panel form-section form-note" open={noteOpen}>
+        <summary>
           <Clipboard size={19} />{t("A note for the clan")}{" "}
           <span className="optional-badge">{t("OPTIONAL")}</span>
-        </h3>
+          <ChevronDown size={16} className="form-note-chevron" />
+        </summary>
         <textarea
           aria-label={t("Notes")}
           maxLength={1000}
@@ -1694,7 +1729,7 @@ function ResourceForm({
           onChange={(e) => setNotes(e.target.value)}
         />
         <div className="character-count">{notes.length} / 1,000</div>
-      </section>
+      </details>
       </fieldset>
       {!readOnly && <div className="save-bar">
         <span className={!completeness.complete || dirty ? "unsaved" : "saved"}>
