@@ -19,10 +19,16 @@ function escape(value: string): string {
 
 export interface CalendarText { summary: string; description: string }
 
-/** A one-hour event at the snipe's start (UTC), with a reminder 30 minutes before, when check-in opens. */
+/** A snipe ends at the day's reset (00:00 UTC) when that's within the hour; otherwise it's an hour long. */
+function snipeEnd(start: Date): Date {
+  const reset = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate() + 1));
+  return reset.getTime() - start.getTime() <= HOUR ? reset : new Date(start.getTime() + HOUR);
+}
+
+/** An event from the snipe's start (UTC) to the reset, with a reminder 30 minutes before, when check-in opens. */
 export function snipeCalendarFile(plan: { id: string; startsAt: string }, text: CalendarText, link: string): string {
   const start = new Date(plan.startsAt);
-  const end = new Date(start.getTime() + HOUR);
+  const end = snipeEnd(start);
   return [
     "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Turmoil Clan Hub//Snipes//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
     "BEGIN:VEVENT", `UID:${plan.id}@turmoil-clan-hub`, `DTSTAMP:${stamp(new Date())}`, `DTSTART:${stamp(start)}`, `DTEND:${stamp(end)}`,
@@ -46,7 +52,7 @@ export function downloadCalendarFile(fileName: string, contents: string) {
 
 export function googleCalendarLink(plan: { startsAt: string }, text: CalendarText): string {
   const start = new Date(plan.startsAt);
-  const end = new Date(start.getTime() + HOUR);
+  const end = snipeEnd(start);
   const query = new URLSearchParams({ action: "TEMPLATE", text: text.summary, dates: `${stamp(start)}/${stamp(end)}`, details: text.description });
   return `https://calendar.google.com/calendar/render?${query}`;
 }

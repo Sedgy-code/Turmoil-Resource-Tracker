@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { errorText } from "@/lib/error-text";
 import { Archive, CalendarDays, CalendarPlus, Check, Crosshair, LoaderCircle, Pencil, Plus, RefreshCw, RotateCcw, X } from "lucide-react";
 import { checkInOpen, downloadCalendarFile, googleCalendarLink, snipeCalendarFile } from "@/lib/snipe-calendar";
-import { displaySnipeTitle, nextSnipeStart, SNIPE_DAYS, snipeDay, snipeDayActivities, snipeTitle } from "@/lib/snipe-day";
+import { beforeResetTime, displaySnipeTitle, minutesBeforeReset, nextSnipeStart, RESET_LEAD_MINUTES, SNIPE_DAYS, snipeDay, snipeDayActivities, snipeTitle } from "@/lib/snipe-day";
 import { numberFormat } from "@/lib/resources";
 import { WAR_ACTIVITIES } from "@/lib/war";
 import { ACTIVITY_ICONS } from "./resource-icons";
@@ -46,7 +46,8 @@ function PlanForm({ plan, busy, onCancel, onSave }: { plan?: SnipePlan; busy: bo
   const { t, language } = useLanguage();
   // Leaders pick the war day; the Hub knows which week it is. The title writes itself.
   const [day, setDay] = useState<number | null>(() => (plan ? snipeDay(plan.startsAt) : null));
-  const [time, setTime] = useState(() => (plan ? new Date(plan.startsAt).toISOString().slice(11, 16) : "10:00"));
+  // Snipes start just before the day's reset (00:00 UTC): 30 to 5 minutes before.
+  const [lead, setLead] = useState<number | null>(() => (plan ? minutesBeforeReset(plan.startsAt) : 30));
   const [activities, setActivities] = useState<WarActivity[]>(() => (plan && snipeDay(plan.startsAt) ? plan.activities : []));
   const [error, setError] = useState("");
   const choose = (next: number) => {
@@ -54,11 +55,11 @@ function PlanForm({ plan, busy, onCancel, onSave }: { plan?: SnipePlan; busy: bo
     setActivities(snipeDayActivities(next));
     setError("");
   };
-  const startsAt = day && /^\d{2}:\d{2}$/.test(time) ? nextSnipeStart(day, time) : null;
+  const startsAt = day && lead ? nextSnipeStart(day, beforeResetTime(lead)) : null;
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!day || !startsAt || !activities.length) {
-      setError(t("Pick a war day and at least one scoring activity."));
+    if (!day || !lead || !startsAt || !activities.length) {
+      setError(t("Pick a war day, how long before reset, and at least one scoring activity."));
       return;
     }
     setError("");
@@ -69,9 +70,12 @@ function PlanForm({ plan, busy, onCancel, onSave }: { plan?: SnipePlan; busy: bo
     <fieldset className="planning-field snipe-day-field">
       <legend>{t("Which war day?")}</legend>
       <div className="planning-tabs snipe-day-picker">{SNIPE_DAYS.map((option) => <button type="button" key={option} aria-pressed={day === option} onClick={() => choose(option)}>{t("Day {day}", { day: option })}</button>)}</div>
+    </fieldset>
+    <fieldset className="planning-field snipe-day-field">
+      <legend>{t("How long before reset?")}</legend>
+      <div className="planning-tabs snipe-lead-picker">{RESET_LEAD_MINUTES.map((option) => <button type="button" key={option} aria-pressed={lead === option} onClick={() => { setLead(option); setError(""); }}>{t("{minutes} min", { minutes: option })}</button>)}</div>
       {startsAt && <small className="snipe-day-date"><CalendarDays size={14} aria-hidden="true" />{utcDateTime(startsAt.toISOString(), language)}</small>}
     </fieldset>
-    <label className="planning-field snipe-time-field"><span>{t("Start time (UTC)")}</span><input aria-label={t("Start time (UTC)")} type="time" value={time} onChange={(event) => setTime(event.target.value)} required /><small>{t("Enter it in UTC, the clan’s clock. Members see it in UTC with a countdown.")}</small></label>
     {day && <fieldset className="planning-activities"><legend>{t("Scoring activities")}</legend>{WAR_ACTIVITIES.filter(({ key }) => snipeDayActivities(day).includes(key)).map(({ key, label }) => { const Picture = ACTIVITY_ICONS[key]; return <label className="planning-check planning-check-compact" key={key}><input type="checkbox" checked={activities.includes(key)} onChange={() => setActivities((selected) => selected.includes(key) ? selected.filter((activity) => activity !== key) : [...selected, key])} /><Picture size={22} className="planning-check-icon" /><span>{t(label)}</span></label>; })}</fieldset>}
     {day && <p className="snipe-title-preview"><span>{t("Snipe title")}</span><strong>{snipeTitle(day, activities, t, language)}</strong></p>}
     {error && <p className="planning-notice" role="alert">{error}</p>}

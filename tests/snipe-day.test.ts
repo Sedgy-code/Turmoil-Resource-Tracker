@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { displaySnipeTitle, nextSnipeStart, snipeDay, snipeDayActivities, snipeTitle } from "../src/lib/snipe-day";
+import { beforeResetTime, displaySnipeTitle, minutesBeforeReset, nextSnipeStart, RESET_LEAD_MINUTES, snipeDay, snipeDayActivities, snipeTitle } from "../src/lib/snipe-day";
+import { googleCalendarLink, snipeCalendarFile } from "../src/lib/snipe-calendar";
 
 // The war that starts on Tuesday 20 Oct 2026: Day 3 is Thursday 22 Oct.
 const thursdayMorning = new Date("2026-10-22T08:00:00Z");
@@ -36,4 +37,24 @@ test("titles the Hub wrote show in each member's language; a leader's own title 
   const english = (text: string, values: Record<string, string | number> = {}) => text.replace(/\{(\w+)\}/g, (_, key: string) => String(values[key] ?? ""));
   assert.equal(displaySnipeTitle(plan, english, "en"), "Day 1 – Hammers, Skills");
   assert.equal(displaySnipeTitle({ ...plan, title: "Snipe vs Akatsuki" }, t), "Snipe vs Akatsuki");
+});
+
+test("snipes start 30 to 5 minutes before the day's reset, and end at the reset", () => {
+  assert.deepEqual([...RESET_LEAD_MINUTES], [30, 25, 20, 15, 10, 5]);
+  assert.equal(beforeResetTime(30), "23:30");
+  assert.equal(beforeResetTime(5), "23:55");
+  // Day 3 (Thursday), 15 minutes before it resets at 00:00 UTC on Friday.
+  const start = nextSnipeStart(3, beforeResetTime(15), thursdayMorning);
+  assert.equal(start.toISOString(), "2026-10-22T23:45:00.000Z");
+  assert.equal(snipeDay(start.toISOString()), 3);
+  assert.equal(minutesBeforeReset(start.toISOString()), 15);
+  assert.equal(minutesBeforeReset("2026-10-22T10:00:00.000Z"), null, "an older snipe at another time");
+  // Late on Day 3, 30 minutes before reset has passed: the next war's Day 3. Five minutes before hasn't.
+  const lateThursday = new Date("2026-10-22T23:40:00Z");
+  assert.equal(nextSnipeStart(3, beforeResetTime(30), lateThursday).toISOString(), "2026-10-29T23:30:00.000Z");
+  assert.equal(nextSnipeStart(3, beforeResetTime(5), lateThursday).toISOString(), "2026-10-22T23:55:00.000Z");
+  // The calendar event runs until the reset.
+  const text = { summary: "Turmoil snipe: Day 3", description: "Check in" };
+  assert.match(snipeCalendarFile({ id: "x", startsAt: start.toISOString() }, text, "https://hub"), /DTSTART:20261022T234500Z\r\nDTEND:20261023T000000Z/);
+  assert.match(googleCalendarLink({ startsAt: start.toISOString() }, text), /dates=20261022T234500Z%2F20261023T000000Z/);
 });

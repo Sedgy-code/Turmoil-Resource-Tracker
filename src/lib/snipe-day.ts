@@ -43,6 +43,22 @@ export function snipeDay(startsAt: string): number | null {
   return day <= 5 ? day : null;
 }
 
+/** Snipes start this many minutes before the day's reset (00:00 UTC), when it's too late for the other clan to answer. */
+export const RESET_LEAD_MINUTES = [30, 25, 20, 15, 10, 5] as const;
+
+/** "23:30" for 30 minutes before reset. */
+export function beforeResetTime(minutes: number): string {
+  const total = 24 * 60 - minutes;
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
+/** How many minutes before reset a snipe starts, when it's one of the usual choices; otherwise null. */
+export function minutesBeforeReset(startsAt: string): number | null {
+  const start = new Date(startsAt);
+  const minutes = 24 * 60 - (start.getUTCHours() * 60 + start.getUTCMinutes());
+  return start.getUTCSeconds() === 0 && (RESET_LEAD_MINUTES as readonly number[]).includes(minutes) ? minutes : null;
+}
+
 /** The next time war Day `day` at `time` (HH:MM, UTC) comes round: this war if it's still ahead, else the next. */
 export function nextSnipeStart(day: number, time: string, now = new Date()): Date {
   const [hours, minutes] = time.split(":").map(Number);
