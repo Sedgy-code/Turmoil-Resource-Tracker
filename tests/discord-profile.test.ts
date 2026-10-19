@@ -203,3 +203,21 @@ test("automatic migration upgrades an existing member table without losing ident
     assert.equal(result.entries[0].notes, "Existing resources");
   } finally { await db.close(); }
 });
+
+test("signing in and the regular Discord check keep the server join date", async () => {
+  await withDatabase(async (db) => {
+    const profileUser = user();
+    const first = await registerDiscordMember(profileUser, db, { ...membership("Knight", profileUser), joinedAt: "2025-05-04T03:02:01.000Z" });
+    assert.equal(first.discordJoinedAt, "2025-05-04T03:02:01.000Z");
+    // No date from Discord this time: the saved one stays.
+    const again = await registerDiscordMember(profileUser, db, membership("Knight", profileUser));
+    assert.equal(again.discordJoinedAt, "2025-05-04T03:02:01.000Z");
+    const token = await createSession(again, {
+      access_token: "profile-test-access", refresh_token: "profile-test-refresh", expires_in: 3600,
+      token_type: "Bearer", scope: "identify guilds.members.read",
+    }, db);
+    // They left and came back: Discord's newer date replaces it.
+    const rechecked = await recheck(db, token, { roles: [], nick: "Knight", joined_at: "2026-02-01T00:00:00+00:00", user: { id: OWNER_ID, username: "discord_handle" } });
+    assert.equal(rechecked?.discordJoinedAt, "2026-02-01T00:00:00.000Z");
+  });
+});

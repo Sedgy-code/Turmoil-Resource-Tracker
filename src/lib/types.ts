@@ -11,7 +11,10 @@ export interface Member {
   role: MemberRole;
   active: boolean;
   lastUpdatedAt: string | null;
+  /** When they first joined the Clan Hub. */
   joinedAt: string;
+  /** When they joined the Turmoil Discord server (Discord's date), once known: "in the clan since". */
+  discordJoinedAt?: string;
   badge?: string | null;
   cosmetics?: EquippedCosmetics;
   /** In the clan on Discord but has never signed in to the Clan Hub. */
@@ -319,9 +322,9 @@ export interface ContributionRow {
   clanDayShare: number | null;
   /** Recent wars where too much of their spending was on other days. */
   blackMarks: number;
-  hoarding: HoardingLevel;
   penalty: number;
   parts: Partial<Record<RankingMetric, number>>;
+  /** Days since they joined the Turmoil Discord server (or the Clan Hub, until Discord's date is known). */
   daysInClan: number;
   isNew: boolean;
   lastSavedAt: string | null;

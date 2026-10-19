@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { capturePendingSnapshots } from "./banks";
 import { guildId } from "./config";
-import { database, lockAdministration, type Database } from "./db";
+import { database, lockAdministration, type Database, type SqlConnection } from "./db";
+import { discordJoinDate } from "./discord";
 import { ApiError } from "./errors";
 import { recordMemberProfile } from "./auth";
-import { memberFromRow } from "./mappers";
+import { iso, memberFromRow } from "./mappers";
 
 /** Never remove more than this share of the roster in one go; something is probably wrong with Discord. */
 const MAX_REMOVAL_SHARE = 0.3;
@@ -22,6 +23,8 @@ interface GuildMember {
   user?: { id?: string; username?: string; global_name?: string | null; avatar?: string | null; bot?: boolean };
   nick?: string | null;
   roles?: string[];
+  /** When they joined the server. */
+  joined_at?: string | null;
 }
 
 /** The clan's Discord role ("Turmoil" unless DISCORD_CLAN_ROLE_NAME says otherwise). */
@@ -56,6 +59,33 @@ function avatarUrl(member: GuildMember): string | null {
   return member.user?.id && member.user.avatar ? `https://cdn.discordapp.com/avatars/${member.user.id}/${member.user.avatar}.png?size=128` : null;
 }
 
+/** Saves when each member joined the Turmoil Discord server ("days in clan"); only changed dates are written. */
+async function saveJoinDates(tx: SqlConnection, guildMembers: GuildMember[]): Promise<number> {
+  const joined = new Map(guildMembers.map((member) => [member.user?.id ?? "", discordJoinDate(member.joined_at)]).filter(([id, date]) => id && date) as [string, string][]);
+  if (!joined.size) return 0;
+  let changed = 0;
+  for (const row of await tx.query("SELECT id, discord_id, discord_joined_at FROM app_members")) {
+    const date = joined.get(String(row.discord_id));
+    const current = iso(row.discord_joined_at);
+    if (!date || date === current) continue;
+    await tx.query("UPDATE app_members SET discord_joined_at = $2 WHERE id = $1", [row.id, date]);
+    changed++;
+  }
+  return changed;
+}
+
+/**
+ * Fills in Discord join dates now (the nightly check also does it), for members who don't have one
+ * yet. Nothing else about the roster changes. Returns how many were filled in.
+ */
+export async function refreshDiscordJoinDates(dependencies: { db?: Database; fetcher?: typeof fetch } = {}): Promise<number> {
+  const token = process.env.DISCORD_BOT_TOKEN;
+  if (!token) return 0;
+  const guildMembers = await fetchGuildMembers(token, dependencies.fetcher ?? fetch);
+  const db = dependencies.db ?? await database();
+  return db.transaction((tx) => saveJoinDates(tx, guildMembers));
+}
+
 /**
  * Deactivates tracker members who have left the Discord server (or lost the Turmoil role), and
  * reactivates anyone this check removed who has since come back. Members switched off by an admin
@@ -73,6 +103,7 @@ export async function syncDiscordMembers(dependencies: { db?: Database; fetcher?
   const db = dependencies.db ?? await database();
   return db.transaction(async (tx) => {
     await lockAdministration(tx, db.dialect);
+    await saveJoinDates(tx, guildMembers);
     const members = await tx.query("SELECT id, discord_id, username, role, active, avatar_url FROM app_members");
     const autoRemoved = new Set((await tx.query("SELECT member_id FROM member_auto_removals")).map((row) => String(row.member_id)));
     const active = members.filter((row) => row.active === true);
@@ -93,9 +124,9 @@ export async function syncDiscordMembers(dependencies: { db?: Database; fetcher?
     for (const member of newcomers) {
       const user = member.user!;
       const name = (member.nick || user.global_name || user.username || "Clan member").slice(0, 80);
-      const rows = await tx.query(`INSERT INTO app_members (id, discord_id, username, display_name, avatar_url, role, never_signed_in)
-        VALUES ($1, $2, $3, $4, $5, 'MEMBER', TRUE) ON CONFLICT (discord_id) DO NOTHING RETURNING *`,
-      [randomUUID(), user.id, user.username || name, name, avatarUrl(member)]);
+      const rows = await tx.query(`INSERT INTO app_members (id, discord_id, username, display_name, avatar_url, role, never_signed_in, discord_joined_at)
+        VALUES ($1, $2, $3, $4, $5, 'MEMBER', TRUE, $6) ON CONFLICT (discord_id) DO NOTHING RETURNING *`,
+      [randomUUID(), user.id, user.username || name, name, avatarUrl(member), discordJoinDate(member.joined_at)]);
       if (rows.length) {
         await recordMemberProfile(tx, memberFromRow(rows[0]));
         added.push(name);

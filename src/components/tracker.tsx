@@ -2092,7 +2092,8 @@ function MembersManager({
     strikes: (member) => member.strikes ?? 0,
     // Never-updated members count as the oldest.
     updated: (member) => new Date(member.lastUpdatedAt ?? 0).getTime(),
-    joined: (member) => new Date(member.joinedAt).getTime(),
+    // "Joined" is when they joined the Turmoil Discord server, once Discord has told us.
+    joined: (member) => new Date(member.discordJoinedAt ?? member.joinedAt).getTime(),
   }, { key: "updated", direction: "asc" });
   const sort = rosterSort.key === "member" ? "alphabetical" : rosterSort.key === "updated" ? (rosterSort.direction === "asc" ? "oldest" : "newest") : "";
   const setSort = (value: string) => setRosterSort(value === "alphabetical" ? { key: "member", direction: "asc" } : { key: "updated", direction: value === "newest" ? "desc" : "asc" });
@@ -2230,7 +2231,7 @@ function MembersManager({
                     <Freshness date={member.lastUpdatedAt} />
                   </td>
                   <td data-label={t("Joined")}>
-                    {new Date(member.joinedAt).toLocaleDateString(language, {
+                    {new Date(member.discordJoinedAt ?? member.joinedAt).toLocaleDateString(language, {
                       month: "short",
                       day: "numeric",
                       year: "numeric",
@@ -2292,7 +2293,7 @@ function MembersManager({
           <span>{t("{count} members", { count: filtered.length })}</span>
           <button className="button subtle small-button" onClick={() => downloadRows(`turmoil-members-${new Date().toISOString().slice(0, 10)}.csv`, [
             ["Member", "Discord ID", "Role", "Status", "Holiday until", "Strikes", "Last resource update", "Joined", "Never signed in"],
-            ...filtered.map((member) => [member.username, member.discordId, member.role, member.active ? "Active" : "Inactive", member.holidayUntil ?? "", String(member.strikes ?? 0), member.lastUpdatedAt ?? "", member.joinedAt, member.neverSignedIn ? "Yes" : ""]),
+            ...filtered.map((member) => [member.username, member.discordId, member.role, member.active ? "Active" : "Inactive", member.holidayUntil ?? "", String(member.strikes ?? 0), member.lastUpdatedAt ?? "", member.discordJoinedAt ?? member.joinedAt, member.neverSignedIn ? "Yes" : ""]),
           ])}><ArrowDownToLine size={13} />{t("Export CSV")}</button>
           <span>{t("At least one active admin is always required")}</span>
         </div>

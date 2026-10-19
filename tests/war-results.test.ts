@@ -169,14 +169,24 @@ test("the contribution ranking puts the least active members first", async () =>
     assert.equal(ranking.rows.at(-1)?.member.id, star.id);
     assert.equal(ranking.rows.find(({ member }) => member.id === star.id)?.vials, 50);
     assert.equal(ranking.records.wars, 1);
-    assert.equal(ranking.weights.vials, 30);
-    // Snipes count only a little (availability and time zones), and the parts still add up to 100.
+    assert.equal(ranking.weights.vials, 25);
+    // Weekly updates count most; snipes only a little (availability and time zones); the parts add up to 100.
     const { RANKING_WEIGHTS } = await import("../src/lib/server/ranking");
+    assert.equal(RANKING_WEIGHTS.updates, 30);
     assert.equal(RANKING_WEIGHTS.snipes, 5);
     assert.equal(Object.values(RANKING_WEIGHTS).reduce((sum, weight) => sum + weight, 0), 100);
+    // Hoarding isn't part of the score any more.
+    assert.equal("hoarding" in ranking.rows[0], false);
     // Members there from the start aren't "new", even though the site is young.
     await db.query("UPDATE app_members SET joined_at = NOW() - INTERVAL '5 days'");
     assert.equal((await contributionRanking(admin, db)).rows.some((row) => row.isNew), false);
+    // Days in clan count from when they joined the Turmoil Discord server, once Discord has said.
+    await db.query("UPDATE app_members SET discord_joined_at = NOW() - INTERVAL '200 days' WHERE id = $1", [star.id]);
+    await db.query("UPDATE app_members SET discord_joined_at = NOW() - INTERVAL '3 days' WHERE id = $1", [idle.id]);
+    const byDiscord = await contributionRanking(admin, db);
+    assert.equal(byDiscord.rows.find(({ member }) => member.id === star.id)?.daysInClan, 200);
+    assert.equal(byDiscord.rows.find(({ member }) => member.id === idle.id)?.isNew, true);
+    assert.equal(byDiscord.rows.find(({ member }) => member.id === admin.id)?.daysInClan, 5);
   });
 });
 
@@ -189,8 +199,8 @@ test("clan members who never signed in are added from Discord and ranked with a 
     const fetcher = (async (url: string) => new Response(JSON.stringify(url.endsWith("/roles")
       ? [{ id: "r-clan", name: "Turmoil" }, { id: "r-guest", name: "Verified" }]
       : [
-        { user: { id: admin.discordId, username: "leader" }, roles: ["r-clan"] },
-        { user: { id: "555", username: "lurker", global_name: "Lurker" }, roles: ["r-clan"] },
+        { user: { id: admin.discordId, username: "leader" }, roles: ["r-clan"], joined_at: "2025-03-01T10:00:00.000000+00:00" },
+        { user: { id: "555", username: "lurker", global_name: "Lurker" }, roles: ["r-clan"], joined_at: "2026-01-15T08:30:00+00:00" },
         { user: { id: "666", username: "guest" }, roles: ["r-guest"] },
         { user: { id: "777", username: "somebot", bot: true }, roles: ["r-clan"] },
       ]))) as typeof fetch;
@@ -202,6 +212,10 @@ test("clan members who never signed in are added from Discord and ranked with a 
       assert.deepEqual(result.added, ["Lurker"]);
       const rows = await db.query("SELECT discord_id, never_signed_in FROM app_members ORDER BY discord_id");
       assert.deepEqual(rows.map((row) => [row.discord_id, row.never_signed_in]).filter(([id]) => id !== admin.discordId), [["555", true]]);
+      // Everyone's Discord join date is kept, for "days in clan".
+      const joined = await db.query("SELECT discord_id, discord_joined_at FROM app_members ORDER BY discord_id");
+      assert.deepEqual(joined.map((row) => [row.discord_id, new Date(row.discord_joined_at as string).toISOString()]),
+        [["555", "2026-01-15T08:30:00.000Z"], [admin.discordId, "2025-03-01T10:00:00.000Z"]].sort((a, b) => a[0].localeCompare(b[0])));
       const ranking = await contributionRanking(admin, db);
       const lurker = ranking.rows.find(({ member }) => member.discordId === "555")!;
       assert.equal(lurker.member.neverSignedIn, true);
@@ -248,5 +262,39 @@ test("admins can fix a saved record and add screenshots to it", async () => {
     assert.deepEqual(listed.imageIds.slice(1), added.imageIds, "new screenshots go after the old ones");
     const tooMany = Array.from({ length: MAX_RECORD_SCREENSHOTS }, () => IMAGE);
     await assert.rejects(addWarResultImages(admin, saved.id, tooMany, db), apiFailure("TOO_MANY_SCREENSHOTS"));
+  });
+});
+
+test("the ranking fills in missing Discord join dates straight away", async () => {
+  const { contributionRanking } = await import("../src/lib/server/ranking");
+  await withDatabase(async (db) => {
+    const admin = await addMember(db, "leader", "ADMIN");
+    const member = await addMember(db, "newbie");
+    const calls: string[] = [];
+    const now = new Date();
+    const fetcher = (async (url: string) => {
+      calls.push(url);
+      return new Response(JSON.stringify([
+        { user: { id: admin.discordId, username: "leader" }, roles: [], joined_at: new Date(now.getTime() - 90 * 86_400_000).toISOString() },
+        { user: { id: member.discordId, username: "newbie" }, roles: [], joined_at: new Date(now.getTime() - 2 * 86_400_000).toISOString() },
+      ]));
+    }) as typeof fetch;
+    const previous = { token: process.env.DISCORD_BOT_TOKEN, guild: process.env.DISCORD_GUILD_ID };
+    try {
+      process.env.DISCORD_BOT_TOKEN = "bot";
+      process.env.DISCORD_GUILD_ID = "123";
+      const ranking = await contributionRanking(admin, db, now, { fetcher });
+      assert.equal(calls.length, 1);
+      assert.equal(ranking.rows.find((row) => row.member.id === admin.id)?.daysInClan, 90);
+      assert.equal(ranking.rows.find((row) => row.member.id === member.id)?.daysInClan, 2);
+      assert.equal(ranking.rows.find((row) => row.member.id === member.id)?.isNew, true);
+      // Everyone has a date now, so Discord isn't asked again.
+      await contributionRanking(admin, db, now, { fetcher });
+      assert.equal(calls.length, 1);
+    } finally {
+      for (const [key, value] of [["DISCORD_BOT_TOKEN", previous.token], ["DISCORD_GUILD_ID", previous.guild]] as const) {
+        if (value === undefined) delete process.env[key]; else process.env[key] = value;
+      }
+    }
   });
 });

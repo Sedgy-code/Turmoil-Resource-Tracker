@@ -72,7 +72,7 @@ export function MemberHistoryPanel({ member, onClose, onChanged, notify }: {
     <button className="history-scrim" aria-label={t("Close")} onClick={onClose} />
     <aside className="history-panel">
       <header>
-        <div className="table-member"><MemberAvatar member={current} /><div><strong><MemberName member={current} /></strong><span>{current.role === "ADMIN" ? t("Admin") : t("Member")} · {t("joined {date}", { date: day(current.joinedAt) })}</span></div></div>
+        <div className="table-member"><MemberAvatar member={current} /><div><strong><MemberName member={current} /></strong><span>{current.role === "ADMIN" ? t("Admin") : t("Member")} · {t("joined {date}", { date: day(current.discordJoinedAt ?? current.joinedAt) })}</span></div></div>
         <button className="icon-button" aria-label={t("Close")} onClick={onClose}><X size={18} /></button>
       </header>
       {error && <div className="error-banner" role="alert">{t(error)}<button onClick={() => void load()}>{t("Retry")}</button></div>}

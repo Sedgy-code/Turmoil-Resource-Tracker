@@ -291,6 +291,8 @@ CREATE TABLE IF NOT EXISTS member_ascensions (
   PRIMARY KEY (member_id, week_start)
 );
 ALTER TABLE app_members ADD COLUMN IF NOT EXISTS reminders_allowed BOOLEAN NOT NULL DEFAULT FALSE;
+-- When they joined the Turmoil Discord server (Discord's own date), for "days in clan".
+ALTER TABLE app_members ADD COLUMN IF NOT EXISTS discord_joined_at TIMESTAMPTZ;
 CREATE TABLE IF NOT EXISTS member_nudges (
   member_id TEXT NOT NULL REFERENCES app_members(id),
   week_start DATE NOT NULL CHECK (EXTRACT(ISODOW FROM week_start) = 1),

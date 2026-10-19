@@ -106,7 +106,7 @@ export function MePage({ data, notify, refresh, onSignOut, onOpenGuide }: {
       <div>
         <strong className="me-name"><MemberName member={me} /></strong>
         <MemberTitle member={me} />
-        <span className="me-role">{me.role === "ADMIN" ? t("Clan admin") : t("Clan member")}{" · "}{t("In the clan since {date}", { date: new Intl.DateTimeFormat(language, { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" }).format(new Date(me.joinedAt)) })}</span>
+        <span className="me-role">{me.role === "ADMIN" ? t("Clan admin") : t("Clan member")}{" · "}{t("In the clan since {date}", { date: new Intl.DateTimeFormat(language, { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" }).format(new Date(me.discordJoinedAt ?? me.joinedAt)) })}</span>
       </div>
     </section>
 

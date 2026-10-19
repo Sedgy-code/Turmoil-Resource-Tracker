@@ -62,14 +62,14 @@ function versionEntry(row: Record<string, unknown>): ResourceEntry {
 
 /**
  * Saving is fine; hoarding is holding a lot, growing it, AND not using it in wars.
- * Holding a lot but spending in wars makes a member a "good saver".
+ * A "good saver" keeps at least a typical member's pile and uses it in wars ("spendsInWars" is only
+ * given to members holding at least the typical amount).
  */
 export function hoardingLevel(reasons: HoardingReason[]): HoardingLevel {
   const large = reasons.includes("large");
-  if (!large) return "ok";
-  if (reasons.includes("growing") && reasons.includes("noWarSpending")) return "high";
+  if (large && reasons.includes("growing") && reasons.includes("noWarSpending")) return "high";
   if (reasons.includes("spendsInWars")) return "saver";
-  if (reasons.includes("growing") || reasons.includes("noWarSpending") || reasons.includes("skipsSnipes")) return "watch";
+  if (large && (reasons.includes("growing") || reasons.includes("noWarSpending") || reasons.includes("skipsSnipes"))) return "watch";
   return "ok";
 }
 
@@ -108,17 +108,24 @@ export async function hoardingReport(actor: Member, db?: Database, now = new Dat
   const values = new Map(members.map((member) => [member.id, banks.has(member.id) ? warValue(banks.get(member.id)!, settings.warRates) : 0]));
   const typical = median([...values.values()]);
   const rules = await hoardingRules(connection);
-  // Share of their holdings each member used during the last few war weeks.
+  // How much of their pile each member used in the last few wars: the war points they scored (from
+  // the end-of-war results) against what their pile was worth when the war started. Scoring war
+  // points is spending, so this holds even when a member earns more during the week than they use.
   const warWeeks = (await connection.query("SELECT DISTINCT week_start::text AS week FROM war_results WHERE kind = 'war' ORDER BY week DESC LIMIT $1", [rules.wars]))
-    .map((row) => String(row.week));
-  const warUse = new Map<string, { before: number; spent: number }>();
+    .map((row) => String(row.week).slice(0, 10));
+  const scoredInWar = new Map<string, Map<string, number>>();
   for (const week of warWeeks) {
-    for (const row of (await warSpending(actor, week, connection, now)).rows) {
-      if (row.before === null || row.spent === null || row.before <= 0) continue;
-      const current = warUse.get(row.member.id) ?? { before: 0, spent: 0 };
-      warUse.set(row.member.id, { before: current.before + row.before, spent: current.spent + Math.max(0, row.spent) });
-    }
+    const rows = await connection.query(`SELECT points.member_id, SUM(points.points) AS points FROM war_result_points points
+      JOIN war_results result ON result.id = points.result_id
+      WHERE result.week_start = $1 AND result.kind = 'war' AND points.member_id IS NOT NULL GROUP BY points.member_id`, [week]);
+    scoredInWar.set(week, new Map(rows.map((row) => [String(row.member_id), Number(row.points)])));
   }
+  /** Their pile when the war started: the last save before Day 1, or their first save during the war week. */
+  const pileAtWar = (history: { at: number; value: number }[], week: string) => {
+    const start = new Date(`${week}T00:00:00Z`).getTime() + DAY;
+    const before = [...history].reverse().find((point) => point.at < start);
+    return before ?? history.find((point) => point.at >= start && point.at < start + 6 * DAY) ?? null;
+  };
 
   const rows: HoardingRow[] = members.map((member) => {
     const value = values.get(member.id) ?? 0;
@@ -145,9 +152,20 @@ export async function hoardingReport(actor: Member, db?: Database, now = new Dat
     if (typical > 0 && value >= typical * rules.largeMultiple) reasons.push("large");
     if (change !== null && change > 0 && trackedDays >= 14 && (lastSpendAt === null || lastSpendAt < growthStart) && value >= typical) reasons.push("growing");
     if (snipeIds.length >= 2 && attended === 0 && value >= typical) reasons.push("skipsSnipes");
-    const use = warUse.get(member.id);
-    const usedShare = use && use.before > 0 ? use.spent / use.before : null;
-    if (usedShare !== null) reasons.push(usedShare * 100 >= rules.spendPercent ? "spendsInWars" : "noWarSpending");
+    let pile = 0;
+    let scored = 0;
+    for (const week of warWeeks) {
+      const atWar = pileAtWar(history, week);
+      if (!atWar || atWar.value <= 0) continue;
+      pile += atWar.value;
+      scored += scoredInWar.get(week)?.get(member.id) ?? 0;
+    }
+    const usedShare = pile > 0 ? scored / pile : null;
+    if (usedShare !== null) {
+      // Using it in wars makes a good saver only for those who keep at least a typical pile.
+      if (usedShare * 100 < rules.spendPercent) reasons.push("noWarSpending");
+      else if (typical > 0 && value >= typical) reasons.push("spendsInWars");
+    }
     if (!lastSavedAt || now.getTime() - new Date(lastSavedAt).getTime() > STALE_AFTER) reasons.push("stale");
     const note = notes.get(member.id);
     return {
@@ -160,7 +178,8 @@ export async function hoardingReport(actor: Member, db?: Database, now = new Dat
       lastSpendAt: lastSpendAt === null ? null : new Date(lastSpendAt).toISOString(),
       snipes: { held: snipeIds.length, saidYes, attended },
       lastSavedAt,
-      warUsePercent: usedShare === null ? null : Math.round(usedShare * 1000) / 10,
+      // Scoring more than the whole pile (they earned more during the war) shows as 100%.
+      warUsePercent: usedShare === null ? null : Math.min(100, Math.round(usedShare * 1000) / 10),
       reasons,
       level: hoardingLevel(reasons),
       note: note ? String(note.note) : "",

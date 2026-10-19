@@ -34,6 +34,8 @@ export function memberFromRow(row: Record<string, unknown>): Member {
     ...(row.holiday_until && dateText(row.holiday_until) >= new Date().toISOString().slice(0, 10) ? { holidayUntil: dateText(row.holiday_until) } : {}),
     // Said yes to a Discord message when they forget to save (leaders can nudge them once a week).
     ...(row.reminders_allowed === true ? { remindersAllowed: true } : {}),
+    // When they joined the Turmoil Discord server, once Discord has told us.
+    ...(row.discord_joined_at ? { discordJoinedAt: iso(row.discord_joined_at)! } : {}),
   };
 }
 export function entryFromRow(row: Record<string, unknown>): ResourceEntry {

@@ -39,6 +39,8 @@ test("saving is fine; hoarding is a big growing pile that isn't used in wars", (
   assert.equal(hoardingLevel(["large", "skipsSnipes"]), "watch");
   assert.equal(hoardingLevel(["large"]), "ok");
   assert.equal(hoardingLevel(["growing", "noWarSpending"]), "ok");
+  // A typical pile used in wars is a good saver too; a big one isn't needed.
+  assert.equal(hoardingLevel(["spendsInWars"]), "saver");
   assert.equal(hoardingLevel([]), "ok");
 });
 
@@ -148,7 +150,10 @@ test("with war results: a saver who spends in wars vs a hoarder who doesn't, usi
     for (const [hammers, at] of [[8000, start - 30 * DAY], [9000, start - DAY], [9500, start + 2 * DAY], [12000, Date.now() - DAY]] as const) await saveHammers(db, hoarder, hammers, ago(at));
     // Saver: big pile that drops during the war, then grows again.
     for (const [hammers, at] of [[8000, start - 30 * DAY], [10000, start - DAY], [6000, start + 2 * DAY], [12000, Date.now() - DAY]] as const) await saveHammers(db, saver, hammers, ago(at));
-    await db.query("INSERT INTO war_results (id, week_start, label, clan_total, created_by, kind) VALUES ($1, $2, '', 1, $3, 'war')", [randomUUID(), warWeek, admin.id]);
+    // The war's results: the saver scored 8,000 war points (40% of a 20,000-point pile), the hoarder 500.
+    const resultId = randomUUID();
+    await db.query("INSERT INTO war_results (id, week_start, label, clan_total, created_by, kind) VALUES ($1, $2, '', 1, $3, 'war')", [resultId, warWeek, admin.id]);
+    await db.query("INSERT INTO war_result_points (result_id, position, game_name, member_id, points) VALUES ($1, 1, 'Saver', $2, 8000), ($1, 2, 'Hoarder', $3, 500)", [resultId, saver.id, hoarder.id]);
     const report = await hoardingReport(admin, db);
     const row = (name: string) => report.rows.find(({ member }) => member.username === name)!;
     assert.equal(report.measuredWars, 1);
@@ -160,5 +165,40 @@ test("with war results: a saver who spends in wars vs a hoarder who doesn't, usi
     await saveHoardingRules(admin, { largeMultiple: 2, spendPercent: 50, wars: 2 }, db);
     assert.notEqual((await hoardingReport(admin, db)).rows.find(({ member }) => member.id === saver.id)!.level, "saver");
     await assert.rejects(saveHoardingRules(saver, { largeMultiple: 3, spendPercent: 10, wars: 2 }, db), apiFailure("ADMIN_REQUIRED"));
+  });
+});
+
+test("good savers: a typical pile used in wars counts, even when they earn more than they spend", async () => {
+  await withDatabase(async (db) => {
+    const admin = await addMember(db, "Leader", "ADMIN");
+    const steady = await addMember(db, "Steady");
+    const small = await addMember(db, "Small");
+    const idle = await addMember(db, "Idle");
+    const { currentWeek } = await import("../src/lib/resources");
+    const warWeek = currentWeek(new Date(Date.now() - 10 * DAY));
+    const start = new Date(`${warWeek}T00:00:00Z`).getTime() + DAY;
+    const ago = (time: number) => (Date.now() - time) / DAY;
+    await saveHammers(db, admin, 3000, 1);
+    // Steady holds a typical pile and keeps growing it, but scores plenty in the war: a good saver.
+    for (const [hammers, at] of [[3000, start - DAY], [3600, start + 6 * DAY]] as const) await saveHammers(db, steady, hammers, ago(at));
+    // Small scores a lot too, but keeps less than a typical member: not a "saver".
+    for (const [hammers, at] of [[500, start - DAY], [400, start + 6 * DAY]] as const) await saveHammers(db, small, hammers, ago(at));
+    // Idle holds a typical pile and scores almost nothing.
+    for (const [hammers, at] of [[3000, start - DAY], [3100, start + 6 * DAY]] as const) await saveHammers(db, idle, hammers, ago(at));
+    const resultId = randomUUID();
+    await db.query("INSERT INTO war_results (id, week_start, label, clan_total, created_by, kind) VALUES ($1, $2, '', 1, $3, 'war')", [resultId, warWeek, admin.id]);
+    await db.query("INSERT INTO war_result_points (result_id, position, game_name, member_id, points) VALUES ($1, 1, 'Steady', $2, 2400), ($1, 2, 'Small', $3, 900), ($1, 3, 'Idle', $4, 100)", [resultId, steady.id, small.id, idle.id]);
+    const report = await hoardingReport(admin, db);
+    const row = (name: string) => report.rows.find(({ member }) => member.username === name)!;
+    // 2,400 war points from a 6,000-point pile: 40% used, though the pile still grew.
+    assert.equal(row("Steady").warUsePercent, 40);
+    assert.equal(row("Steady").level, "saver");
+    assert.equal(row("Small").warUsePercent, 90);
+    assert.equal(row("Small").level, "ok");
+    assert.equal(row("Idle").level, "ok");
+    assert.ok(row("Idle").reasons.includes("noWarSpending"));
+    // More points than the whole pile (they earned during the war) shows as 100%.
+    await db.query("UPDATE war_result_points SET points = 9000 WHERE member_id = $1", [steady.id]);
+    assert.equal((await hoardingReport(admin, db)).rows.find(({ member }) => member.id === steady.id)!.warUsePercent, 100);
   });
 });

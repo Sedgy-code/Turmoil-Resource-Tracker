@@ -193,6 +193,12 @@ describe("Authentication boundaries", () => {
       delete process.env.DISCORD_ROLE_ID;
     }
   });
+  test("the Discord join date is read from the membership, and ignored when it isn't a date", async () => {
+    const joined = await assertGuildMembership("token", responseFetcher(200, { roles: [], joined_at: "2025-11-02T09:15:00.123000+00:00" }));
+    assert.equal(joined.joinedAt, "2025-11-02T09:15:00.123Z");
+    assert.equal((await assertGuildMembership("token", responseFetcher(200, { roles: [], joined_at: "soon" }))).joinedAt, undefined);
+    assert.equal((await assertGuildMembership("token", responseFetcher(200, { roles: [] }))).joinedAt, undefined);
+  });
   test("Discord outages are service failures rather than permission grants", async () => {
     await assert.rejects(
       assertGuildMembership("token", responseFetcher(429)),

@@ -14,6 +14,15 @@ export interface DiscordMembership {
   nick?: string | null;
   avatar?: string | null;
   user?: DiscordUser;
+  /** When they joined the server (ISO), if Discord says. */
+  joinedAt?: string | null;
+}
+
+/** Discord's "joined the server" time as ISO, or null when missing or not a date. */
+export function discordJoinDate(value: unknown): string | null {
+  if (typeof value !== "string" || !value) return null;
+  const time = Date.parse(value);
+  return Number.isFinite(time) ? new Date(time).toISOString() : null;
 }
 export interface DiscordTokens {
   access_token: string;
@@ -210,10 +219,12 @@ export async function assertGuildMembership(
       discriminator: (supplied.discriminator as string | undefined) ?? "0",
     };
   }
+  const joinedAt = discordJoinDate(membership.joined_at);
   return {
     roles: membership.roles,
     nick: membership.nick as string | null | undefined,
     avatar: membership.avatar as string | null | undefined,
+    ...(joinedAt ? { joinedAt } : {}),
     ...(user ? { user } : {}),
   };
 }

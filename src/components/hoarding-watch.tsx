@@ -44,7 +44,8 @@ function RulesEditor({ rules, measuredWars, onSaved, notify }: { rules: Hoarding
   </label>;
   return <section className="panel hoard-rules">
     <h2>{t("Saver or hoarder? Your rules")}</h2>
-    <p>{t("Saving is fine. Someone only counts as hoarding when all three are true: they hold a lot, their pile keeps growing, and they barely used it in recent wars. Big holders who do spend in wars are marked as good savers.")}</p>
+    <p>{t("Saving is fine. Someone only counts as hoarding when all three are true: they hold a lot, their pile keeps growing, and they barely use it in wars. Anyone who keeps at least a typical member’s pile and uses it in wars is a good saver.")}</p>
+    <p>{t("“Used in wars” compares the war points they scored with what their pile was worth when the war started.")}</p>
     <div className="rule-grid">
       {field("largeMultiple", t("Holds at least … × a typical member"), 1, 20, 0.5, "×")}
       {field("spendPercent", t("Must use at least … of their pile in wars"), 0, 100, 5, "%")}

@@ -82,8 +82,8 @@ export async function registerDiscordMember(
           "ACCOUNT_INACTIVE",
         );
       const updated = await tx.query(
-        "UPDATE app_members SET username = $2, display_name = $3, avatar_url = $4, global_avatar_url = $5, global_display_name = $6, never_signed_in = FALSE WHERE id = $1 RETURNING *",
-        [existing[0].id, user.username, profile.displayName, profile.avatarUrl, profile.globalAvatarUrl, profile.globalDisplayName],
+        "UPDATE app_members SET username = $2, display_name = $3, avatar_url = $4, global_avatar_url = $5, global_display_name = $6, never_signed_in = FALSE, discord_joined_at = COALESCE($7, discord_joined_at) WHERE id = $1 RETURNING *",
+        [existing[0].id, user.username, profile.displayName, profile.avatarUrl, profile.globalAvatarUrl, profile.globalDisplayName, membership?.joinedAt ?? null],
       );
       const member = memberFromRow(updated[0]);
       await recordMemberProfile(tx, member, memberFromRow(existing[0]));
@@ -96,7 +96,7 @@ export async function registerDiscordMember(
     const initialAdmin =
       !administrators.length && (designated ? designated === user.id : true);
     const rows = await tx.query(
-      "INSERT INTO app_members (id,discord_id,username,display_name,avatar_url,global_avatar_url,global_display_name,role) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",
+      "INSERT INTO app_members (id,discord_id,username,display_name,avatar_url,global_avatar_url,global_display_name,role,discord_joined_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *",
       [
         randomUUID(),
         user.id,
@@ -106,6 +106,7 @@ export async function registerDiscordMember(
         profile.globalAvatarUrl,
         profile.globalDisplayName,
         initialAdmin ? "ADMIN" : "MEMBER",
+        membership?.joinedAt ?? null,
       ],
     );
     const member = memberFromRow(rows[0]);
@@ -249,8 +250,8 @@ export async function authenticatedMember(
         );
         const previousMember = memberFromRow(session);
         const updatedMembers = await tx.query(
-          "UPDATE app_members SET username = $2, display_name = $3, avatar_url = $4, global_avatar_url = $5, global_display_name = $6 WHERE id = $1 AND active = TRUE RETURNING *",
-          [session.member_id, profileUser.username, profile.displayName, profile.avatarUrl, profile.globalAvatarUrl, profile.globalDisplayName],
+          "UPDATE app_members SET username = $2, display_name = $3, avatar_url = $4, global_avatar_url = $5, global_display_name = $6, discord_joined_at = COALESCE($7, discord_joined_at) WHERE id = $1 AND active = TRUE RETURNING *",
+          [session.member_id, profileUser.username, profile.displayName, profile.avatarUrl, profile.globalAvatarUrl, profile.globalDisplayName, membership.joinedAt ?? null],
         );
         if (!updatedMembers.length) return { member: null };
         await recordMemberProfile(tx, memberFromRow(updatedMembers[0]), previousMember);

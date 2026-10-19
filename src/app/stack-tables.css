@@ -86,6 +86,6 @@
   .app-shell table.stack-table .member-actions { flex-direction: row; flex-wrap: wrap; gap: 8px; }
 }
 
-/* Outside card form these stay hidden. */
-.stack-only, .stack-folded-only { display: none; }
+/* Outside card form these stay hidden (stronger than a component's own display, e.g. .rank-place). */
+.app-shell .stack-only, .app-shell .stack-folded-only { display: none; }
 @media (prefers-reduced-motion: reduce) { .stack-toggle svg { transition: none; } }
