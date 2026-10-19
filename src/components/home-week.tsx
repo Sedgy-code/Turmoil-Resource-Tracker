@@ -14,6 +14,7 @@ import { TermHelp, WelcomeCard } from "./first-visit";
 import { celebrate } from "./celebrate";
 import { announceClanPointsUpdate } from "@/lib/clan-points";
 import { checkInOpen } from "@/lib/snipe-calendar";
+import { displaySnipeTitle } from "@/lib/snipe-day";
 import { CoinStack } from "./home-icons";
 import { PILLAR_ICONS, VialIcon } from "./resource-icons";
 import { MemberAvatar } from "./member-identity";
@@ -77,6 +78,7 @@ function JobMark({ tone, done, children }: { tone: "gold" | "slate"; done: boole
  */
 export function HomeWeek({ data, notify, leader }: { data: DashboardResponse; notify: (message: string, error?: boolean) => void; leader?: ReactNode }) {
   const t = useT();
+  const { language } = useLanguage();
   const now = useNow();
   const me = data.currentUser;
   const [earned, setEarned] = useState<boolean | null>(null);
@@ -203,7 +205,7 @@ export function HomeWeek({ data, notify, leader }: { data: DashboardResponse; no
     {leader}
     {live && <section className="home-card home-snipe-live" aria-labelledby="home-snipe-live-title">
       <div className="home-card-head"><h2 id="home-snipe-live-title" className="home-kicker"><Target size={19} />{t("Snipe on now")}</h2></div>
-      <p className="home-today-main">{live.title}</p>
+      <p className="home-today-main">{displaySnipeTitle(live, t, language)}</p>
       {checkedIn
         ? <p className="snipe-checked-in"><Check size={18} aria-hidden="true" />{t("You’re checked in. Thanks for joining!")}</p>
         : <button type="button" className="home-hero-cta home-checkin" disabled={busy} onClick={() => void checkIn(live)}><Check size={19} aria-hidden="true" /><span>{t("Check in now")}</span><em>{t("+10 points")}</em></button>}
@@ -250,7 +252,7 @@ export function HomeWeek({ data, notify, leader }: { data: DashboardResponse; no
           <JobMark tone="slate" done={!!answer}><Target size={20} /></JobMark>
           <div className="home-job-text">
             <strong>{snipeTitle}<TermHelp term="snipe" /></strong>
-            <small>{snipe.title} · {t("Starts in {time}", { time: countdown(new Date(snipe.startsAt), now) })}</small>
+            <small>{displaySnipeTitle(snipe, t, language)} · {t("Starts in {time}", { time: countdown(new Date(snipe.startsAt), now) })}</small>
           </div>
           <div className="home-choice" role="group" aria-label={t("Can you join this snipe?")}>
             <button aria-pressed={answer === "yes"} disabled={busy} onClick={() => void respond(snipe, "yes")}><Check size={16} />{t("Yes")}</button>

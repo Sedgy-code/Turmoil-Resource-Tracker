@@ -98,3 +98,14 @@
 @media (max-width: 640px) {
   .snipe-checkin, .snipe-calendar { margin-left: 16px; margin-right: 16px; }
 }
+
+/* New snipe: pick the war day (1–5), the time, and what scores that day; the title writes itself. */
+.snipe-day-field { margin: 0 0 14px; padding: 0; border: 0; }
+.snipe-day-field > legend { margin-bottom: 8px; padding: 0; font-size: 11px; font-weight: 650; color: var(--muted); }
+.snipe-day-picker { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.snipe-day-picker button { min-height: 46px; padding: 8px 4px; font-size: 14px; white-space: nowrap; }
+.snipe-day-date { display: flex; align-items: center; gap: 6px; margin-top: 8px; color: var(--gold) !important; font-weight: 650; }
+.snipe-time-field { max-width: 260px; margin-bottom: 14px; }
+.snipe-title-preview { display: grid; gap: 3px; margin: 12px 0 0; padding: 10px 12px; border: 1px dashed var(--border); border-radius: 10px; }
+.snipe-title-preview > span { font-size: 11px; font-weight: 650; color: var(--muted); }
+.snipe-title-preview > strong { font-size: 15px; color: var(--text); }
