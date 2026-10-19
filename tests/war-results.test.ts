@@ -298,3 +298,24 @@ test("the ranking fills in missing Discord join dates straight away", async () =
     }
   });
 });
+
+test("vials: donating at least 80% of a typical donor's amount earns full marks", async () => {
+  const { contributionRanking, VIALS_FULL_MARKS } = await import("../src/lib/server/ranking");
+  assert.equal(VIALS_FULL_MARKS, 0.8);
+  await withDatabase(async (db) => {
+    const admin = await addMember(db, "leader", "ADMIN");
+    const high = await addMember(db, "high");
+    const steady = await addMember(db, "steady");
+    const low = await addMember(db, "low");
+    await saveWarResult(admin, { kind: "vials", week: currentWeek(), label: "", clanTotal: null, rows: [
+      { gameName: "high", memberId: high.id, points: 100 }, { gameName: "steady", memberId: steady.id, points: 70 }, { gameName: "low", memberId: low.id, points: 40 },
+    ], images: [] }, db);
+    const ranking = await contributionRanking(admin, db);
+    const part = (id: string) => ranking.rows.find(({ member }) => member.id === id)?.parts.vials;
+    // Typical donor: 70. Full marks from 56 vials, so a lower ascension bonus doesn't cost a member doing their share.
+    assert.equal(part(high.id), 1);
+    assert.equal(part(steady.id), 1);
+    assert.equal(part(low.id), 40 / 56);
+    assert.equal(part(admin.id), 0);
+  });
+});

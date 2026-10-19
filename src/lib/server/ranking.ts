@@ -32,6 +32,20 @@ export const RANKING_WEIGHTS: Record<RankingMetric, number> = {
   snipes: 5,
 };
 
+/**
+ * Vials: donating at least this share of what a typical donor gives earns full marks. Ascension
+ * bonuses give some members 5% and others up to 60% more vials for the same play, so a member
+ * doing their full share can still donate less than the top donors.
+ */
+export const VIALS_FULL_MARKS = 0.8;
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  if (!sorted.length) return 0;
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
 /** Fill in missing Discord join dates at most this often (the nightly Discord check does the rest). */
 const JOIN_DATE_REFRESH_MS = 10 * 60 * 1000;
 let joinDatesRefreshedAt = 0;
@@ -137,13 +151,18 @@ export async function contributionRanking(actor: Member, db?: Database, now = ne
     metric === "warPoints" ? wars.count > 0 : metric === "vials" ? vials.count > 0 : metric === "clanDays" ? dayWeeks.length > 0 : true);
   const totalWeight = available.reduce((sum, metric) => sum + RANKING_WEIGHTS[metric], 0);
   const values = (metric: RankingMetric) => raw.map((row) => Number(row[metric] ?? 0));
+  // A typical donor: the middle of everyone who donated anything.
+  const typicalVials = median(values("vials").filter((value) => value > 0));
+  const part = (metric: RankingMetric, value: number) => metric === "vials" && typicalVials > 0
+    ? Math.min(1, value / (VIALS_FULL_MARKS * typicalVials))
+    : percentile(value, values(metric));
 
   // Without a Discord join date, everyone who signed up in the first few days was already in the
   // clan when the site launched, so they aren't "new".
   const launch = Math.min(...members.map((member) => new Date(member.joinedAt).getTime()));
   const joinedRecently = (member: Member) => !!member.discordJoinedAt || new Date(member.joinedAt).getTime() > launch + 3 * DAY;
   const rows: ContributionRow[] = raw.map((row) => {
-    const parts = Object.fromEntries(available.map((metric) => [metric, percentile(Number(row[metric] ?? 0), values(metric))])) as Partial<Record<RankingMetric, number>>;
+    const parts = Object.fromEntries(available.map((metric) => [metric, part(metric, Number(row[metric] ?? 0))])) as Partial<Record<RankingMetric, number>>;
     const base = totalWeight ? available.reduce((sum, metric) => sum + (parts[metric] ?? 0) * RANKING_WEIGHTS[metric], 0) / totalWeight * 100 : 50;
     // Never signing in to the Clan Hub at all is the biggest red flag.
     const penalty = (row.member.neverSignedIn ? NEVER_SIGNED_IN_PENALTY : 0) + Math.min(15, row.noShows * 5)

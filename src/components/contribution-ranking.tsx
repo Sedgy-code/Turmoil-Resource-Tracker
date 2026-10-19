@@ -69,6 +69,7 @@ export function ContributionRanking() {
         <h2>{t("How the score works")}</h2>
         <p>{t("Each member gets a score out of 100 from how they compare with everyone else. Lowest scores are at the top — talk to them first when you need space.")}</p>
         <ul className="rank-weights">{weights.map(([metric, weight]) => <li key={metric}><strong>{weight}%</strong> {t(METRIC_LABELS[metric])}</li>)}</ul>
+        <p>{t("Vials: donating at least 80% of what a typical member gives earns full marks, as ascension bonuses differ (5% to 60%).")}</p>
         <p>{t("Minus 40 for never signing in to the Clan Hub. Minus 5 for each snipe they said Yes to but missed (up to 15).")}</p>
         <p>{t("Minus 5 for each war where more than 10% of their war points came on days that weren’t clan days (a black mark, up to 15).")}</p>
         {missing.length > 0 && <p className="hoard-typical">{t("Not counted yet (no records): {parts}", { parts: missing.map((metric) => t(METRIC_LABELS[metric])).join(", ") })}</p>}
