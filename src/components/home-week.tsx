@@ -14,7 +14,7 @@ import { TermHelp, WelcomeCard } from "./first-visit";
 import { celebrate } from "./celebrate";
 import { announceClanPointsUpdate } from "@/lib/clan-points";
 import { checkInOpen } from "@/lib/snipe-calendar";
-import { displaySnipeTitle } from "@/lib/snipe-day";
+import { announceSnipeAnswered, displaySnipeTitle } from "@/lib/snipe-day";
 import { CoinStack } from "./home-icons";
 import { PILLAR_ICONS, VialIcon } from "./resource-icons";
 import { MemberAvatar } from "./member-identity";
@@ -167,6 +167,7 @@ export function HomeWeek({ data, notify, leader }: { data: DashboardResponse; no
     try {
       const updated = (await send<{ plan: SnipePlan }>(`/api/snipes/${plan.id}/response`, "POST", { answer: value })).plan;
       setPlans((current) => current?.map((item) => item.id === updated.id ? updated : item) ?? current);
+      announceSnipeAnswered();
       notify(t("Answer saved."));
     } catch (e) {
       fail(e);

@@ -93,6 +93,16 @@ function requireOpen(row: Record<string, unknown>): void {
   if (row.archived === true) throw new ApiError(409, "This snipe is archived and cannot be changed.", "SNIPE_ARCHIVED");
 }
 
+/** Upcoming snipes (not archived, not started) the member hasn't said Yes or No to: the Snipes tab's count. */
+export async function snipesToAnswer(memberId: string, db?: Database, now = new Date()): Promise<number> {
+  const connection = db ?? await database();
+  const rows = await connection.query(`SELECT COUNT(*)::int AS count FROM snipe_plans plan
+    WHERE plan.archived = FALSE AND plan.starts_at > $2
+      AND NOT EXISTS (SELECT 1 FROM snipe_responses response WHERE response.snipe_id = plan.id AND response.member_id = $1)`,
+  [memberId, now.toISOString()]);
+  return Number(rows[0]?.count ?? 0);
+}
+
 export async function listSnipes(actor: Member, db?: Database): Promise<SnipesResponse> {
   const connection = db ?? await database();
   return connection.transaction(async (tx) => {

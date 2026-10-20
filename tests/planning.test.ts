@@ -23,6 +23,7 @@ import {
   listSnipes,
   purchaseDewItem,
   respondToSnipe,
+  snipesToAnswer,
   updateSnipe,
 } from "../src/lib/server/planning";
 
@@ -403,5 +404,23 @@ test("snipe validation rejects unsupported actions and closes attendance after t
     const archived = await updateSnipe(admin, plan.id, { archived: true }, db);
     assert.equal(archived.archived, true);
     assert.equal(archived.responses.length, 0);
+  });
+});
+
+test("the Snipes tab counts upcoming snipes the member hasn't answered", async () => {
+  await withDatabase(async (db) => {
+    const admin = await addMember(db, "Leader", "ADMIN");
+    const member = await addMember(db, "Member");
+    assert.equal(await snipesToAnswer(member.id, db), 0);
+    const first = await makeSnipe(db, admin);
+    const second = await makeSnipe(db, admin);
+    assert.equal(await snipesToAnswer(member.id, db), 2);
+    await respondToSnipe(member, first.id, { answer: "no" }, db);
+    assert.equal(await snipesToAnswer(member.id, db), 1, "No counts as an answer");
+    // Archived snipes and ones that have started aren't counted.
+    await updateSnipe(admin, second.id, { archived: true }, db);
+    assert.equal(await snipesToAnswer(member.id, db), 0);
+    await makeSnipe(db, admin);
+    assert.equal(await snipesToAnswer(member.id, db, new Date(Date.now() + 2 * 86_400_000)), 0);
   });
 });

@@ -46,6 +46,8 @@ export interface SessionResponse {
   error?: string;
   /** Public address of the tracker; the browser moves there if opened elsewhere. */
   canonicalOrigin?: string;
+  /** Upcoming snipes the member hasn't answered yet (shown on the Snipes tab). */
+  snipesToAnswer?: number;
 }
 
 export interface DashboardResponse {

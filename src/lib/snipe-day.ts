@@ -71,3 +71,9 @@ export function displaySnipeTitle(plan: { title: string; startsAt: string; activ
   const day = snipeDay(plan.startsAt);
   return day && plan.title === snipeTitle(day, plan.activities) ? snipeTitle(day, plan.activities, t, language) : plan.title;
 }
+
+/** Sent when the member answers a snipe, so the count on the Snipes tab updates straight away. */
+export const SNIPE_ANSWERED = "turmoil-snipe-answered";
+export function announceSnipeAnswered(): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(SNIPE_ANSWERED));
+}

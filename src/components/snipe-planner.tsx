@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { errorText } from "@/lib/error-text";
 import { Archive, CalendarDays, CalendarPlus, Check, Crosshair, LoaderCircle, Pencil, Plus, RefreshCw, RotateCcw, X } from "lucide-react";
 import { checkInOpen, downloadCalendarFile, googleCalendarLink, snipeCalendarFile } from "@/lib/snipe-calendar";
-import { beforeResetTime, displaySnipeTitle, minutesBeforeReset, nextSnipeStart, RESET_LEAD_MINUTES, SNIPE_DAYS, snipeDay, snipeDayActivities, snipeTitle } from "@/lib/snipe-day";
+import { announceSnipeAnswered, beforeResetTime, displaySnipeTitle, minutesBeforeReset, nextSnipeStart, RESET_LEAD_MINUTES, SNIPE_DAYS, snipeDay, snipeDayActivities, snipeTitle } from "@/lib/snipe-day";
 import { numberFormat } from "@/lib/resources";
 import { WAR_ACTIVITIES } from "@/lib/war";
 import { ACTIVITY_ICONS } from "./resource-icons";
@@ -189,6 +189,7 @@ export function SnipePlanner({ data, notify }: Props) {
     try {
       const result = await request<{ plan: SnipePlan }>(`/api/snipes/${plan.id}/response`, { method: "POST", body: JSON.stringify({ answer }) });
       replacePlan(result.plan);
+      announceSnipeAnswered();
       notify(t(answer === "yes" ? "You’re on the list for this snipe." : "Your response was saved."));
     } catch (error) { notify(t(errorText(error)), true); }
     finally { finishMutation(); }

@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { appUrl, configurationIssues, isDemo, isPreviewDeployment } from "@/lib/server/config";
 import { authenticatedMember, SESSION_COOKIE, sessionCookieOptions } from "@/lib/server/auth";
 import { errorResponse, privateResponse } from "@/lib/server/errors";
+import { snipesToAnswer } from "@/lib/server/planning";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
@@ -16,7 +17,9 @@ export async function GET(request: NextRequest) {
     if (process.env.NODE_ENV === "production" && !isPreviewDeployment()) {
       try { canonicalOrigin = appUrl(); } catch { canonicalOrigin = undefined; }
     }
-    const response = privateResponse({ user, demo, configured, canonicalOrigin });
+    // The number on the Snipes tab; the page still loads if it can't be counted.
+    const snipeCount = user ? await snipesToAnswer(user.id).catch(() => 0) : 0;
+    const response = privateResponse({ user, demo, configured, canonicalOrigin, ...(snipeCount ? { snipesToAnswer: snipeCount } : {}) });
     // Route responses can refresh cookies; server component renders cannot.
     // Only return the existing opaque token after authentication succeeds.
     if (user && token && !demo)

@@ -33,6 +33,7 @@ import { PullToRefresh } from "./pull-to-refresh";
 import { ContributionCards } from "./contribution-cards";
 import { EggIcon, EggshellIcon, HammerIcon, HorseshoeIcon, KeyIcon, RESOURCE_ICONS, TicketIcon, VialIcon } from "./resource-icons";
 import { announceClanPointsUpdate } from "@/lib/clan-points";
+import { SNIPE_ANSWERED } from "@/lib/snipe-day";
 import { MemberAvatar as Avatar, MemberName, MemberTitle } from "./member-identity";
 import { DEFAULT_WAR_RATES, WAR_ACTIVITIES, estimateWar } from "@/lib/war";
 import { assessBankCompleteness } from "@/lib/completeness";
@@ -176,16 +177,18 @@ const VIEW_HREF: Record<View, string> = {
   me: "/me",
   status: "/status",
 };
-type Section = "home" | "resources" | "war" | "clan" | "me" | "leadership";
+type Section = "home" | "resources" | "war" | "snipes" | "clan" | "me" | "leadership";
 /**
- * The menu, the same five tabs for everyone: Home, Resources, War (what's happening now), Clan (how
- * the clan and its members are doing) and Me (your own things and settings). Each opens its first
- * page; a section with more than one page shows tabs. Leaders also get Leadership in the side menu.
+ * The menu, the same six tabs for everyone: Home, Resources, War (what's happening now), Snipes (its
+ * own tab, so the question "can you join?" is one tap away), Clan (how the clan and its members are
+ * doing) and Me (your own things and settings). Each opens its first page; a section with more than
+ * one page shows tabs. Leaders also get Leadership in the side menu.
  */
 const SECTIONS: { section: Section; label: string; short: string; icon: Icon; tabs: { view: View; label: string }[]; admin?: boolean }[] = [
   { section: "home", label: "Home", short: "Home", icon: House, tabs: [{ view: "dashboard", label: "Home" }] },
   { section: "resources", label: "My Resources", short: "Resources", icon: Backpack, tabs: [{ view: "resources", label: "My Resources" }] },
-  { section: "war", label: "War", short: "War", icon: Swords, tabs: [{ view: "warWeek", label: "This Week" }, { view: "snipes", label: "Snipes" }, { view: "war", label: "Points Calculator" }] },
+  { section: "war", label: "War", short: "War", icon: Swords, tabs: [{ view: "warWeek", label: "This Week" }, { view: "war", label: "Points Calculator" }] },
+  { section: "snipes", label: "Snipes", short: "Snipes", icon: Crosshair, tabs: [{ view: "snipes", label: "Snipes" }] },
   { section: "clan", label: "Clan", short: "Clan", icon: Trophy, tabs: [{ view: "clan", label: "Rankings" }, { view: "warResults", label: "War Results" }, { view: "vials", label: "Vials" }, { view: "tech", label: "Clan Tech" }, { view: "weeks", label: "Weekly History" }] },
   { section: "me", label: "Me", short: "Me", icon: CircleUserRound, tabs: [{ view: "me", label: "Me" }, { view: "store", label: "Reward Shop" }] },
   { section: "leadership", label: "Leadership", short: "Leadership", icon: ShieldCheck, admin: true, tabs: [{ view: "status", label: "Status board" }, { view: "members", label: "Members" }, { view: "ranking", label: "Ranking" }, { view: "hoarding", label: "Hoarding" }, { view: "settings", label: "Settings" }] },
@@ -305,6 +308,15 @@ function DiscordIcon() {
   );
 }
 
+/** How many upcoming snipes are waiting for this member's answer, on the Snipes tab. */
+function SnipeBadge({ count }: { count: number }) {
+  const t = useT();
+  return <>
+    <b className="tab-badge" aria-hidden="true">{count > 9 ? "9+" : count}</b>
+    <span className="visually-hidden">{t("No answer yet")}</span>
+  </>;
+}
+
 export default function Tracker({ view }: { view: View }) {
   return (
     <LanguageProvider>
@@ -321,6 +333,8 @@ function TrackerApp({ view }: { view: View }) {
   const snapshotId = params.get("snapshot");
   const explicitWeek = params.get("week");
   const [session, setSession] = useState<SessionResponse | null>(null);
+  // Upcoming snipes this member hasn't said Yes or No to: a number on the Snipes tab.
+  const snipesToAnswer = session?.snipesToAnswer ?? 0;
   useOfflineSupport(session?.user?.id);
   const [sessionError, setSessionError] = useState("");
   const [week, setWeek] = useState(currentWeek());
@@ -377,6 +391,11 @@ function TrackerApp({ view }: { view: View }) {
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
+  }, [checkSession]);
+  useEffect(() => {
+    const answered = () => void checkSession();
+    window.addEventListener(SNIPE_ANSWERED, answered);
+    return () => window.removeEventListener(SNIPE_ANSWERED, answered);
   }, [checkSession]);
   const sessionUserId = session?.user?.id;
   const refresh = useCallback(async () => {
@@ -599,6 +618,7 @@ function TrackerApp({ view }: { view: View }) {
                 >
                   <NavIcon size={19} />
                   <span>{t(label)}</span>
+                  {section === "snipes" && snipesToAnswer > 0 && <SnipeBadge count={snipesToAnswer} />}
                   {admin && (
                     <span className="nav-admin">
                       <ShieldCheck size={13} />
@@ -863,6 +883,7 @@ function TrackerApp({ view }: { view: View }) {
           <Link key={section} href={VIEW_HREF[tabs[0].view]} className={sectionOf(view).section === section ? "active" : ""} aria-current={sectionOf(view).section === section ? "page" : undefined}>
             <NavIcon size={20} />
             <span>{t(short)}</span>
+            {section === "snipes" && snipesToAnswer > 0 && <SnipeBadge count={snipesToAnswer} />}
           </Link>
         ))}
       </nav>
