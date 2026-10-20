@@ -76,11 +76,19 @@ async function planFromRow(tx: SqlConnection, row: Record<string, unknown>, cont
   return {
     id: String(row.id), title: String(row.title), startsAt: iso(row.starts_at)!, activities,
     archived: row.archived === true, createdBy: String(row.created_by), createdAt: iso(row.created_at)!,
+    assembled: await lastAssembly(tx, String(row.id)),
     responses, participants,
     attendees: attendeeRows.map((attendee) => ({ memberId: String(attendee.member_id), confirmedBy: String(attendee.confirmed_by), confirmedAt: iso(attendee.confirmed_at)!, member: memberFromRow(attendee) })),
     counts: { yes: participants.length, no: responses.filter((response) => response.answer === "no").length, unanswered: live.members.length - responses.length },
     estimate: estimateWar(live.entries.filter((entry) => participantIds.has(entry.memberId)), live.rates, activities),
   };
+}
+
+/** The last time a leader called this snipe's snipers in #snipe-chat. */
+export async function lastAssembly(connection: SqlConnection, snipeId: string): Promise<SnipePlan["assembled"]> {
+  const rows = await connection.query(`SELECT a.sent_at, a.member_count, COALESCE(NULLIF(m.display_name, ''), m.username) AS name
+    FROM snipe_assemblies a JOIN app_members m ON m.id = a.sent_by WHERE a.snipe_id = $1 ORDER BY a.sent_at DESC LIMIT 1`, [snipeId]);
+  return rows[0] ? { by: String(rows[0].name), at: iso(rows[0].sent_at)!, count: Number(rows[0].member_count) } : null;
 }
 
 async function findPlan(tx: SqlConnection, id: string): Promise<Record<string, unknown>> {

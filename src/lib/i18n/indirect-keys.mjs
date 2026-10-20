@@ -160,5 +160,9 @@ export const INDIRECT_KEYS = [
   // Snipe check-in and offline messages
   "Check-in opens 30 minutes before the snipe starts.", "Check-in for this snipe has closed.",
   "You’re offline. Connect to the internet and try again.",
+  // Calling the snipers in #snipe-chat (src/lib/server/snipe-discord.ts)
+  "Nobody has said Yes to this snipe yet.", "The snipers were already called in the last 10 minutes.",
+  "This snipe is over, so the snipers can’t be called.", "Discord isn’t set up for snipe calls yet.",
+  "The bot couldn’t post in #snipe-chat. It needs permission to send messages there.",
   "Unable to calculate this estimate. Reduce the selected activities or saved resource counts.",
 ];

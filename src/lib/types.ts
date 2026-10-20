@@ -109,6 +109,8 @@ export interface SnipePlan {
   archived: boolean;
   createdBy: string;
   createdAt: string;
+  /** The last time a leader called the snipers in #snipe-chat (count = members pinged). */
+  assembled?: { by: string; at: string; count: number } | null;
   responses: { memberId: string; answer: "yes" | "no"; updatedAt: string }[];
   attendees?: { memberId: string; confirmedBy: string; confirmedAt: string; member?: Member }[];
   participants: { member: Member; estimate: WarEstimate }[];

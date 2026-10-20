@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { errorText } from "@/lib/error-text";
-import { Archive, CalendarDays, CalendarPlus, Check, Crosshair, LoaderCircle, Pencil, Plus, RefreshCw, RotateCcw, X } from "lucide-react";
-import { checkInOpen, downloadCalendarFile, googleCalendarLink, snipeCalendarFile } from "@/lib/snipe-calendar";
+import { Archive, CalendarDays, CalendarPlus, Check, Crosshair, LoaderCircle, Megaphone, Pencil, Plus, RefreshCw, RotateCcw, X } from "lucide-react";
+import { CHECKIN_CLOSES_AFTER_MS, checkInOpen, downloadCalendarFile, googleCalendarLink, snipeCalendarFile } from "@/lib/snipe-calendar";
 import { announceSnipeAnswered, beforeResetTime, displaySnipeTitle, minutesBeforeReset, nextSnipeStart, RESET_LEAD_MINUTES, SNIPE_DAYS, snipeDay, snipeDayActivities, snipeTitle } from "@/lib/snipe-day";
 import { numberFormat } from "@/lib/resources";
 import { WAR_ACTIVITIES } from "@/lib/war";
@@ -39,6 +39,8 @@ function points(minimum: number, maximum: number) {
 
 /** Matches the server: attendance confirmed within 8 days of the start still earns Clan Points. */
 const REWARD_WINDOW_MS = 8 * 24 * 60 * 60 * 1000;
+/** Matches the server: a snipe's snipers can be called in #snipe-chat every 10 minutes. */
+const ASSEMBLE_EVERY_MS = 10 * 60_000;
 
 type PlanDraft = { title: string; startsAt: string; activities: WarActivity[] };
 
@@ -222,6 +224,18 @@ export function SnipePlanner({ data, notify }: Props) {
     } catch (error) { notify(t(errorText(error)), true); }
     finally { finishMutation(); }
   }
+  /** Leaders: one post in #snipe-chat that pings everyone who said Yes (the bot gives them the Snipe Group role first). */
+  async function assemble(plan: SnipePlan) {
+    if (!window.confirm(t("Post in #snipe-chat on Discord and ping everyone who said Yes ({count})?", { count: plan.counts.yes }))) return;
+    if (!beginMutation(`assemble:${plan.id}`)) return;
+    try {
+      const { call } = await request<{ call: { by: string; at: string; count: number; roleFailed: number } }>(`/api/snipes/${plan.id}/assemble`, { method: "POST", body: "{}" });
+      replacePlan({ ...plan, assembled: { by: call.by, at: call.at, count: call.count } });
+      if (call.roleFailed > 0) notify(t("Snipers called: {count} pinged. {failed} couldn’t get the Snipe Group role, so they may not see #snipe-chat.", { count: call.count, failed: call.roleFailed }), true);
+      else notify(t("Snipers called in #snipe-chat: {count} pinged.", { count: call.count }));
+    } catch (error) { notify(t(errorText(error)), true); }
+    finally { finishMutation(); }
+  }
   async function checkIn(plan: SnipePlan) {
     if (!beginMutation(`checkin:${plan.id}`)) return;
     try {
@@ -245,6 +259,7 @@ export function SnipePlanner({ data, notify }: Props) {
     } catch (error) { notify(t(errorText(error)), true); }
     finally { finishMutation(); }
   }
+  const clock = (iso: string) => `${new Intl.DateTimeFormat(language, { timeZone: "UTC", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(iso))} UTC`;
   const visible = plans.filter((plan) => plan.archived === (tab === "history")).sort((a, b) => tab === "history" ? b.startsAt.localeCompare(a.startsAt) : a.startsAt.localeCompare(b.startsAt));
   return <div className="planning-stack">
     <section className="planning-panel">
@@ -267,6 +282,10 @@ export function SnipePlanner({ data, notify }: Props) {
       const yesNotTicked = checklist.filter((member) => promisedIds.has(member.id) && !attendedIds.has(member.id)).map((member) => member.id);
       const rewardOpen = Date.now() - new Date(plan.startsAt).getTime() <= REWARD_WINDOW_MS;
       const needsAttendance = isAdmin && started && attendees.length === 0;
+      // Leaders can call the snipers until check-in closes, every 10 minutes at most.
+      const callOpen = isAdmin && !plan.archived && Date.now() <= new Date(plan.startsAt).getTime() + CHECKIN_CLOSES_AFTER_MS;
+      const callAgainAt = plan.assembled ? new Date(plan.assembled.at).getTime() + ASSEMBLE_EVERY_MS : 0;
+      const callWaiting = callAgainAt > Date.now();
       const confirmedName = (memberId: string) => attendees.find((attendee) => attendee.memberId === memberId)?.member?.username
         || data.members.find((member) => member.id === memberId)?.username
         || plan.participants.find(({ member }) => member.id === memberId)?.member.username
@@ -275,6 +294,15 @@ export function SnipePlanner({ data, notify }: Props) {
         <div className="planning-heading"><div><h2>{displaySnipeTitle(plan, t, language)}</h2><p className="planning-date"><CalendarDays size={14} /><time dateTime={plan.startsAt}>{utcDateTime(plan.startsAt, language)}</time>{!started && <span className="planning-countdown">{t("in {time}", { time: countdown(new Date(plan.startsAt)) })}</span>}</p></div>{isAdmin && !plan.archived && <div className="planning-inline-actions">{needsAttendance && <span className="planning-chip snipe-needs-attendance">{t("Needs attendance")}</span>}<button className="planning-button planning-button-subtle" onClick={() => { setEditing(editing === plan.id ? null : plan.id); setCreating(false); }} disabled={busy !== null} aria-expanded={editing === plan.id}><Pencil size={14} />{t("Edit plan")}</button><button className="planning-button planning-button-subtle" onClick={() => void archive(plan)} disabled={busy !== null}><Archive size={14} />{t("Archive snipe")}</button></div>}{plan.archived && <div className="planning-inline-actions"><span className="planning-chip">{t("Archived")}</span>{isAdmin && <button className="planning-button planning-button-subtle" onClick={() => void reopen(plan)} disabled={busy !== null}><RotateCcw size={14} />{t("Reopen")}</button>}</div>}</div>
         {editing === plan.id && isAdmin && !plan.archived && <PlanForm key={plan.id} plan={plan} busy={busy !== null} onCancel={() => setEditing(null)} onSave={(draft) => savePlan(draft, plan.id)} />}
         <div className="planning-attendance" aria-label={t("Attendance")}><span className="planning-yes"><Check size={15} />{t("Yes")}: {plan.counts.yes}</span><span className="planning-no"><X size={15} />{t("No")}: {plan.counts.no}</span><span>{t("No answer")}: {plan.counts.unanswered}</span></div>
+        {callOpen && <div className="snipe-assemble">
+          <button className={`planning-button snipe-assemble-button${callWaiting || plan.counts.yes === 0 ? " planning-button-subtle" : ""}`} disabled={busy !== null || callWaiting || plan.counts.yes === 0} onClick={() => void assemble(plan)}>
+            {busy === `assemble:${plan.id}` ? <LoaderCircle size={16} className="spin" /> : <Megaphone size={16} />}
+            {callWaiting ? t("Call again in {time}", { time: countdown(new Date(callAgainAt)) }) : t("Assemble snipers ({count})", { count: plan.counts.yes })}
+          </button>
+          <small>{plan.assembled
+            ? t("Called by {name}, {time}", { name: plan.assembled.by, time: clock(plan.assembled.at) })
+            : plan.counts.yes === 0 ? t("Nobody has said Yes to this snipe yet.") : t("Posts in #snipe-chat and pings everyone who said Yes.")}</small>
+        </div>}
         {!plan.archived && <details className="planning-response-details"><summary>{t("See who said No or hasn’t answered")}</summary><div className="planning-response-grid"><div><h3>{t("Can’t join")}</h3><p>{unavailable.length ? unavailable.map((member) => member.username).join(", ") : t("Nobody has said No.")}</p></div><div><h3>{t("No answer yet")}</h3><p>{unanswered.length ? unanswered.map((member) => member.username).join(", ") : t("Everyone has answered.")}</p></div></div></details>}
         {/* On now: one tap checks in and gives the week's 10 Clan Points. */}
         {!plan.archived && checkInOpen(plan.startsAt) && <div className="snipe-checkin">
@@ -288,7 +316,7 @@ export function SnipePlanner({ data, notify }: Props) {
           <button className="planning-button planning-button-subtle" onClick={() => downloadCalendarFile(`turmoil-snipe-${plan.startsAt.slice(0, 10)}.ics`, snipeCalendarFile(plan, calendarText(plan), `${window.location.origin}/snipes`))}><CalendarPlus size={16} />{t("Add to calendar")}</button>
           <a className="snipe-calendar-google" href={googleCalendarLink(plan, calendarText(plan))} target="_blank" rel="noreferrer">{t("Google Calendar")}</a>
         </div>}
-        {!plan.archived && <div className="planning-rsvp"><p>{t(started ? "This snipe has started. Answers are closed." : "Can you join this snipe?")}</p>{!started && <div className="planning-tabs"><button aria-pressed={answer === "yes"} disabled={busy !== null} onClick={() => void respond(plan, "yes")}><Check size={14} />{t("Yes")}</button><button aria-pressed={answer === "no"} disabled={busy !== null} onClick={() => void respond(plan, "no")}><X size={14} />{t("No")}</button></div>}{busy === plan.id && <LoaderCircle size={16} className="spin" aria-label={t("Saving…")} />}</div>}
+        {!plan.archived && <div className="planning-rsvp"><p>{t(started ? "This snipe has started. Answers are closed." : "Can you join this snipe?")}{!started && <small className="snipe-role-hint">{t("Saying Yes opens #snipe-chat for you on Discord.")}</small>}</p>{!started && <div className="planning-tabs"><button aria-pressed={answer === "yes"} disabled={busy !== null} onClick={() => void respond(plan, "yes")}><Check size={14} />{t("Yes")}</button><button aria-pressed={answer === "no"} disabled={busy !== null} onClick={() => void respond(plan, "no")}><X size={14} />{t("No")}</button></div>}{busy === plan.id && <LoaderCircle size={16} className="spin" aria-label={t("Saving…")} />}</div>}
         <section className="snipe-confirmed-attendance" aria-label={t("Confirmed attendance for {title}", { title: displaySnipeTitle(plan, t, language) })}>
           <div className="snipe-attendance-heading"><h3>{t("Confirmed attendance")}</h3><span className="planning-chip">{t("{count} attended", { count: attendees.length })}</span></div>
           <p className="snipe-attendance-copy">{t("Get 10 Clan Points a week for joining a snipe. Check in here or in Discord, from 30 minutes before it starts.")}</p>

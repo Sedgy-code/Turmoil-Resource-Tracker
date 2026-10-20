@@ -309,4 +309,12 @@ CREATE TABLE IF NOT EXISTS clan_reminders (
   sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   member_count INTEGER NOT NULL CHECK (member_count >= 0)
 );
+CREATE TABLE IF NOT EXISTS snipe_assemblies (
+  id TEXT PRIMARY KEY,
+  snipe_id TEXT NOT NULL REFERENCES snipe_plans(id),
+  sent_by TEXT NOT NULL REFERENCES app_members(id),
+  sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  member_count INTEGER NOT NULL CHECK (member_count >= 0)
+);
+CREATE INDEX IF NOT EXISTS snipe_assemblies_snipe_idx ON snipe_assemblies(snipe_id, sent_at DESC);
 `;

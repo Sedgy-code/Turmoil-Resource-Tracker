@@ -111,3 +111,13 @@
 .snipe-title-preview { display: grid; gap: 3px; margin: 12px 0 0; padding: 10px 12px; border: 1px dashed var(--border); border-radius: 10px; }
 .snipe-title-preview > span { font-size: 11px; font-weight: 650; color: var(--muted); }
 .snipe-title-preview > strong { font-size: 15px; color: var(--text); }
+
+/* Leaders: call everyone who said Yes in #snipe-chat (one tap, at most every 10 minutes). */
+.snipe-assemble { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 0 24px 18px; }
+.snipe-assemble-button { min-height: 46px; font-size: 14px; }
+.snipe-assemble small { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.snipe-role-hint { display: block; margin-top: 3px; color: var(--subtle); font-size: 11px; }
+@media (max-width: 640px) {
+  .snipe-assemble { margin-left: 16px; margin-right: 16px; }
+  .snipe-assemble-button { width: 100%; justify-content: center; }
+}

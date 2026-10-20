@@ -19,7 +19,7 @@ export interface DiscordSyncResult {
   skipped?: string;
 }
 
-interface GuildMember {
+export interface GuildMember {
   user?: { id?: string; username?: string; global_name?: string | null; avatar?: string | null; bot?: boolean };
   nick?: string | null;
   roles?: string[];
@@ -38,7 +38,7 @@ export async function clanRoleId(token: string, fetcher: typeof fetch): Promise<
 }
 
 /** Every server member, read with the site's bot. */
-async function fetchGuildMembers(token: string, fetcher: typeof fetch): Promise<GuildMember[]> {
+export async function fetchGuildMembers(token: string, fetcher: typeof fetch): Promise<GuildMember[]> {
   const all: GuildMember[] = [];
   let after = "0";
   for (let page = 0; page < 20; page++) {
