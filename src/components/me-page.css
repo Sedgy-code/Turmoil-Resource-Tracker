@@ -151,6 +151,11 @@
 .status-nudged { display: inline-flex; align-items: flex-start; gap: 5px; color: #c8ccff; font-size: 12px; line-height: 1.35; text-align: end; }
 .status-nudged svg { flex-shrink: 0; margin-top: 2px; }
 .status-no-dm { color: var(--subtle, #a0b4d4); font-size: 12px; text-align: end; }
+/* Remind everyone not saved: one Discord post, every 12 hours at most. */
+.status-remind-all { display: grid; gap: 6px; justify-items: start; margin: 0 0 14px; }
+.status-remind-all .button { min-height: 48px; }
+.status-remind-all .status-nudged { text-align: start; }
+@media (max-width: 600px) { .status-remind-all .button { width: 100%; justify-content: center; } }
 
 @media (min-width: 900px) {
   .me-page { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }

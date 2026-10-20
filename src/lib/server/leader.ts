@@ -1,8 +1,9 @@
 import { currentWeek } from "../resources";
 import { nextWarWeek, raceEnd, warDay, warWeekOf } from "../war-calendar";
-import type { LeaderTodo, Member, StatusResponse, StatusRow } from "../types";
+import type { LeaderTodo, Member, StatusResponse, StatusRow, WarActivity } from "../types";
+import { randomUUID } from "node:crypto";
 import { appUrl, isDemo } from "./config";
-import { database, type Database, type SqlConnection } from "./db";
+import { database, lockAdministration, type Database, type SqlConnection } from "./db";
 import { webhookLook } from "./discord-branding";
 import { ApiError } from "./errors";
 import { requireAdmin } from "./leadership";
@@ -14,6 +15,8 @@ const HOUR = 3_600_000;
 const DISCORD_API = "https://discord.com/api/v10";
 /** Snipes that started this long ago still show "check who came" on the leaders' to-do card. */
 export const ATTENDANCE_TODO_MS = 36 * HOUR;
+/** Leaders can remind everyone who hasn't saved this often (the Monday reminder runs regardless). */
+export const REMIND_ALL_EVERY_MS = 12 * HOUR;
 
 async function uploaded(connection: SqlConnection, week: string, kind: string, day?: number): Promise<boolean> {
   const rows = day === undefined
@@ -102,8 +105,11 @@ export async function statusBoard(actor: Member, db?: Database, now = new Date()
   const voteWeek = nextWarWeek(now);
   const voting = votingOpen(now, await clanDays(connection, voteWeek));
   const votes = voting ? (await voteCounts(connection, voteWeek)).byMember : new Map<string, number[]>();
-  const next = await connection.query("SELECT id, title, starts_at FROM snipe_plans WHERE archived = FALSE AND starts_at > $1 ORDER BY starts_at LIMIT 1", [now.toISOString()]);
-  const snipe = next[0] ? { id: String(next[0].id), title: String(next[0].title), startsAt: iso(next[0].starts_at)! } : null;
+  const next = await connection.query("SELECT id, title, starts_at, activities FROM snipe_plans WHERE archived = FALSE AND starts_at > $1 ORDER BY starts_at LIMIT 1", [now.toISOString()]);
+  const snipe = next[0] ? {
+    id: String(next[0].id), title: String(next[0].title), startsAt: iso(next[0].starts_at)!,
+    activities: (typeof next[0].activities === "string" ? JSON.parse(next[0].activities) : next[0].activities) as WarActivity[],
+  } : null;
   const answers = new Map<string, "yes" | "no">();
   if (snipe) {
     for (const row of await connection.query("SELECT member_id, answer FROM snipe_responses WHERE snipe_id = $1", [snipe.id])) {
@@ -123,7 +129,14 @@ export async function statusBoard(actor: Member, db?: Database, now = new Date()
     };
   });
   rows.sort((a, b) => STATE_ORDER[a.state] - STATE_ORDER[b.state] || a.member.username.localeCompare(b.member.username, undefined, { sensitivity: "base" }));
-  return { week, voting, snipe, rows };
+  return { week, voting, snipe, rows, lastReminder: await lastClanReminder(connection) };
+}
+
+/** The last time a leader reminded everyone who hadn't saved. */
+async function lastClanReminder(connection: SqlConnection): Promise<StatusResponse["lastReminder"]> {
+  const rows = await connection.query(`SELECT r.sent_at, r.member_count, COALESCE(NULLIF(m.display_name, ''), m.username) AS name
+    FROM clan_reminders r JOIN app_members m ON m.id = r.sent_by ORDER BY r.sent_at DESC LIMIT 1`);
+  return rows[0] ? { by: String(rows[0].name), at: iso(rows[0].sent_at)!, count: Number(rows[0].member_count) } : null;
 }
 
 /** The reminder a leader's nudge sends (English only, like every automatic Discord post). */
@@ -131,13 +144,21 @@ export function nudgeMessage(leader: string, link: string): string {
   return `👋 **Turmoil Clan Hub**: ${leader} is reminding you to save your resources this week (+20 Clan Points): ${link}`;
 }
 
-/** Sends the nudge: a Discord message from the site's bot, or a mention in the reminder channel if the member's messages are closed. */
-async function deliverNudge(discordId: string, content: string, fetcher: typeof fetch): Promise<"dm" | "mention"> {
-  const token = process.env.DISCORD_BOT_TOKEN;
+function reminderWebhook(): string | null {
   const webhook = process.env.DISCORD_REMINDER_WEBHOOK_URL;
-  const webhookOk = !!webhook && /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\//.test(webhook);
-  if (!token && !webhookOk) throw new ApiError(503, "Discord reminders aren’t set up yet.", "NUDGE_NOT_CONFIGURED");
-  if (token && /^\d+$/.test(discordId)) {
+  return webhook && /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\//.test(webhook) ? webhook : null;
+}
+
+/**
+ * Sends the nudge: a private Discord message from the site's bot for members who allowed it, otherwise
+ * (or if their messages are closed) a mention in the reminder channel, like the Monday reminder.
+ */
+async function deliverNudge(discordId: string, content: string, fetcher: typeof fetch, privateMessage: boolean): Promise<"dm" | "mention"> {
+  const token = process.env.DISCORD_BOT_TOKEN;
+  const webhook = reminderWebhook();
+  const webhookOk = !!webhook;
+  if (!(privateMessage && token) && !webhookOk) throw new ApiError(503, "Discord reminders aren’t set up yet.", "NUDGE_NOT_CONFIGURED");
+  if (privateMessage && token && /^\d+$/.test(discordId)) {
     const headers = { Authorization: `Bot ${token}`, "Content-Type": "application/json" };
     const channel = await fetcher(`${DISCORD_API}/users/@me/channels`, { method: "POST", headers, body: JSON.stringify({ recipient_id: discordId }) }).catch(() => null);
     const channelId = channel?.ok ? String(((await channel.json().catch(() => ({}))) as { id?: unknown }).id ?? "") : "";
@@ -162,8 +183,9 @@ async function deliverNudge(discordId: string, content: string, fetcher: typeof 
 }
 
 /**
- * A leader's one-tap reminder to a member who hasn't saved this week. Only for members who allowed
- * it, at most once per member per clan week, and never while they're away.
+ * A leader's one-tap reminder to a member who hasn't saved this week: a private message if they
+ * allowed it, otherwise a mention in the reminder channel. At most once per member per clan week, and
+ * never while they're away.
  */
 export async function nudgeMember(actor: Member, memberId: string, dependencies: { db?: Database; fetcher?: typeof fetch; now?: Date } = {}): Promise<{ by: string; at: string }> {
   const connection = dependencies.db ?? await database();
@@ -174,7 +196,6 @@ export async function nudgeMember(actor: Member, memberId: string, dependencies:
     const rows = await tx.query("SELECT * FROM app_members WHERE id = $1 AND active = TRUE", [memberId]);
     if (!rows.length) throw new ApiError(404, "Member not found.", "MEMBER_NOT_FOUND");
     const target = rows[0];
-    if (target.reminders_allowed !== true) throw new ApiError(409, "This member hasn’t allowed Discord reminders.", "NUDGE_NOT_ALLOWED");
     const member = memberFromRow(target);
     if (member.holidayUntil) throw new ApiError(409, "This member is away, so they aren’t reminded.", "NUDGE_AWAY");
     const saved = await tx.query("SELECT 1 FROM dew_weekly_earnings WHERE member_id = $1 AND week_start = $2::date AND reason = 'resources'", [memberId, week]);
@@ -187,8 +208,71 @@ export async function nudgeMember(actor: Member, memberId: string, dependencies:
     );
     if (!claimed.length) throw new ApiError(409, "This member was already reminded this week.", "NUDGE_ALREADY_SENT");
     // In the demo nothing is sent; on the real Hub a failed delivery undoes the claim (the transaction rolls back).
-    const channel = isDemo() ? "demo" : await deliverNudge(member.discordId, nudgeMessage(leader.username, `${appUrl()}/resources`), dependencies.fetcher ?? fetch);
+    const channel = isDemo() ? "demo" : await deliverNudge(member.discordId, nudgeMessage(leader.username, `${appUrl()}/resources`), dependencies.fetcher ?? fetch, target.reminders_allowed === true);
     if (channel !== "dm") await tx.query("UPDATE member_nudges SET channel = $3 WHERE member_id = $1 AND week_start = $2::date", [memberId, week, channel]);
     return { by: leader.username, at: now.toISOString() };
+  });
+}
+
+/** The reminder to everyone who hasn't saved, posted in the reminder channel (English only, like every Discord post). */
+export function remindAllMessage(leader: string, mentions: string[], link: string): string {
+  return [
+    `📋 **Resource reminder from ${leader}**`,
+    mentions.join(" "),
+    "",
+    `Please save your resources this week (+20 Clan Points): ${link}`,
+  ].join("\n");
+}
+
+/**
+ * A leader reminds everyone who hasn't saved this clan week (members away are left out) with one post
+ * in the reminder channel, mentioning each of them. At most every 12 hours, whoever sends it.
+ */
+export async function remindNotSaved(actor: Member, dependencies: { db?: Database; fetcher?: typeof fetch; now?: Date } = {}): Promise<{ count: number; by: string; at: string }> {
+  const connection = dependencies.db ?? await database();
+  const now = dependencies.now ?? new Date();
+  const week = currentWeek(now);
+  return connection.transaction(async (tx) => {
+    // One leader at a time, so two taps never post twice.
+    await lockAdministration(tx, connection.dialect);
+    const leader = await requireAdmin(tx, actor.id);
+    const last = await lastClanReminder(tx);
+    if (last && now.getTime() - new Date(last.at).getTime() < REMIND_ALL_EVERY_MS) {
+      throw new ApiError(409, "Everyone was reminded in the last 12 hours. Try again later.", "REMIND_ALL_TOO_SOON");
+    }
+    // Same members as the board's "Not saved", A–Z.
+    const pending = (await memberWeeks(tx, now)).filter(({ state }) => state === "notStarted").map(({ member }) => member)
+      .sort((a, b) => a.username.localeCompare(b.username, undefined, { sensitivity: "base" }));
+    if (!pending.length) throw new ApiError(409, "Nobody needs a reminder right now.", "REMIND_ALL_NOBODY");
+    if (!isDemo()) {
+      const webhook = reminderWebhook();
+      if (!webhook) throw new ApiError(503, "Discord reminders aren’t set up yet.", "NUDGE_NOT_CONFIGURED");
+      const fetcher = dependencies.fetcher ?? fetch;
+      const link = `${appUrl()}/resources`;
+      // Discord messages are capped at 2,000 characters: 40 mentions per post.
+      for (let start = 0; start < pending.length; start += 40) {
+        const ids = pending.slice(start, start + 40).map((member) => member.discordId);
+        const posted = await fetcher(webhook, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...webhookLook(),
+            content: remindAllMessage(leader.username, ids.map((id) => `<@${id}>`), link),
+            // Only ping the listed members, never @everyone or roles.
+            allowed_mentions: { parse: [], users: ids },
+          }),
+        }).catch(() => null);
+        if (!posted?.ok) throw new ApiError(502, "Discord didn’t deliver the reminder. Try again later, or remind them in the clan chat.", "NUDGE_FAILED");
+      }
+    }
+    await tx.query("INSERT INTO clan_reminders (id, week_start, sent_by, sent_at, member_count) VALUES ($1, $2::date, $3, $4, $5)",
+      [randomUUID(), week, leader.id, now.toISOString(), pending.length]);
+    // Each of them shows "Reminded by …" on the board for this week.
+    for (const member of pending) {
+      await tx.query(`INSERT INTO member_nudges (member_id, week_start, nudged_by, nudged_at, channel) VALUES ($1, $2::date, $3, $4, $5)
+        ON CONFLICT (member_id, week_start) DO UPDATE SET nudged_by = EXCLUDED.nudged_by, nudged_at = EXCLUDED.nudged_at, channel = EXCLUDED.channel`,
+      [member.id, week, leader.id, now.toISOString(), isDemo() ? "demo" : "mention"]);
+    }
+    return { count: pending.length, by: leader.username, at: now.toISOString() };
   });
 }

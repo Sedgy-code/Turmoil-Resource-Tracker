@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { errorText } from "@/lib/error-text";
-import { Bell, Check, LoaderCircle, Search } from "lucide-react";
-import { utcDateTime } from "@/lib/war-calendar";
+import { Bell, Check, LoaderCircle, Megaphone, Search } from "lucide-react";
+import { countdown, utcDateTime } from "@/lib/war-calendar";
+import { displaySnipeTitle } from "@/lib/snipe-day";
 import { useLanguage } from "@/lib/i18n";
 import type { Member, MemberWeekState, StatusResponse, StatusRow } from "@/lib/types";
 import { MemberHistoryPanel } from "./member-history";
@@ -14,8 +15,11 @@ type Filter = "all" | MemberWeekState;
 
 /**
  * Leadership's status board: every member's clan week at a glance, the ones still to save first.
- * Members who allowed it get a one-tap Discord reminder, once a week, and the board shows who sent it.
+ * Leaders can remind one member (a private Discord message if they allowed it, otherwise a mention in
+ * the reminder channel, once a week each) or everyone not saved at once (one post, every 12 hours).
  */
+const REMIND_ALL_EVERY_MS = 12 * 3_600_000;
+
 export function StatusBoard({ notify }: { notify: (message: string, error?: boolean) => void }) {
   const { t, language } = useLanguage();
   const [board, setBoard] = useState<StatusResponse | null>(null);
@@ -36,6 +40,21 @@ export function StatusBoard({ notify }: { notify: (message: string, error?: bool
     }
   }, []);
   useEffect(() => { void load(); }, [load]);
+  async function remindAll(count: number) {
+    if (!window.confirm(t("Post a reminder in Discord mentioning {count} members who haven’t saved?", { count }))) return;
+    setBusy("all");
+    try {
+      const response = await fetch("/api/status/remind-all", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Please try again.");
+      notify(t("Reminder posted in Discord for {count} members.", { count: result.reminder.count }));
+    } catch (e) {
+      notify(t(errorText(e)), true);
+    } finally {
+      setBusy(null);
+      void load();
+    }
+  }
   async function nudge(row: StatusRow) {
     setBusy(row.member.id);
     try {
@@ -74,8 +93,20 @@ export function StatusBoard({ notify }: { notify: (message: string, error?: bool
     {!board && !error && <p className="status-loading"><LoaderCircle className="spin" size={18} />{t("Loading…")}</p>}
     {board && <>
       <p className="status-intro">{t("This clan week, Monday to Monday (UTC). Members still to save are first.")}
-        {board.snipe && <> {t("Next snipe: {title}, {date}.", { title: board.snipe.title, date: utcDateTime(board.snipe.startsAt, language) })}</>}
+        {board.snipe && <> {t("Next snipe: {title}, {date}.", { title: displaySnipeTitle(board.snipe, t, language), date: utcDateTime(board.snipe.startsAt, language) })}</>}
       </p>
+      {/* Everyone not saved (members away are left out), with one Discord post. */}
+      {counts.notStarted > 0 && (() => {
+        const nextAt = board.lastReminder ? new Date(board.lastReminder.at).getTime() + REMIND_ALL_EVERY_MS : 0;
+        const waiting = nextAt > Date.now();
+        return <div className="status-remind-all">
+          <button type="button" className="button primary" disabled={busy !== null || waiting} onClick={() => void remindAll(counts.notStarted)}>
+            {busy === "all" ? <LoaderCircle size={16} className="spin" /> : <Megaphone size={16} />}
+            {waiting ? t("Remind everyone again in {time}", { time: countdown(new Date(nextAt)) }) : t("Remind everyone not saved ({count})", { count: counts.notStarted })}
+          </button>
+          {board.lastReminder && <small className="status-nudged"><Bell size={13} aria-hidden="true" />{t("Reminded by {name}, {time}", { name: board.lastReminder.by, time: time(board.lastReminder.at) })}</small>}
+        </div>;
+      })()}
       <div className="status-filters" role="group" aria-label={t("Show")}>
         {filters.map(({ key, label }) => <button key={key} type="button" aria-pressed={filter === key} className={`tone-${key}`} onClick={() => setFilter(key)}>{label}<span>{counts[key]}</span></button>)}
       </div>
@@ -100,10 +131,9 @@ export function StatusBoard({ notify }: { notify: (message: string, error?: bool
           </button>
           <div className="status-action">
             {row.nudge ? <small className="status-nudged"><Bell size={13} aria-hidden="true" />{t("Reminded by {name}, {time}", { name: row.nudge.by, time: time(row.nudge.at) })}</small>
-              : row.state === "notStarted" && row.remindersAllowed ? <button type="button" className="button secondary small-button" disabled={busy !== null} onClick={() => void nudge(row)}>
+              : row.state === "notStarted" ? <button type="button" className="button secondary small-button" disabled={busy !== null} onClick={() => void nudge(row)}>
                 {busy === row.member.id ? <LoaderCircle size={14} className="spin" /> : <Bell size={14} />}{t("Remind")}
-              </button>
-                : row.state === "notStarted" ? <small className="status-no-dm">{t("No Discord reminders")}</small> : null}
+              </button> : null}
           </div>
         </li>)}
       </ul>

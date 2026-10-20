@@ -370,8 +370,10 @@ export interface StatusResponse {
   /** Voting for next war's clan days is open (Days 6–7). */
   voting: boolean;
   /** The next snipe, whose answers are shown. */
-  snipe: { id: string; title: string; startsAt: string } | null;
+  snipe: { id: string; title: string; startsAt: string; activities: WarActivity[] } | null;
   rows: StatusRow[];
+  /** The last time a leader reminded everyone who hadn't saved (at most every 12 hours). */
+  lastReminder: { by: string; at: string; count: number } | null;
 }
 
 export interface ContributionRankingResponse {

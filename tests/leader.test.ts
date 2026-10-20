@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, beforeEach, test } from "node:test";
 import { randomUUID } from "node:crypto";
 import { initializeSchema, openDatabase, type Database } from "../src/lib/server/db";
-import { leaderTodo, nudgeMember, nudgeMessage, statusBoard } from "../src/lib/server/leader";
+import { leaderTodo, nudgeMember, nudgeMessage, remindAllMessage, remindNotSaved, statusBoard } from "../src/lib/server/leader";
 import { updateMySettings } from "../src/lib/server/me";
 import { memberHistory } from "../src/lib/server/leadership";
 import { memberFromRow } from "../src/lib/server/mappers";
@@ -32,6 +32,7 @@ before(async () => {
 });
 beforeEach(async () => {
   await db.query("DELETE FROM member_nudges");
+  await db.query("DELETE FROM clan_reminders");
 });
 after(async () => {
   await db.close();
@@ -95,11 +96,50 @@ test("a nudge goes to a member who allowed it, once a week", async () => {
   assert.equal(sent.length, 2);
 });
 
-test("nudges respect the member's choice, their time away and their save", async () => {
+test("members who didn't allow private messages are mentioned in the reminder channel instead", async () => {
+  const sent: { url: string; body: Record<string, unknown> }[] = [];
+  const fetcher = (async (url: string, init: RequestInit) => {
+    sent.push({ url, body: JSON.parse(String(init.body)) });
+    return new Response(null, { status: 204 });
+  }) as unknown as typeof fetch;
+  await nudgeMember(await member(adminId), quietId, { db, fetcher, now: thursday });
+  // No private message: straight to the channel, pinging only them.
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].url, "https://discord.com/api/webhooks/1/abc");
+  assert.equal(sent[0].body.content, `<@400> ${nudgeMessage("Boss", "https://tracker.example/resources")}`);
+  assert.deepEqual(sent[0].body.allowed_mentions, { parse: [], users: ["400"] });
+  assert.equal((await db.query("SELECT channel FROM member_nudges WHERE member_id = $1", [quietId]))[0].channel, "mention");
+});
+
+test("nudges respect time away and saves, and only leaders send them", async () => {
   const fetcher = (async () => new Response(null, { status: 200 })) as unknown as typeof fetch;
-  await assert.rejects(nudgeMember(await member(adminId), quietId, { db, fetcher, now: thursday }), /allowed Discord reminders/);
   await assert.rejects(nudgeMember(await member(adminId), savedId, { db, fetcher, now: thursday }), /already saved/);
   await assert.rejects(nudgeMember(await member(savedId), pendingId, { db, fetcher, now: thursday }), /administrators/);
+});
+
+test("a leader can remind everyone not saved with one post, every 12 hours at most", async () => {
+  const sent: { url: string; body: Record<string, unknown> }[] = [];
+  const fetcher = (async (url: string, init: RequestInit) => {
+    sent.push({ url, body: JSON.parse(String(init.body)) });
+    return new Response(null, { status: 204 });
+  }) as unknown as typeof fetch;
+  await assert.rejects(remindNotSaved(await member(savedId), { db, fetcher, now: thursday }), /administrators/);
+  const reminder = await remindNotSaved(await member(adminId), { db, fetcher, now: thursday });
+  // Boss, Late and Quiet haven't saved; Saver has. One post mentions the three, and pings only them.
+  assert.deepEqual(reminder, { count: 3, by: "Boss", at: thursday.toISOString() });
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].url, "https://discord.com/api/webhooks/1/abc");
+  assert.equal(sent[0].body.content, remindAllMessage("Boss", ["<@100>", "<@300>", "<@400>"], "https://tracker.example/resources"));
+  assert.deepEqual(sent[0].body.allowed_mentions, { parse: [], users: ["100", "300", "400"] });
+  const board = await statusBoard(await member(adminId), db, thursday);
+  assert.deepEqual(board.lastReminder, { by: "Boss", at: thursday.toISOString(), count: 3 });
+  assert.equal(board.rows.find((row) => row.member.id === quietId)?.nudge?.by, "Boss");
+  // Not again within 12 hours, even from another leader.
+  await assert.rejects(remindNotSaved(await member(adminId), { db, fetcher, now: new Date(thursday.getTime() + 11 * 3_600_000) }), /last 12 hours/);
+  assert.equal(sent.length, 1);
+  const later = await remindNotSaved(await member(adminId), { db, fetcher, now: new Date(thursday.getTime() + 13 * 3_600_000) });
+  assert.equal(later.count, 3);
+  assert.equal(sent.length, 2);
 });
 
 test("closed messages fall back to a mention in the reminder channel; a failed send is not counted", async () => {

@@ -301,4 +301,12 @@ CREATE TABLE IF NOT EXISTS member_nudges (
   channel TEXT NOT NULL DEFAULT 'dm' CHECK (channel IN ('dm', 'mention', 'demo')),
   PRIMARY KEY (member_id, week_start)
 );
+-- A leader's reminder to everyone who hasn't saved, posted in the reminder channel (at most every 12 hours).
+CREATE TABLE IF NOT EXISTS clan_reminders (
+  id TEXT PRIMARY KEY,
+  week_start DATE NOT NULL,
+  sent_by TEXT NOT NULL REFERENCES app_members(id),
+  sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  member_count INTEGER NOT NULL CHECK (member_count >= 0)
+);
 `;
