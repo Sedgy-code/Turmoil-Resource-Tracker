@@ -148,6 +148,8 @@ export interface WeeksResponse {
 }
 export interface MembersResponse {
   members: Member[];
+  /** What the Discord check just changed, when it ran and changed something (names). */
+  discord?: { added: string[]; removed: string[]; restored: string[] };
 }
 export interface MemberHistoryEvent {
   at: string;

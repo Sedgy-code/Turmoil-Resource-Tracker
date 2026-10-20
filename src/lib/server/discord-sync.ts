@@ -86,6 +86,25 @@ export async function refreshDiscordJoinDates(dependencies: { db?: Database; fet
   return db.transaction((tx) => saveJoinDates(tx, guildMembers));
 }
 
+/** Opening the Members page checks Discord at most this often (the nightly check runs regardless). */
+const ON_DEMAND_SYNC_MS = 2 * 60 * 1000;
+let lastOnDemandSync = 0;
+
+/**
+ * The same check as the nightly one, when a leader opens the Members page, so new clan members and
+ * leavers show up straight away. Skipped if it ran in the last couple of minutes; if Discord can't
+ * be reached the page still loads (the nightly check catches up). Returns null when it didn't run.
+ */
+export async function syncDiscordMembersOnDemand(dependencies: { db?: Database; fetcher?: typeof fetch } = {}): Promise<DiscordSyncResult | null> {
+  if (!process.env.DISCORD_BOT_TOKEN || Date.now() - lastOnDemandSync < ON_DEMAND_SYNC_MS) return null;
+  lastOnDemandSync = Date.now();
+  try {
+    return await syncDiscordMembers(dependencies);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Deactivates tracker members who have left the Discord server (or lost the Turmoil role), and
  * reactivates anyone this check removed who has since come back. Members switched off by an admin

@@ -2007,6 +2007,9 @@ function MembersManager({
   const [capacity, setCapacity] = useState(50);
   const [capacityDraft, setCapacityDraft] = useState("50");
   const [capacitySaving, setCapacitySaving] = useState(false);
+  // The latest toast, refresh and language for load(), which stays the same function between renders.
+  const latest = useRef({ notify, refresh, t });
+  useEffect(() => { latest.current = { notify, refresh, t }; });
   const load = useCallback(async () => {
     const results = await Promise.allSettled([
       api<MembersResponse>("/api/members"),
@@ -2015,6 +2018,17 @@ function MembersManager({
     if (results[0].status === "fulfilled") {
       setMembers(results[0].value.members);
       setError("");
+      // The Discord check found new members or leavers: say who, and update the clan totals.
+      const discord = results[0].value.discord;
+      if (discord) {
+        const { notify: say, refresh: reload, t } = latest.current;
+        say([
+          discord.added.length ? t("New from Discord: {names}", { names: discord.added.join(", ") }) : "",
+          discord.restored.length ? t("Back on Discord: {names}", { names: discord.restored.join(", ") }) : "",
+          discord.removed.length ? t("Left Discord: {names}", { names: discord.removed.join(", ") }) : "",
+        ].filter(Boolean).join(" · "));
+        void reload();
+      }
     } else setError((results[0].reason as Error).message);
     if (results[1].status === "fulfilled") {
       setCapacity(results[1].value.settings.capacity);

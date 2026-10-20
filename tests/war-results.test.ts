@@ -319,3 +319,40 @@ test("vials: donating at least 80% of a typical donor's amount earns full marks"
     assert.equal(part(admin.id), 0);
   });
 });
+
+test("opening the Members page checks Discord straight away, at most every couple of minutes", async () => {
+  const { syncDiscordMembersOnDemand } = await import("../src/lib/server/discord-sync");
+  await withDatabase(async (db) => {
+    const admin = await addMember(db, "leader", "ADMIN");
+    let calls = 0;
+    const fetcher = (async (url: string) => {
+      calls++;
+      return new Response(JSON.stringify(url.endsWith("/roles")
+        ? [{ id: "r-clan", name: "Turmoil" }]
+        : [
+          { user: { id: admin.discordId, username: "leader" }, roles: ["r-clan"] },
+          { user: { id: "888", username: "newbie", global_name: "Newbie" }, roles: ["r-clan"], joined_at: "2026-10-19T09:00:00+00:00" },
+        ]));
+    }) as typeof fetch;
+    const previous = { token: process.env.DISCORD_BOT_TOKEN, guild: process.env.DISCORD_GUILD_ID };
+    try {
+      delete process.env.DISCORD_BOT_TOKEN;
+      assert.equal(await syncDiscordMembersOnDemand({ db, fetcher }), null, "no bot: nothing to check");
+      process.env.DISCORD_BOT_TOKEN = "bot";
+      process.env.DISCORD_GUILD_ID = "123";
+      const first = await syncDiscordMembersOnDemand({ db, fetcher });
+      assert.deepEqual(first?.added, ["Newbie"]);
+      const newbie = (await db.query("SELECT never_signed_in, discord_joined_at FROM app_members WHERE discord_id = '888'"))[0];
+      assert.equal(newbie.never_signed_in, true);
+      assert.equal(new Date(newbie.discord_joined_at as string).toISOString(), "2026-10-19T09:00:00.000Z");
+      // Opening the page again right away doesn't ask Discord again.
+      const before = calls;
+      assert.equal(await syncDiscordMembersOnDemand({ db, fetcher }), null);
+      assert.equal(calls, before);
+    } finally {
+      for (const [key, value] of [["DISCORD_BOT_TOKEN", previous.token], ["DISCORD_GUILD_ID", previous.guild]] as const) {
+        if (value === undefined) delete process.env[key]; else process.env[key] = value;
+      }
+    }
+  });
+});
