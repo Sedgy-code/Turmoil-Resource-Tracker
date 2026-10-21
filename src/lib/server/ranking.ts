@@ -99,9 +99,10 @@ export async function contributionRanking(actor: Member, db?: Database, now = ne
   const vials = await recordTotals("vials");
 
   const snipes = await snipeRecognition(connection, now);
+  // No-shows: said Yes, others checked in, they didn't. A snipe leaders cancelled never counts.
   const promised = await connection.query(`SELECT response.member_id, COUNT(*)::int AS count FROM snipe_responses response
     JOIN snipe_plans plan ON plan.id = response.snipe_id
-    WHERE response.answer = 'yes' AND plan.starts_at >= $1 AND plan.starts_at <= $2
+    WHERE response.answer = 'yes' AND plan.starts_at >= $1 AND plan.starts_at <= $2 AND plan.cancelled_at IS NULL
       AND EXISTS (SELECT 1 FROM snipe_attendance attendance WHERE attendance.snipe_id = plan.id)
       AND NOT EXISTS (SELECT 1 FROM snipe_attendance attendance WHERE attendance.snipe_id = plan.id AND attendance.member_id = response.member_id)
     GROUP BY response.member_id`, [`${sinceWeek}T00:00:00Z`, now.toISOString()]);

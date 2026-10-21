@@ -320,6 +320,30 @@ test("vials: donating at least 80% of a typical donor's amount earns full marks"
   });
 });
 
+test("saying Yes and not turning up costs 5 points, but never for a snipe that was cancelled", async () => {
+  const { contributionRanking } = await import("../src/lib/server/ranking");
+  await withDatabase(async (db) => {
+    const admin = await addMember(db, "leader", "ADMIN");
+    const came = await addMember(db, "came");
+    const missed = await addMember(db, "missed");
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString();
+    const addSnipe = async (cancelled: boolean) => {
+      const id = randomUUID();
+      await db.query(`INSERT INTO snipe_plans (id, title, starts_at, activities, created_by, archived, cancelled_at, cancelled_by)
+        VALUES ($1, 'Day 2 – Mounts', $2, '["mountSummons"]'::jsonb, $3, $4, $5, $6)`,
+      [id, yesterday, admin.id, cancelled, cancelled ? yesterday : null, cancelled ? admin.id : null]);
+      for (const member of [came, missed]) await db.query("INSERT INTO snipe_responses (snipe_id, member_id, answer) VALUES ($1, $2, 'yes')", [id, member.id]);
+      // "came" checked in before it was called off.
+      await db.query("INSERT INTO snipe_attendance (snipe_id, member_id, confirmed_by) VALUES ($1, $2, $2)", [id, came.id]);
+    };
+    const row = async () => (await contributionRanking(admin, db)).rows.find(({ member }) => member.id === missed.id)!;
+    await addSnipe(true);
+    assert.deepEqual([(await row()).noShows, (await row()).penalty], [0, 0], "cancelled: no penalty");
+    await addSnipe(false);
+    assert.deepEqual([(await row()).noShows, (await row()).penalty], [1, 5], "a real snipe still counts");
+  });
+});
+
 test("opening the Members page checks Discord straight away, at most every couple of minutes", async () => {
   const { syncDiscordMembersOnDemand } = await import("../src/lib/server/discord-sync");
   await withDatabase(async (db) => {
