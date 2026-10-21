@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { initializeSchema, openDatabase, type Database } from "../src/lib/server/db";
 import { memberFromRow } from "../src/lib/server/mappers";
 import { listSnipes } from "../src/lib/server/planning";
-import { assembleMessages, assembleSnipers, giveSnipeRole, SNIPE_CHANNEL_ID, snipeRoleId } from "../src/lib/server/snipe-discord";
+import { assembleMessages, assembleSnipers, catchUpSnipeRoles, giveSnipeRole, SNIPE_CHANNEL_ID, snipeRoleId } from "../src/lib/server/snipe-discord";
 
 let db: Database;
 const previous = { ...process.env };
@@ -158,6 +158,19 @@ test("in the demo nothing is posted, but the call is recorded", async () => {
   const call = await assembleSnipers(await member(bossId), snipeId, { db, fetcher, now });
   assert.equal(call.count, 2);
   assert.equal(calls.length, 0);
+});
+
+test("leaders opening Snipes catch up the role for anyone who said Yes earlier", async () => {
+  const { calls, fetcher } = discord();
+  // Ann already has it; Bob said Yes before the bot gave roles out. Cy said No; Gone left the clan.
+  assert.deepEqual(await catchUpSnipeRoles({ db, fetcher, now }), { given: 1, failed: 0 });
+  assert.deepEqual(calls.filter(({ method }) => method === "PUT").map(({ url }) => url), [`${API}/guilds/999/members/300/roles/r2`]);
+  // At most every 10 minutes.
+  assert.equal(await catchUpSnipeRoles({ db, fetcher, now: new Date(now.getTime() + 5 * 60_000) }), null);
+  // Once check-in has closed, that snipe's answers no longer count.
+  const later = discord();
+  assert.deepEqual(await catchUpSnipeRoles({ db, fetcher: later.fetcher, now: new Date(Date.parse(startsAt) + 4 * 3_600_000) }), { given: 0, failed: 0 });
+  assert.equal(later.calls.length, 0);
 });
 
 test("big calls are split across posts, and names can't add Discord formatting", () => {

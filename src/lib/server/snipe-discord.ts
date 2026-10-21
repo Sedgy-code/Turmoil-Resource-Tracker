@@ -78,6 +78,31 @@ export async function giveSnipeRole(discordIds: string[], fetcher: typeof fetch 
   return { given, failed: missing.length - given };
 }
 
+/** How often a leader opening Snipes re-checks that everyone who said Yes has the role. */
+const ROLE_CATCH_UP_MS = 10 * 60_000;
+let lastRoleCatchUp = 0;
+
+/**
+ * Everyone who said Yes to a snipe that's still to come (or on now) gets the Snipe Group role, in case
+ * they answered before the bot handed it out or Discord didn't take it then. Runs when a leader opens
+ * Snipes, at most every 10 minutes. Never throws: the page loads either way.
+ */
+export async function catchUpSnipeRoles(dependencies: { db?: Database; fetcher?: typeof fetch; now?: Date } = {}): Promise<{ given: number; failed: number } | null> {
+  const now = dependencies.now ?? new Date();
+  if (isDemo() || !process.env.DISCORD_BOT_TOKEN || !guildId() || now.getTime() - lastRoleCatchUp < ROLE_CATCH_UP_MS) return null;
+  lastRoleCatchUp = now.getTime();
+  try {
+    const connection = dependencies.db ?? await database();
+    const rows = await connection.query(`SELECT DISTINCT m.discord_id FROM snipe_responses r
+      JOIN snipe_plans p ON p.id = r.snipe_id JOIN app_members m ON m.id = r.member_id
+      WHERE r.answer = 'yes' AND m.active = TRUE AND p.archived = FALSE AND p.starts_at > $1`,
+    [new Date(now.getTime() - CHECKIN_CLOSES_AFTER_MS).toISOString()]);
+    return await giveSnipeRole(rows.map((row) => String(row.discord_id)), dependencies.fetcher ?? fetch);
+  } catch {
+    return null;
+  }
+}
+
 /** Stops a name or title from turning into Discord formatting. */
 const plain = (text: string) => text.replace(/([\\*_~`|>])/g, "\\$1");
 
