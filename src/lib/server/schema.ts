@@ -317,4 +317,7 @@ CREATE TABLE IF NOT EXISTS snipe_assemblies (
   member_count INTEGER NOT NULL CHECK (member_count >= 0)
 );
 CREATE INDEX IF NOT EXISTS snipe_assemblies_snipe_idx ON snipe_assemblies(snipe_id, sent_at DESC);
+-- A leader called the snipe off (not needed): it's archived and closed to answers and check-in.
+ALTER TABLE snipe_plans ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;
+ALTER TABLE snipe_plans ADD COLUMN IF NOT EXISTS cancelled_by TEXT REFERENCES app_members(id);
 `;

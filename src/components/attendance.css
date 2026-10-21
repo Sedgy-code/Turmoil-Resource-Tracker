@@ -121,3 +121,18 @@
   .snipe-assemble { margin-left: 16px; margin-right: 16px; }
   .snipe-assemble-button { width: 100%; justify-content: center; }
 }
+.snipe-assemble-meta { display: flex; flex: 1 1 260px; align-items: center; justify-content: space-between; gap: 8px 12px; min-width: 0; }
+.snipe-assemble-meta .snipe-cancel-open { flex-shrink: 0; min-height: 40px; font-size: 13px; }
+
+/* Leaders: call a snipe off. Kept in History, marked Cancelled; Reopen undoes it. */
+.snipe-cancel-confirm { display: grid; gap: 12px; margin: -6px 24px 18px; padding: 14px 16px; border: 1px solid #e9958666; border-radius: 12px; background: #2a1412; }
+.snipe-cancel-confirm > p { margin: 0; color: var(--text); font-size: 13px; line-height: 1.5; }
+.snipe-cancel-confirm .planning-form-actions { margin-top: 0; }
+.app-shell .snipe-cancel-confirm .snipe-cancel-button { background: linear-gradient(180deg, #f08c78, #d9604a); color: #1f0805; box-shadow: none; }
+.app-shell .snipe-cancel-confirm .snipe-cancel-button:hover:not(:disabled) { background: linear-gradient(180deg, #f6a08e, #e0705b); }
+.snipe-cancelled-chip { border-color: #e9958677 !important; color: #f0a596 !important; }
+.snipe-cancelled-note { margin-top: 6px; color: #f0a596; font-size: 12px; }
+@media (max-width: 640px) {
+  .snipe-cancel-confirm { margin-left: 16px; margin-right: 16px; }
+  .snipe-cancel-confirm .planning-form-actions .planning-button { flex: 1; justify-content: center; }
+}

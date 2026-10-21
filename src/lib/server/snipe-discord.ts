@@ -135,6 +135,50 @@ export function assembleMessages(snipe: { id: string; title: string; startsAt: s
   return posts;
 }
 
+/** "Wed 21 Oct, 23:30 UTC": Discord posts are English and clan times are UTC. */
+function utcLabel(iso: string): string {
+  return `${new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" }).format(new Date(iso))}, ${new Date(iso).toISOString().slice(11, 16)} UTC`;
+}
+
+/** Tells everyone who said Yes that the snipe is off (English only, like every Discord post). */
+export function cancelMessages(snipe: { title: string; startsAt: string }, leader: string, discordIds: string[]) {
+  const posts: { content: string; allowed_mentions: { parse: never[]; users: string[] } }[] = [];
+  for (let first = 0; first < discordIds.length; first += MENTIONS_PER_POST) {
+    const users = discordIds.slice(first, first + MENTIONS_PER_POST);
+    const mentions = users.map((id) => `<@${id}>`).join(" ");
+    posts.push({
+      content: first === 0
+        ? [`❌ **Snipe cancelled: ${plain(snipe.title)}** (${utcLabel(snipe.startsAt)})`, `No need to join. Called off by ${plain(leader)}. Thanks for being ready!`, mentions].join("\n")
+        : mentions,
+      allowed_mentions: { parse: [] as never[], users },
+    });
+  }
+  return posts;
+}
+
+/**
+ * Posts the cancellation in #snipe-chat, pinging everyone who said Yes. True when it was posted
+ * (nothing is sent in the demo); false if Discord didn't take it. The cancel stands either way.
+ */
+export async function tellSnipersCancelled(snipe: { title: string; startsAt: string }, leader: string, discordIds: string[], fetcher: typeof fetch = fetch): Promise<boolean> {
+  const ids = discordIds.filter((id) => DISCORD_ID.test(id));
+  if (isDemo()) return true;
+  const token = process.env.DISCORD_BOT_TOKEN;
+  if (!token || !guildId() || !ids.length) return false;
+  const channel = process.env.DISCORD_SNIPE_CHANNEL_ID || SNIPE_CHANNEL_ID;
+  const headers = { Authorization: `Bot ${token}`, "Content-Type": "application/json" };
+  let posted = false;
+  for (const post of cancelMessages(snipe, leader, ids)) {
+    const sent = await fetcher(`${DISCORD_API}/channels/${channel}/messages`, { method: "POST", headers, body: JSON.stringify(post) }).catch(() => null);
+    if (!sent?.ok) {
+      console.warn("Snipe cancel not posted", sent?.status, sent ? (await sent.text().catch(() => "")).slice(0, 200) : "no answer");
+      break;
+    }
+    posted = true;
+  }
+  return posted;
+}
+
 async function requireNotRecent(connection: SqlConnection, snipeId: string, now: Date): Promise<void> {
   const last = await lastAssembly(connection, snipeId);
   if (last && now.getTime() - new Date(last.at).getTime() < ASSEMBLE_EVERY_MS) {
@@ -165,8 +209,9 @@ export async function assembleSnipers(actor: Member, snipeId: string, dependenci
   const { leader, plan, snipers } = await connection.transaction(async (tx) => {
     await lockAdministration(tx, connection.dialect);
     const leader = await requireAdmin(tx, actor.id);
-    const rows = await tx.query("SELECT id, title, starts_at, archived FROM snipe_plans WHERE id = $1", [snipeId]);
+    const rows = await tx.query("SELECT id, title, starts_at, archived, cancelled_at FROM snipe_plans WHERE id = $1", [snipeId]);
     if (!rows.length) throw new ApiError(404, "This snipe plan could not be found.", "SNIPE_NOT_FOUND");
+    if (rows[0].cancelled_at) throw new ApiError(409, "This snipe was cancelled.", "SNIPE_CANCELLED");
     if (rows[0].archived === true) throw new ApiError(409, "This snipe is archived and cannot be changed.", "SNIPE_ARCHIVED");
     const plan = { id: String(rows[0].id), title: String(rows[0].title), startsAt: iso(rows[0].starts_at)! };
     if (now.getTime() > new Date(plan.startsAt).getTime() + CHECKIN_CLOSES_AFTER_MS) {

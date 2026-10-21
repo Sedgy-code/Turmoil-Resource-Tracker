@@ -98,7 +98,13 @@ async function findPlan(tx: SqlConnection, id: string): Promise<Record<string, u
 }
 
 function requireOpen(row: Record<string, unknown>): void {
+  if (row.cancelled_at) throw new ApiError(409, "This snipe was cancelled.", "SNIPE_CANCELLED");
   if (row.archived === true) throw new ApiError(409, "This snipe is archived and cannot be changed.", "SNIPE_ARCHIVED");
+}
+
+/** Nobody checks in to, or is ticked for, a snipe that was called off. */
+function requireNotCancelled(row: Record<string, unknown>): void {
+  if (row.cancelled_at) throw new ApiError(409, "This snipe was cancelled.", "SNIPE_CANCELLED");
 }
 
 /** Upcoming snipes (not archived, not started) the member hasn't said Yes or No to: the Snipes tab's count. */
@@ -145,8 +151,8 @@ export async function updateSnipe(actor: Member, id: string, input: Partial<Snip
     requireAdministrator(freshActor);
     let row = await findPlan(tx, id);
     if (input.archived === false) {
-      // Moving a plan back to Open makes it live again, using everyone's latest resources.
-      if (row.archived === true) [row] = await tx.query("UPDATE snipe_plans SET archived = FALSE, archived_result = NULL WHERE id = $1 RETURNING *", [id]);
+      // Moving a plan back to Open makes it live again, using everyone's latest resources (and undoes a cancel).
+      if (row.archived === true) [row] = await tx.query("UPDATE snipe_plans SET archived = FALSE, archived_result = NULL, cancelled_at = NULL, cancelled_by = NULL WHERE id = $1 RETURNING *", [id]);
       return planFromRow(tx, row);
     }
     requireOpen(row);
@@ -163,6 +169,28 @@ export async function updateSnipe(actor: Member, id: string, input: Partial<Snip
       await tx.query("UPDATE snipe_plans SET archived = TRUE, archived_result = $2::jsonb WHERE id = $1", [id, JSON.stringify(plan)]);
     }
     return plan;
+  });
+}
+
+/**
+ * A leader calls a snipe off (not needed after all). It moves to History marked Cancelled, with
+ * everyone's answers kept, and nobody can answer or check in. Reopen brings it back.
+ * Also returns the Discord ids of everyone who said Yes (A–Z), so they can be told.
+ */
+export async function cancelSnipe(actor: Member, id: string, db?: Database, now = new Date()): Promise<{ plan: SnipePlan; leader: Member; snipers: string[] }> {
+  const connection = db ?? await database();
+  return connection.transaction(async (tx) => {
+    await lockAdministration(tx, connection.dialect);
+    const leader = await activeActor(tx, actor.id);
+    requireAdministrator(leader);
+    const row = await findPlan(tx, id);
+    requireOpen(row);
+    const plan = await planFromRow(tx, row);
+    plan.archived = true;
+    plan.cancelled = { by: leader.username, at: now.toISOString() };
+    await tx.query("UPDATE snipe_plans SET archived = TRUE, archived_result = $2::jsonb, cancelled_at = $3, cancelled_by = $4 WHERE id = $1",
+      [id, JSON.stringify(plan), now.toISOString(), leader.id]);
+    return { plan, leader, snipers: plan.participants.map(({ member }) => member.discordId) };
   });
 }
 
@@ -204,6 +232,7 @@ export async function confirmSnipeAttendance(actor: Member, id: string, input: {
     const freshActor = await activeActor(tx, actor.id);
     requireAdministrator(freshActor);
     let row = await findPlan(tx, id);
+    requireNotCancelled(row);
     if (typeof input.attended !== "boolean") throw new ApiError(400, "Confirm actual attendance for this member.", "INVALID_SNIPE_ATTENDANCE");
     const startsAt = new Date(iso(row.starts_at)!);
     const now = new Date();
@@ -246,6 +275,7 @@ export async function checkInToSnipe(actor: Member, id: string, db?: Database, n
     await lockAdministration(tx, connection.dialect);
     const freshActor = await activeActor(tx, actor.id);
     let row = await findPlan(tx, id);
+    requireNotCancelled(row);
     const startsAt = new Date(iso(row.starts_at)!);
     if (now.getTime() < startsAt.getTime() - CHECKIN_OPENS_BEFORE_MS) throw new ApiError(409, "Check-in opens 30 minutes before the snipe starts.", "CHECKIN_NOT_OPEN");
     if (now.getTime() > startsAt.getTime() + CHECKIN_CLOSES_AFTER_MS) throw new ApiError(409, "Check-in for this snipe has closed.", "CHECKIN_CLOSED");

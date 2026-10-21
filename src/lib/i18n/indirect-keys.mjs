@@ -164,5 +164,6 @@ export const INDIRECT_KEYS = [
   "Nobody has said Yes to this snipe yet.", "The snipers were already called in the last 10 minutes.",
   "This snipe is over, so the snipers can’t be called.", "Discord isn’t set up for snipe calls yet.",
   "The bot couldn’t post in #snipe-chat. It needs permission to send messages there.",
+  "This snipe was cancelled.",
   "Unable to calculate this estimate. Reduce the selected activities or saved resource counts.",
 ];

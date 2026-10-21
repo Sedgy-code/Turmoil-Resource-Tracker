@@ -3,8 +3,9 @@ import { after, before, beforeEach, test } from "node:test";
 import { randomUUID } from "node:crypto";
 import { initializeSchema, openDatabase, type Database } from "../src/lib/server/db";
 import { memberFromRow } from "../src/lib/server/mappers";
-import { listSnipes } from "../src/lib/server/planning";
-import { assembleMessages, assembleSnipers, catchUpSnipeRoles, giveSnipeRole, SNIPE_CHANNEL_ID, snipeRoleId } from "../src/lib/server/snipe-discord";
+import { checkIn } from "../src/lib/server/discord-interactions";
+import { cancelSnipe, checkInToSnipe, listSnipes, respondToSnipe, snipesToAnswer, updateSnipe } from "../src/lib/server/planning";
+import { assembleMessages, assembleSnipers, cancelMessages, catchUpSnipeRoles, giveSnipeRole, SNIPE_CHANNEL_ID, snipeRoleId, tellSnipersCancelled } from "../src/lib/server/snipe-discord";
 
 let db: Database;
 const previous = { ...process.env };
@@ -184,4 +185,47 @@ test("big calls are split across posts, and names can't add Discord formatting",
   assert.equal(posts[1].components, undefined);
   assert.equal(posts[1].content, ids.slice(40).map((id) => `<@${id}>`).join(" "));
   assert.ok(posts.every((post) => post.content.length < 2000));
+});
+
+test("a leader can cancel a snipe that isn't needed, tell the snipers, and reopen it", async () => {
+  // Far enough ahead that answers are still open whenever the test runs.
+  const later = randomUUID();
+  const start = "2027-01-05T23:30:00.000Z";
+  await db.query("INSERT INTO snipe_plans (id, title, starts_at, activities, created_by) VALUES ($1, 'Day 1 – Hammers, Skills', $2, '[\"hammers\",\"skillSummons\"]'::jsonb, $3)", [later, start, bossId]);
+  for (const [member, answer] of [[annId, "yes"], [bobId, "yes"], [cyId, "no"]]) {
+    await db.query("INSERT INTO snipe_responses (snipe_id, member_id, answer) VALUES ($1, $2, $3)", [later, member, answer]);
+  }
+  const toAnswer = await snipesToAnswer(bossId, db, now);
+  await assert.rejects(cancelSnipe(await member(annId), later, db, now), /administrators/);
+  const cancelled = await cancelSnipe(await member(bossId), later, db, now);
+  assert.equal(cancelled.plan.archived, true);
+  assert.deepEqual(cancelled.plan.cancelled, { by: "Boss", at: now.toISOString() });
+  // Ann and Bob said Yes (A–Z), so they're the ones to tell.
+  assert.deepEqual(cancelled.snipers, ["200", "300"]);
+  const listed = (await listSnipes(await member(bossId), db)).plans.find((plan) => plan.id === later)!;
+  assert.deepEqual([listed.archived, listed.cancelled?.by, listed.counts.yes], [true, "Boss", 2]);
+  // Closed: no answers, calls, check-ins (Hub or Discord), and it's not a snipe to answer any more.
+  await assert.rejects(respondToSnipe(await member(annId), later, { answer: "no" }, db), /was cancelled/);
+  await assert.rejects(assembleSnipers(await member(bossId), later, { db, fetcher: discord().fetcher, now }), /was cancelled/);
+  await assert.rejects(checkInToSnipe(await member(annId), later, db, new Date(start)), /was cancelled/);
+  assert.match(await checkIn("200", later, db, new Date(start)), /was cancelled/);
+  assert.equal(await snipesToAnswer(bossId, db, now), toAnswer - 1);
+  await assert.rejects(cancelSnipe(await member(bossId), later, db, now), /was cancelled/);
+  // Reopen undoes it, answers and all.
+  const reopened = await updateSnipe(await member(bossId), later, { archived: false }, db);
+  assert.deepEqual([reopened.archived, reopened.cancelled ?? null, reopened.counts.yes], [false, null, 2]);
+  assert.equal(await snipesToAnswer(bossId, db, now), toAnswer);
+});
+
+test("the snipers are told in #snipe-chat when a snipe is cancelled", async () => {
+  const { calls, fetcher } = discord();
+  const snipe = { title: "Day 2 – Mounts", startsAt: "2026-10-21T23:30:00.000Z" };
+  assert.equal(await tellSnipersCancelled(snipe, "Boss", ["200", "300"], fetcher), true);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, `${API}/channels/${SNIPE_CHANNEL_ID}/messages`);
+  assert.equal(calls[0].body!.content, "❌ **Snipe cancelled: Day 2 – Mounts** (Wed 21 Oct, 23:30 UTC)\nNo need to join. Called off by Boss. Thanks for being ready!\n<@200> <@300>");
+  assert.deepEqual(calls[0].body!.allowed_mentions, { parse: [], users: ["200", "300"] });
+  // Discord said no: the cancel still stands, and the leader is told it wasn't posted.
+  assert.equal(await tellSnipersCancelled(snipe, "Boss", ["200"], discord({ post: 403 }).fetcher), false);
+  assert.equal(cancelMessages(snipe, "Boss", Array.from({ length: 41 }, (_, index) => String(index + 1))).length, 2);
 });

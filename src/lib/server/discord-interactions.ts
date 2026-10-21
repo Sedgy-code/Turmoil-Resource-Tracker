@@ -40,7 +40,7 @@ const reply = (content: string, ephemeral = true) => ({ type: 4, data: { content
 /** The snipe whose check-in window is open right now (closest start time first). */
 async function openSnipe(connection: SqlConnection, now: Date) {
   const rows = await connection.query(`SELECT id, title, starts_at FROM snipe_plans
-    WHERE starts_at <= $1 AND starts_at >= $2 ORDER BY ABS(EXTRACT(EPOCH FROM (starts_at - $3::timestamptz))) LIMIT 1`, [
+    WHERE starts_at <= $1 AND starts_at >= $2 AND cancelled_at IS NULL ORDER BY ABS(EXTRACT(EPOCH FROM (starts_at - $3::timestamptz))) LIMIT 1`, [
     new Date(now.getTime() + CHECKIN_OPENS_BEFORE_MS).toISOString(),
     new Date(now.getTime() - CHECKIN_CLOSES_AFTER_MS).toISOString(),
     now.toISOString(),
@@ -59,7 +59,8 @@ export async function checkIn(discordId: string, snipeId: string | null, db?: Da
     if (!member.active) return "Your Clan Hub account is switched off. Ask a clan admin.";
     let plan = await openSnipe(tx, now);
     if (snipeId) {
-      const rows = await tx.query("SELECT id, title, starts_at FROM snipe_plans WHERE id = $1", [snipeId]);
+      const rows = await tx.query("SELECT id, title, starts_at, cancelled_at FROM snipe_plans WHERE id = $1", [snipeId]);
+      if (rows[0]?.cancelled_at) return `**${String(rows[0].title)}** was cancelled, so there’s nothing to check in to.`;
       plan = rows[0] ? { id: String(rows[0].id), title: String(rows[0].title), startsAt: new Date(iso(rows[0].starts_at)!) } : null;
     }
     if (!plan) return "There’s no snipe open for check-in right now.";

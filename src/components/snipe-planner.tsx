@@ -109,6 +109,9 @@ export function SnipePlanner({ data, notify }: Props) {
   const [editing, setEditing] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // Leaders cancelling a snipe: which card's confirm is open, and whether to tell the snipers.
+  const [cancelling, setCancelling] = useState<string | null>(null);
+  const [tellSnipers, setTellSnipers] = useState(true);
   const requestGeneration = useRef(0);
   const loadingGeneration = useRef<number | null>(null);
   const loadController = useRef<AbortController | null>(null);
@@ -236,6 +239,19 @@ export function SnipePlanner({ data, notify }: Props) {
     } catch (error) { notify(t(errorText(error)), true); }
     finally { finishMutation(); }
   }
+  /** Leaders: call off a snipe that isn't needed (it moves to History; Reopen undoes it). */
+  async function cancel(plan: SnipePlan) {
+    if (!beginMutation(`cancel:${plan.id}`)) return;
+    try {
+      const result = await request<{ plan: SnipePlan; told: boolean | null }>(`/api/snipes/${plan.id}/cancel`, { method: "POST", body: JSON.stringify({ tellSnipers: plan.counts.yes > 0 && tellSnipers }) });
+      replacePlan(result.plan); setCancelling(null); setEditing(null);
+      // It no longer counts as a snipe to answer on the Snipes tab.
+      announceSnipeAnswered();
+      notify(result.told === false ? t("Snipe cancelled, but the message in #snipe-chat couldn’t be posted.")
+        : result.told ? t("Snipe cancelled, and everyone who said Yes was told in #snipe-chat.") : t("Snipe cancelled."), result.told === false);
+    } catch (error) { notify(t(errorText(error)), true); }
+    finally { finishMutation(); }
+  }
   async function checkIn(plan: SnipePlan) {
     if (!beginMutation(`checkin:${plan.id}`)) return;
     try {
@@ -291,7 +307,7 @@ export function SnipePlanner({ data, notify }: Props) {
         || plan.participants.find(({ member }) => member.id === memberId)?.member.username
         || t("Former clan member");
       return <section className="planning-panel planning-snipe snipe-card" key={plan.id} aria-label={displaySnipeTitle(plan, t, language)}>
-        <div className="planning-heading"><div><h2>{displaySnipeTitle(plan, t, language)}</h2><p className="planning-date"><CalendarDays size={14} /><time dateTime={plan.startsAt}>{utcDateTime(plan.startsAt, language)}</time>{!started && <span className="planning-countdown">{t("in {time}", { time: countdown(new Date(plan.startsAt)) })}</span>}</p></div>{isAdmin && !plan.archived && <div className="planning-inline-actions">{needsAttendance && <span className="planning-chip snipe-needs-attendance">{t("Needs attendance")}</span>}<button className="planning-button planning-button-subtle" onClick={() => { setEditing(editing === plan.id ? null : plan.id); setCreating(false); }} disabled={busy !== null} aria-expanded={editing === plan.id}><Pencil size={14} />{t("Edit plan")}</button><button className="planning-button planning-button-subtle" onClick={() => void archive(plan)} disabled={busy !== null}><Archive size={14} />{t("Archive snipe")}</button></div>}{plan.archived && <div className="planning-inline-actions"><span className="planning-chip">{t("Archived")}</span>{isAdmin && <button className="planning-button planning-button-subtle" onClick={() => void reopen(plan)} disabled={busy !== null}><RotateCcw size={14} />{t("Reopen")}</button>}</div>}</div>
+        <div className="planning-heading"><div><h2>{displaySnipeTitle(plan, t, language)}</h2><p className="planning-date"><CalendarDays size={14} /><time dateTime={plan.startsAt}>{utcDateTime(plan.startsAt, language)}</time>{!started && !plan.archived && <span className="planning-countdown">{t("in {time}", { time: countdown(new Date(plan.startsAt)) })}</span>}</p>{plan.cancelled && <p className="snipe-cancelled-note">{t("Cancelled by {name}, {time}", { name: plan.cancelled.by, time: clock(plan.cancelled.at) })}</p>}</div>{isAdmin && !plan.archived && <div className="planning-inline-actions">{needsAttendance && <span className="planning-chip snipe-needs-attendance">{t("Needs attendance")}</span>}<button className="planning-button planning-button-subtle" onClick={() => { setEditing(editing === plan.id ? null : plan.id); setCreating(false); }} disabled={busy !== null} aria-expanded={editing === plan.id}><Pencil size={14} />{t("Edit plan")}</button><button className="planning-button planning-button-subtle" onClick={() => void archive(plan)} disabled={busy !== null}><Archive size={14} />{t("Archive snipe")}</button></div>}{plan.archived && <div className="planning-inline-actions"><span className={`planning-chip${plan.cancelled ? " snipe-cancelled-chip" : ""}`}>{t(plan.cancelled ? "Cancelled" : "Archived")}</span>{isAdmin && <button className="planning-button planning-button-subtle" onClick={() => void reopen(plan)} disabled={busy !== null}><RotateCcw size={14} />{t("Reopen")}</button>}</div>}</div>
         {editing === plan.id && isAdmin && !plan.archived && <PlanForm key={plan.id} plan={plan} busy={busy !== null} onCancel={() => setEditing(null)} onSave={(draft) => savePlan(draft, plan.id)} />}
         <div className="planning-attendance" aria-label={t("Attendance")}><span className="planning-yes"><Check size={15} />{t("Yes")}: {plan.counts.yes}</span><span className="planning-no"><X size={15} />{t("No")}: {plan.counts.no}</span><span>{t("No answer")}: {plan.counts.unanswered}</span></div>
         {callOpen && <div className="snipe-assemble">
@@ -299,9 +315,20 @@ export function SnipePlanner({ data, notify }: Props) {
             {busy === `assemble:${plan.id}` ? <LoaderCircle size={16} className="spin" /> : <Megaphone size={16} />}
             {callWaiting ? t("Call again in {time}", { time: countdown(new Date(callAgainAt)) }) : t("Assemble snipers ({count})", { count: plan.counts.yes })}
           </button>
-          <small>{plan.assembled
-            ? t("Called by {name}, {time}", { name: plan.assembled.by, time: clock(plan.assembled.at) })
-            : plan.counts.yes === 0 ? t("Nobody has said Yes to this snipe yet.") : t("Posts in #snipe-chat and pings everyone who said Yes.")}</small>
+          <div className="snipe-assemble-meta">
+            <small>{plan.assembled
+              ? t("Called by {name}, {time}", { name: plan.assembled.by, time: clock(plan.assembled.at) })
+              : plan.counts.yes === 0 ? t("Nobody has said Yes to this snipe yet.") : t("Posts in #snipe-chat and pings everyone who said Yes.")}</small>
+            <button className="planning-button planning-button-subtle snipe-cancel-open" disabled={busy !== null} aria-expanded={cancelling === plan.id} onClick={() => { setCancelling(cancelling === plan.id ? null : plan.id); setTellSnipers(true); }}><X size={14} />{t("Cancel snipe")}</button>
+          </div>
+        </div>}
+        {callOpen && cancelling === plan.id && <div className="snipe-cancel-confirm" role="group" aria-label={t("Cancel snipe")}>
+          <p>{t("Cancel this snipe? It moves to History, and nobody can answer or check in.")}</p>
+          {plan.counts.yes > 0 && <label className="planning-check"><input type="checkbox" checked={tellSnipers} onChange={(event) => setTellSnipers(event.target.checked)} /><span>{t("Tell everyone who said Yes in #snipe-chat ({count})", { count: plan.counts.yes })}</span></label>}
+          <div className="planning-form-actions">
+            <button className="planning-button planning-button-subtle" disabled={busy !== null} onClick={() => setCancelling(null)}>{t("Keep the snipe")}</button>
+            <button className="planning-button snipe-cancel-button" disabled={busy !== null} onClick={() => void cancel(plan)}>{busy === `cancel:${plan.id}` ? <LoaderCircle size={15} className="spin" /> : <X size={15} />}{t("Yes, cancel it")}</button>
+          </div>
         </div>}
         {!plan.archived && <details className="planning-response-details"><summary>{t("See who said No or hasn’t answered")}</summary><div className="planning-response-grid"><div><h3>{t("Can’t join")}</h3><p>{unavailable.length ? unavailable.map((member) => member.username).join(", ") : t("Nobody has said No.")}</p></div><div><h3>{t("No answer yet")}</h3><p>{unanswered.length ? unanswered.map((member) => member.username).join(", ") : t("Everyone has answered.")}</p></div></div></details>}
         {/* On now: one tap checks in and gives the week's 10 Clan Points. */}
@@ -317,7 +344,7 @@ export function SnipePlanner({ data, notify }: Props) {
           <a className="snipe-calendar-google" href={googleCalendarLink(plan, calendarText(plan))} target="_blank" rel="noreferrer">{t("Google Calendar")}</a>
         </div>}
         {!plan.archived && <div className="planning-rsvp"><p>{t(started ? "This snipe has started. Answers are closed." : "Can you join this snipe?")}{!started && <small className="snipe-role-hint">{t("Saying Yes opens #snipe-chat for you on Discord.")}</small>}</p>{!started && <div className="planning-tabs"><button aria-pressed={answer === "yes"} disabled={busy !== null} onClick={() => void respond(plan, "yes")}><Check size={14} />{t("Yes")}</button><button aria-pressed={answer === "no"} disabled={busy !== null} onClick={() => void respond(plan, "no")}><X size={14} />{t("No")}</button></div>}{busy === plan.id && <LoaderCircle size={16} className="spin" aria-label={t("Saving…")} />}</div>}
-        <section className="snipe-confirmed-attendance" aria-label={t("Confirmed attendance for {title}", { title: displaySnipeTitle(plan, t, language) })}>
+        {!plan.cancelled && <section className="snipe-confirmed-attendance" aria-label={t("Confirmed attendance for {title}", { title: displaySnipeTitle(plan, t, language) })}>
           <div className="snipe-attendance-heading"><h3>{t("Confirmed attendance")}</h3><span className="planning-chip">{t("{count} attended", { count: attendees.length })}</span></div>
           <p className="snipe-attendance-copy">{t("Get 10 Clan Points a week for joining a snipe. Check in here or in Discord, from 30 minutes before it starts.")}</p>
           {attendees.length > 0 ? <ul className="snipe-confirmed-list">{attendees.map((attendee) => <li key={attendee.memberId}><Check size={14} aria-hidden="true" /><span>{confirmedName(attendee.memberId)}</span>{attendee.memberId === data.currentUser.id && <small>{t("You attended")}</small>}</li>)}</ul> : <p className="snipe-attendance-empty">{t(started || plan.archived ? "No attendance has been confirmed." : "Admins confirm attendance after the snipe starts.")}</p>}
@@ -341,7 +368,7 @@ export function SnipePlanner({ data, notify }: Props) {
               </li>;
             })}</ul>
           </div>}
-        </section>
+        </section>}
         <div className="planning-activity-chips" aria-label={t("Include activities")}>{activityLabels.map((activity) => { const Picture = ACTIVITY_ICONS[activity.key]; return <span className="planning-chip planning-activity-chip" key={activity.key}><Picture size={18} />{t(activity.label)}</span>; })}</div>
         <ParticipantsTable plan={plan} activityLabels={activityLabels} meId={data.currentUser.id} />
         <div className="planning-total"><div><span>{t("{count} said Yes", { count: numberFormat(plan.counts.yes) })}</span><small>{t("Estimated snipe points")}</small></div><strong>{points(plan.estimate.minimum, plan.estimate.maximum)}</strong></div>
