@@ -172,19 +172,8 @@ export async function leadershipDue(db: Database, now = new Date(), tasks: reado
   return due;
 }
 
-/** Clan Hub admins (the people who can do these jobs), leaving out anyone on holiday. */
-export async function leadershipPings(db: Database, now = new Date()): Promise<string[]> {
-  const rows = await db.query(
-    `SELECT discord_id FROM app_members
-     WHERE role = 'ADMIN' AND active = TRUE AND (holiday_until IS NULL OR holiday_until < $1::date)
-     ORDER BY LOWER(COALESCE(NULLIF(display_name, ''), username))`,
-    [now.toISOString().slice(0, 10)],
-  );
-  return rows.map((row) => String(row.discord_id)).filter((id) => /^\d+$/.test(id)).slice(0, 50);
-}
-
 /** English only, like every automatic post: the server's translation bot does the rest. */
-export function leadershipReminderMessage(due: LeadershipDue, base: string, mentions: string[] = []): string {
+export function leadershipReminderMessage(due: LeadershipDue, base: string): string {
   const blocks = due.tasks.map((task) => {
     if (task === "warday" && due.warDay) {
       const { day, endsAt } = due.warDay;
@@ -212,33 +201,34 @@ export function leadershipReminderMessage(due: LeadershipDue, base: string, ment
       "Press **Add**, add the screenshots, then **Read screenshots** → check → **Save**.",
     ];
   });
-  return ["📌 **Leadership reminder**", ...(mentions.length ? [mentions.join(" ")] : []), ...blocks.flatMap((lines) => ["", ...lines])].join("\n");
+  return ["📌 **Leadership reminder**", ...blocks.flatMap((lines) => ["", ...lines])].join("\n");
 }
 
 /**
- * Posts in the leadership channel with the site's bot, only when a job is undone, and pings the
- * Clan Hub admins. Times are in vercel.json: daily points Tuesday–Saturday 21:00 UTC (Days 1–5),
- * war results and clan days Monday 10:00 UTC, vials Sunday 10:00 UTC.
+ * Posts in the leadership channel with the site's bot, only when a job is undone. It pings nobody
+ * (leadership asked for no pings in #the-dictators-den): no one is mentioned, and the post is sent
+ * silently, so it never sets off a notification. Times are in vercel.json: daily points
+ * Tuesday–Saturday 21:00 UTC (Days 1–5), war results and clan days Monday 10:00 UTC, vials Sunday 10:00 UTC.
  */
-export async function sendLeadershipReminder(dependencies: { db?: Database; fetcher?: typeof fetch; now?: Date; tasks?: readonly LeadershipTask[] } = {}): Promise<{ posted: boolean; missing: LeadershipTask[]; pinged: number }> {
+export async function sendLeadershipReminder(dependencies: { db?: Database; fetcher?: typeof fetch; now?: Date; tasks?: readonly LeadershipTask[] } = {}): Promise<{ posted: boolean; missing: LeadershipTask[] }> {
   const token = process.env.DISCORD_BOT_TOKEN;
   if (!token) throw new ApiError(503, "Set DISCORD_BOT_TOKEN so the bot can post reminders.", "REMINDER_NOT_CONFIGURED");
   const db = dependencies.db ?? await database();
   const now = dependencies.now ?? new Date();
   const due = await leadershipDue(db, now, dependencies.tasks);
-  if (!due.tasks.length) return { posted: false, missing: [], pinged: 0 };
-  const pings = await leadershipPings(db, now);
+  if (!due.tasks.length) return { posted: false, missing: [] };
   const channel = process.env.DISCORD_LEADERSHIP_CHANNEL_ID || LEADERSHIP_CHANNEL_ID;
   const response = await (dependencies.fetcher ?? fetch)(`https://discord.com/api/v10/channels/${channel}/messages`, {
     method: "POST",
     headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
-    // Ping only the listed admins (never @everyone or roles); flags 4 = no link previews.
+    // No pings: nothing may mention anyone (members, roles, @everyone or @here).
+    // flags: 4 = no link previews, 4096 = silent (no push or desktop notifications).
     body: JSON.stringify({
-      content: leadershipReminderMessage(due, appUrl(), pings.map((id) => `<@${id}>`)),
-      allowed_mentions: { parse: [], users: pings },
-      flags: 4,
+      content: leadershipReminderMessage(due, appUrl()),
+      allowed_mentions: { parse: [] },
+      flags: 4 | 4096,
     }),
   });
   if (!response.ok) throw new ApiError(502, "Discord did not accept the leadership reminder.", "REMINDER_FAILED");
-  return { posted: true, missing: due.tasks, pinged: pings.length };
+  return { posted: true, missing: due.tasks };
 }

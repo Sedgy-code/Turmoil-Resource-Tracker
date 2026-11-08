@@ -49,12 +49,12 @@ test("automatic posts are English only (the translation bot handles other langua
   const shoutout = shoutoutMessage(["🥇 <@1> — 3 (8 wk)"], "https://x/snipes");
   assert.match(shoutout, /Thank you to everyone who joined last week's snipes!/);
   assert.doesNotMatch(shoutout, otherScripts);
-  const leadership = leadershipReminderMessage({ tasks: ["warday", "clanDays", "war", "vials"], warDay: { day: 2, endsAt: new Date("2026-10-22T00:00:00Z") }, nextWar: true }, "https://x", ["<@1>"]);
+  const leadership = leadershipReminderMessage({ tasks: ["warday", "clanDays", "war", "vials"], warDay: { day: 2, endsAt: new Date("2026-10-22T00:00:00Z") }, nextWar: true }, "https://x");
   assert.match(leadership, /Day 2 war points[\s\S]*Clan days for the next war[\s\S]*Clan war results[\s\S]*Clan tech vial donations/);
   assert.doesNotMatch(leadership, otherScripts);
 });
 
-test("leadership reminders ping the Clan Hub admins, only when a job is still undone", async () => {
+test("leadership reminders ping nobody and post silently, only when a job is still undone", async () => {
   const { randomUUID } = await import("node:crypto");
   const { initializeSchema, openDatabase } = await import("../src/lib/server/db");
   const { sendLeadershipReminder } = await import("../src/lib/server/reminders");
@@ -66,21 +66,21 @@ test("leadership reminders ping the Clan Hub admins, only when a job is still un
     const posts: { url: string; body: { content: string; allowed_mentions: unknown; flags: number } }[] = [];
     const fetcher = (async (url: string, init?: RequestInit) => { posts.push({ url, body: JSON.parse(String(init?.body)) }); return new Response("{}"); }) as unknown as typeof fetch;
     const admin = (await db.query("INSERT INTO app_members (id,discord_id,username,role) VALUES ($1,'111','leader','ADMIN') RETURNING id", [randomUUID()]))[0].id;
-    await db.query("INSERT INTO app_members (id,discord_id,username,role,holiday_until) VALUES ($1,'222','away','ADMIN','2026-12-31')", [randomUUID()]);
     await db.query("INSERT INTO app_members (id,discord_id,username,role) VALUES ($1,'333','member','MEMBER')", [randomUUID()]);
     const send = (now: string, tasks: LeadershipTask[]) => sendLeadershipReminder({ db, fetcher, now: new Date(now), tasks });
     const last = () => posts[posts.length - 1].body;
 
     // Sunday: vials for the race week that ends Monday 00:00 UTC.
     const sunday = "2026-10-18T10:00:00Z";
-    assert.deepEqual(await send(sunday, ["vials"]), { posted: true, missing: ["vials"], pinged: 1 });
+    assert.deepEqual(await send(sunday, ["vials"]), { posted: true, missing: ["vials"] });
     assert.match(posts[0].url, /channels\/1504758222974746645\/messages/);
-    // Only admins are pinged, not the one on holiday or ordinary members, and never roles.
-    assert.deepEqual(last().allowed_mentions, { parse: [], users: ["111"] });
-    assert.match(last().content, /^📌 \*\*Leadership reminder\*\*\n<@111>\n/);
+    // Nobody is pinged in #the-dictators-den: no one is mentioned (not even the admins), nothing can
+    // ping (members, roles, @everyone or @here), and the post is silent (4096) with no link previews (4).
+    assert.deepEqual(last().allowed_mentions, { parse: [] });
+    assert.match(last().content, /^📌 \*\*Leadership reminder\*\*\n\n🧪 \*\*Clan tech vial donations\*\*/);
     assert.match(last().content, /vial donations[^\n]*https:\/\/tracker\.example\/vial-donations/);
-    assert.doesNotMatch(last().content, /<@222>|<@333>|Clan war results/);
-    assert.equal(last().flags, 4);
+    assert.doesNotMatch(last().content, /<@|@everyone|@here|Clan war results/);
+    assert.equal(last().flags, 4 | 4096);
     await db.query("INSERT INTO war_results (id, week_start, label, created_by, kind) VALUES ($1, '2026-10-12', '', $2, 'vials')", [randomUUID(), admin]);
     assert.equal((await send(sunday, ["vials"])).posted, false);
 
@@ -110,6 +110,12 @@ test("leadership reminders ping the Clan Hub admins, only when a job is still un
     assert.equal((await send("2026-10-25T21:00:00Z", ["warday"])).posted, false);
     assert.equal((await send("2026-10-26T10:00:00Z", ["warday"])).posted, false);
     assert.equal(posts.length, 5);
+    // Every kind of leadership reminder (vials, war results, clan days, daily points) pings nobody.
+    for (const { body } of posts) {
+      assert.deepEqual(body.allowed_mentions, { parse: [] });
+      assert.equal(body.flags, 4 | 4096);
+      assert.doesNotMatch(body.content, /<@/);
+    }
   } finally {
     if (previous === undefined) delete process.env.DISCORD_BOT_TOKEN; else process.env.DISCORD_BOT_TOKEN = previous;
     await db.close();
