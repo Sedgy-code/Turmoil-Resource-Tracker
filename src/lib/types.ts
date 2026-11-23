@@ -438,13 +438,28 @@ export interface SpendingOrderResponse {
   /** Leaders only: the Discord forum post. */
   post?: { enabled: boolean; configured: boolean; openDays: number[] };
 }
+/** The #spending-order post's embed (a Discord card), drawn the same way in the leaders' preview. */
+export interface SpendingPostEmbed {
+  color: number;
+  author: { name: string; iconUrl: string; url: string };
+  title: string;
+  url: string;
+  description: string;
+  /** A field with the name "\u200b" carries on the list above it. */
+  fields: { name: string; value: string }[];
+  footer: string;
+  button: { label: string; url: string };
+}
 export interface SpendingPostPreview {
   /** The clan day the post is for: the next one due (tomorrow's, or today's), else the next clan day. */
   day: number | null;
   /** It can go up now: posts go up the day before their clan day. */
   due: boolean;
+  /** The forum post's title. */
   title: string;
+  /** The line above the embed. */
   content: string;
+  embed: SpendingPostEmbed | null;
   enabled: boolean;
   /** That day's post is already up in Discord. */
   posted: boolean;

@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Check, ChevronsUp, Eye, EyeOff, Hand, Lock, LoaderCircle, Send, Star, Target } from "lucide-react";
+import { Check, ChevronsUp, ExternalLink, Eye, EyeOff, Hand, Lock, LoaderCircle, RefreshCw, Send, Star, Target } from "lucide-react";
 import { errorText } from "@/lib/error-text";
 import { useLanguage } from "@/lib/i18n";
 import { numberFormat } from "@/lib/resources";
 import { ASCEND_LEVEL, SPEND_INFO, SPEND_RESOURCES } from "@/lib/spending-order";
-import type { AscendCheck, DashboardResponse, SpendingOrderResponse, SpendingPostPreview, SpendOrder, SpendResource, SpendRow } from "@/lib/types";
+import type { AscendCheck, DashboardResponse, SpendingOrderResponse, SpendingPostEmbed, SpendingPostPreview, SpendOrder, SpendResource, SpendRow } from "@/lib/types";
 import { RankBadge } from "./contribution-cards";
 import { TermHelp } from "./first-visit";
 import { MemberAvatar, MemberName } from "./member-identity";
@@ -160,7 +160,28 @@ function DiscordText({ text }: { text: string }) {
     : plain(part))}</>;
 }
 
-/** Leaders: switch the #spending-order post on or off, see exactly what it will say, or post today's now. */
+/** The post as Discord draws it: the line above, then the embed card and its Open button. */
+function EmbedPreview({ content, embed }: { content: string; embed: SpendingPostEmbed }) {
+  return <div className="spend-discord">
+    {content && <p className="spend-discord-content"><DiscordText text={content} /></p>}
+    <div className="spend-embed" style={{ borderInlineStartColor: `#${embed.color.toString(16).padStart(6, "0")}` }}>
+      <span className="spend-embed-author">
+        {/* eslint-disable-next-line @next/next/no-img-element -- the same small icon Discord shows */}
+        <img src={embed.author.iconUrl} alt="" width={20} height={20} />{embed.author.name}
+      </span>
+      <strong className="spend-embed-title">{embed.title}</strong>
+      <p className="spend-embed-text"><DiscordText text={embed.description} /></p>
+      {embed.fields.map((field, index) => <div key={index} className="spend-embed-field">
+        {field.name !== "\u200b" && <strong>{field.name}</strong>}
+        <p className="spend-embed-text"><DiscordText text={field.value} /></p>
+      </div>)}
+      <small className="spend-embed-footer">{embed.footer}</small>
+    </div>
+    <span className="spend-embed-button">{embed.button.label}<ExternalLink size={13} aria-hidden="true" /></span>
+  </div>;
+}
+
+/** Leaders: switch the #spending-order post on or off, see exactly what it will say, post the next one now, or update the posts that are up. */
 function PostPanel({ order, notify, onChange }: { order: SpendingOrderResponse; notify: (message: string, error?: boolean) => void; onChange: (next: SpendingOrderResponse) => void }) {
   const { t } = useLanguage();
   const [preview, setPreview] = useState<SpendingPostPreview | null>(null);
@@ -176,6 +197,13 @@ function PostPanel({ order, notify, onChange }: { order: SpendingOrderResponse; 
     try {
       onChange(await request<SpendingOrderResponse>("/api/spending-order", { method: "PUT", body: JSON.stringify({ postEnabled: !post.enabled }) }));
       notify(t(post.enabled ? "Daily post switched off." : "Daily post switched on."));
+    } catch (error) { notify(t(errorText(error)), true); } finally { setBusy(false); }
+  }
+  async function updateNow() {
+    setBusy(true);
+    try {
+      setPreview(await request<SpendingPostPreview>("/api/spending-order/post", { method: "PATCH", body: "{}" }));
+      notify(t("The post now shows the latest order."));
     } catch (error) { notify(t(errorText(error)), true); } finally { setBusy(false); }
   }
   async function postNow() {
@@ -202,6 +230,7 @@ function PostPanel({ order, notify, onChange }: { order: SpendingOrderResponse; 
       <button type="button" className="planning-button planning-button-subtle" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? <EyeOff size={15} /> : <Eye size={15} />}{t(open ? "Hide preview" : "Show preview")}</button>
       {post.enabled && preview?.due && !preview.posted && <button type="button" className="planning-button" disabled={busy || !post.configured} onClick={() => void postNow()}>{busy ? <LoaderCircle size={15} className="spin" /> : <Send size={15} />}{t("Post Day {day} now", { day: preview.day ?? "" })}</button>}
       {preview?.posted && <span className="planning-chip"><Check size={13} />{t("Day {day}’s post is up.", { day: preview.day ?? "" })}</span>}
+      {preview?.posted && <button type="button" className="planning-button planning-button-subtle" disabled={busy || !post.configured} onClick={() => void updateNow()}>{busy ? <LoaderCircle size={15} className="spin" /> : <RefreshCw size={15} />}{t("Update the post")}</button>}
     </div>
     {open && (preview
       ? preview.day === null
@@ -209,7 +238,7 @@ function PostPanel({ order, notify, onChange }: { order: SpendingOrderResponse; 
         : <figure className="spend-post-preview">
           <figcaption>{t("Preview for Day {day}", { day: preview.day })}</figcaption>
           <strong>{preview.title}</strong>
-          <pre><DiscordText text={preview.content} /></pre>
+          {preview.embed ? <EmbedPreview content={preview.content} embed={preview.embed} /> : <pre><DiscordText text={preview.content} /></pre>}
         </figure>
       : <p className="spend-post-empty"><LoaderCircle size={15} className="spin" /></p>)}
   </section>;

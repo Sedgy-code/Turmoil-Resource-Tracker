@@ -9,8 +9,8 @@ import { initializeSchema, openDatabase, type Database } from "../src/lib/server
 import { ApiError } from "../src/lib/server/errors";
 import { memberFromRow } from "../src/lib/server/mappers";
 import {
-  getSpendingOrder, plainName, postSpendingNow, spendingPostContent, spendingPostPreview,
-  spendingPostTitle, syncSpendingPosts, updateSpendingSettings,
+  getSpendingOrder, plainName, postSpendingNow, spendingPost, spendingPostPreview,
+  spendingPostTitle, syncSpendingPosts, updateSpendingPostsNow, updateSpendingSettings,
 } from "../src/lib/server/spending-order";
 import { spendSettingsSchema } from "../src/lib/server/validation";
 
@@ -100,35 +100,54 @@ test("snipers go first, then the biggest stockpile; members away are skipped", (
   assert.deepEqual(later.rows.map((row) => [row.member.username, row.place]), [["Di", 1], ["Bo", 2], ["Ed", 3], ["Ana", 4], ["Cy", 5]]);
 });
 
-test("the post lists the order in English with names only, never pinging anyone", () => {
+test("the post is an embed like the app's table, in English, never pinging anyone", () => {
   assert.equal(spendingPostTitle(3, new Date("2026-11-26T00:00:00Z")), "Day 3 – Skills and Pets · Thu 26 Nov");
   assert.equal(spendingPostTitle(2, new Date("2026-11-25T00:00:00Z")), "Day 2 – Mounts · Wed 25 Nov");
   assert.equal(plainName("*Star*_x @everyone"), "\\*Star\\*\\_x @\u200beveryone");
-  const members = [person("a", "Ana"), person("b", "Bo"), person("c", "Cy", "2026-11-30")];
+  const members = [person("a", "Ana"), person("b", "Bo"), person("c", "Cy", "2026-11-30"), person("d", "Di"), person("e", "Ed")];
   const line = buildOrder({
-    resource: "skills", members, entries: [entry("a", { skillTickets: 50_000 }), entry("b", { skillTickets: 90_000 }), entry("c", { skillTickets: 1_000 })],
-    rates: DEFAULT_WAR_RATES, ascending: new Map(), snipers: new Set(["a"]), date: "2026-11-26", day: 3, today: true,
+    resource: "skills", members, rates: DEFAULT_WAR_RATES, ascending: new Map(), snipers: new Set(["a"]), date: "2026-11-26", day: 3, today: true,
+    entries: [
+      entry("a", { skillTickets: 50_000 }), entry("b", { skillTickets: 90_000 }), entry("c", { skillTickets: 1_000 }),
+      entry("d", { skillTickets: 30_000 }), entry("e", { skillTickets: 20_000 }, { skillLevel: 82 }),
+    ],
   });
-  const text = spendingPostContent(3, [line], "https://tracker.example/spending-order");
-  assert.match(text, /Spending order – Day 3 \(clan day\)\*\*\nDay 3 is on now\. Spend in this order\.\n/);
-  assert.match(text, /🎟️ \*\*Skills\*\*\n1\. 🎯 Ana\n2\. Bo\n/);
-  assert.doesNotMatch(text, /Cy/); // away: skipped
-  assert.match(text, /🎯 = in the Day 3 snipe, so they go first\./);
+  const { content, embed } = spendingPost(3, [line], "https://tracker.example");
+  assert.equal(content, "Find your place below, and ask questions here.");
+  assert.equal(embed.title, "📋 Spending order – Day 3 (clan day)");
+  assert.equal(embed.url, "https://tracker.example/spending-order");
+  assert.equal(embed.author.iconUrl, "https://tracker.example/app-icons/icon-192.png");
+  assert.equal(embed.description, "Day 3 is on now. Spend in this order.\nBiggest stockpiles first, counted in war points.");
+  // Like the app: place, name, war points and the ascend check. Cy is away, so skipped.
+  assert.deepEqual(embed.fields, [{
+    name: "🎟️ Skills · 4 in line",
+    value: [
+      "1. 🎯 Ana · 281.3K pts · ✅ Legendary",
+      "2. Bo · 506.3K pts · ✅ Legendary",
+      "3. Di · 168.8K pts · ⏳ needs 19.6K",
+      "4. Ed · 112.5K pts · 🔒 Lv 82",
+    ].join("\n"),
+  }]);
+  assert.equal(embed.footer, "✅ ready to ascend · ⏳ not enough yet · 🔒 summon level under 100 · 🎯 in the Day 3 snipe");
+  assert.deepEqual(embed.button, { label: "Open the Spending Order", url: "https://tracker.example/spending-order" });
   // Up the day before: it says when the day starts, and that the order will update.
-  const early = spendingPostContent(3, [line], "https://tracker.example/spending-order", new Date("2026-11-26T00:00:00Z"));
-  assert.match(early, /\nDay 3 starts 00:00 UTC Thu 26 Nov\. The order updates when it starts\.\n/);
-  assert.doesNotMatch(early, /is on now/);
-  assert.doesNotMatch(text, /<@|Your turn|I'm done/);
-  assert.doesNotMatch(text, /[\u3040-\u30ff\u4e00-\u9fff\uac00-\ud7af]/u);
-  // A long order is cut to fit one Discord message, saying how many more there are.
+  const early = spendingPost(3, [line], "https://tracker.example", new Date("2026-11-26T00:00:00Z")).embed;
+  assert.match(early.description, /^Day 3 starts 00:00 UTC Thu 26 Nov\. The order updates when it starts\.\n/);
+  const everything = JSON.stringify({ content, embed });
+  assert.doesNotMatch(everything, /<@|Your turn|I'm done/);
+  assert.doesNotMatch(everything, /[\u3040-\u30ff\u4e00-\u9fff\uac00-\ud7af]/u);
+  // A long order fits Discord's limits: fields of up to 1,024 characters, and the rest counted.
   const many = Array.from({ length: 120 }, (_, index) => person(`m${index}`, `Member number ${index} with a long name`));
   const long = buildOrder({
     resource: "skills", members: many, entries: many.map((member, index) => entry(member.id, { skillTickets: 10_000 + index })),
     rates: DEFAULT_WAR_RATES, ascending: new Map(), snipers: new Set(), date: "2026-11-26", day: 3, today: true,
   });
-  const cut = spendingPostContent(3, [long], "https://tracker.example/spending-order");
-  assert.ok(cut.length <= 2000);
-  assert.match(cut, /\+\d+ more on the Clan Hub/);
+  const cut = spendingPost(3, [long], "https://tracker.example").embed;
+  const size = cut.title.length + cut.description.length + cut.footer.length + cut.author.name.length + cut.fields.reduce((total, field) => total + field.name.length + field.value.length, 0);
+  assert.ok(size <= 6000 && cut.fields.length <= 25 && cut.fields.every((field) => field.value.length <= 1024 && field.name.length > 0), `size ${size}`);
+  assert.equal(cut.fields[0].name, "🎟️ Skills · 120 in line");
+  assert.equal(cut.fields[1].name, "\u200b");
+  assert.match(cut.fields[cut.fields.length - 1].value, /\n\+\d+ more on the Clan Hub$/);
 });
 
 test("only the post switch can be sent", () => {
@@ -205,7 +224,13 @@ test("each clan day's post goes up the day before, updates when the day starts, 
     calls.push({ url, method: String(init.method ?? "GET"), body: init.body ? JSON.parse(String(init.body)) : {} });
     return new Response(JSON.stringify(url.endsWith("/threads") ? { id: String(++threads) } : {}), { status: 200 });
   }) as unknown as typeof fetch;
-  const content = (index: number) => String((calls[index].body.message as { content?: string } | undefined)?.content ?? calls[index].body.content);
+  type Sent = { content?: string; flags?: number; allowed_mentions?: unknown; embeds?: { description: string; url: string; fields: { name: string; value: string }[] }[]; components?: { components: { url: string }[] }[] };
+  const sent = (index: number) => (calls[index].body.message ?? calls[index].body) as Sent;
+  // The embed as one text: description, then each field's name and list.
+  const content = (index: number) => {
+    const embed = sent(index).embeds![0];
+    return [embed.description, ...embed.fields.map((field) => `${field.name}\n${field.value}`)].join("\n");
+  };
 
   // Switched off: nothing is posted, and leaders can't post by hand.
   assert.deepEqual(await syncSpendingPosts({ db, fetcher, now: DAY_1 }), { closed: 0, refreshed: null, opened: [], skipped: "switched off" });
@@ -213,7 +238,7 @@ test("each clan day's post goes up the day before, updates when the day starts, 
   const preview = await spendingPostPreview(leader, db, DAY_1);
   assert.deepEqual([preview.day, preview.due, preview.posted, preview.enabled], [1, true, false, false]);
   assert.equal(preview.title, "Day 1 – Skills · Tue 24 Nov");
-  assert.match(preview.content, /Day 1 is on now/);
+  assert.match(preview.embed!.description, /Day 1 is on now/);
   assert.equal(calls.length, 0);
 
   // Switched on during Day 1, whose post never went up: it goes up late, already "on now". Day 2 isn't a clan day.
@@ -222,8 +247,11 @@ test("each clan day's post goes up the day before, updates when the day starts, 
   assert.deepEqual(calls.map((call) => [call.method, call.url]), [["POST", "https://discord.com/api/v10/channels/555/threads"]]);
   assert.equal(calls[0].body.name, "Day 1 – Skills · Tue 24 Nov");
   assert.equal(calls[0].body.auto_archive_duration, 4320);
-  assert.deepEqual((calls[0].body.message as { allowed_mentions: unknown }).allowed_mentions, { parse: [] });
-  assert.match(content(0), /Day 1 is on now\.[\s\S]*🎟️ \*\*Skills\*\*\n1\. Ana\n2\. Bo\n3\. Cy/);
+  assert.deepEqual(sent(0).allowed_mentions, { parse: [] });
+  assert.equal(sent(0).flags, undefined); // embeds on
+  assert.equal(sent(0).content, "Find your place below, and ask questions here.");
+  assert.equal(sent(0).components![0].components[0].url, "https://tracker.example/spending-order");
+  assert.match(content(0), /Day 1 is on now\.[\s\S]*🎟️ Skills · 3 in line\n1\. Ana · [^\n]+\n2\. Bo · [^\n]+\n3\. Cy · /);
 
   // Day 2: Day 1's post closes, and Day 3's goes up the day before, with Bo (in the Day 3 snipe) first.
   calls.length = 0;
@@ -235,9 +263,9 @@ test("each clan day's post goes up the day before, updates when the day starts, 
   assert.deepEqual({ ...calls[0].body }, { archived: true, locked: true });
   assert.equal(calls[1].body.name, "Day 3 – Skills and Pets · Thu 26 Nov");
   assert.match(content(1), /Day 3 starts 00:00 UTC Thu 26 Nov\. The order updates when it starts\./);
-  assert.match(content(1), /🎟️ \*\*Skills\*\*\n1\. 🎯 Bo\n2\. Ana\n3\. Cy/);
-  assert.match(content(1), /🥚 \*\*Pets\*\*\n1\. Ana\n/);
-  assert.match(content(1), /https:\/\/tracker\.example\/spending-order/);
+  assert.match(content(1), /🎟️ Skills · 3 in line\n1\. 🎯 Bo · [^\n]+\n2\. Ana · [^\n]+\n3\. Cy · /);
+  assert.match(content(1), /🥚 Pets · \d in line\n1\. Ana · /);
+  assert.equal(sent(1).embeds![0].url, "https://tracker.example/spending-order");
   // The midday run (or a second run) opens nothing new, and there's nothing left to post by hand.
   calls.length = 0;
   assert.deepEqual(await syncSpendingPosts({ db, fetcher, now: new Date("2026-11-25T12:05:00Z") }), { closed: 0, refreshed: null, opened: [] });
@@ -246,13 +274,21 @@ test("each clan day's post goes up the day before, updates when the day starts, 
   const upNow = await spendingPostPreview(leader, db, DAY_2);
   assert.deepEqual([upNow.day, upNow.due, upNow.posted], [3, true, true]);
   assert.deepEqual((await getSpendingOrder(leader, db, DAY_2)).post?.openDays, [3]);
+  // A leader can update the post with the latest order (only leaders); the start-of-day update still comes.
+  const bo = (await db.query("SELECT * FROM app_members WHERE username = 'Bo'")).map(memberFromRow)[0];
+  await assert.rejects(updateSpendingPostsNow(bo, { db, fetcher, now: DAY_2 }), (error) => error instanceof ApiError && error.code === "ADMIN_REQUIRED");
+  const updated = await updateSpendingPostsNow(leader, { db, fetcher, now: DAY_2 });
+  assert.deepEqual([updated.day, updated.posted], [3, true]);
+  assert.deepEqual(calls.map((call) => [call.method, call.url]), [["PATCH", "https://discord.com/api/v10/channels/702/messages/702"]]);
+  assert.equal(sent(0).flags, 0); // also switches embeds back on for posts made before the embed
+  assert.match(content(0), /Day 3 starts 00:00 UTC Thu 26 Nov/);
 
   // Day 3 starts: the post gets the order as it stands now, once.
   calls.length = 0;
   assert.deepEqual(await syncSpendingPosts({ db, fetcher, now: DAY_3 }), { closed: 0, refreshed: 3, opened: [] });
   assert.deepEqual(calls.map((call) => [call.method, call.url]), [["PATCH", "https://discord.com/api/v10/channels/702/messages/702"]]);
   assert.match(content(0), /Day 3 is on now\. Spend in this order\./);
-  assert.deepEqual(calls[0].body.allowed_mentions, { parse: [] });
+  assert.deepEqual(sent(0).allowed_mentions, { parse: [] });
   calls.length = 0;
   assert.deepEqual(await syncSpendingPosts({ db, fetcher, now: new Date("2026-11-26T12:05:00Z") }), { closed: 0, refreshed: null, opened: [] });
   assert.equal(calls.length, 0);
@@ -261,6 +297,7 @@ test("each clan day's post goes up the day before, updates when the day starts, 
   assert.deepEqual(await syncSpendingPosts({ db, fetcher, now: DAY_4 }), { closed: 1, refreshed: null, opened: [] });
   assert.deepEqual(calls.map((call) => [call.method, call.url, call.body]), [["PATCH", "https://discord.com/api/v10/channels/702", { archived: true, locked: true }]]);
   assert.deepEqual((await getSpendingOrder(leader, db, DAY_4)).post?.openDays, []);
+  await assert.rejects(updateSpendingPostsNow(leader, { db, fetcher, now: DAY_4 }), (error) => error instanceof ApiError && error.code === "NO_SPENDING_POST");
 
   // Day 7 (Monday): the next war's Day 1 post goes up the day before. If Discord says no, nothing is
   // kept, so the next run (or a leader's Post now) tries again.

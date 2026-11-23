@@ -1,6 +1,6 @@
 import { currentWeek } from "../resources";
 import { buildOrder, orderDay, orderWeek, resourcesOnDay, SPEND_INFO, SPEND_RESOURCES } from "../spending-order";
-import type { AscensionPillar, Member, ResourceEntry, SpendingOrderResponse, SpendingPostPreview, SpendOrder, SpendResource, WarActivity, WarRates } from "../types";
+import type { AscendCheck, AscensionPillar, Member, ResourceEntry, SpendingOrderResponse, SpendingPostEmbed, SpendingPostPreview, SpendOrder, SpendResource, WarActivity, WarRates } from "../types";
 import { parsePillars } from "./ascensions";
 import { appUrl, isDemo } from "./config";
 import { database, type Database, type SqlConnection } from "./db";
@@ -190,8 +190,6 @@ export async function updateSpendingSettings(actor: Member, input: { postEnabled
  * ------------------------------------------------------------------------------------------- */
 
 const RESOURCE_EMOJI: Record<SpendResource, string> = { skills: "🎟️", pets: "🥚", mounts: "🐎" };
-/** Discord messages are capped at 2,000 characters. */
-const POST_LIMIT = 2000;
 
 /** Names exactly as written: Discord formatting characters are shown, not applied. */
 export function plainName(name: string): string {
@@ -211,40 +209,97 @@ function utcStart(date: Date): string {
   return `00:00 UTC ${new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" }).format(date)}`;
 }
 
+/** The Hub's gold, so the post looks like the app. */
+const EMBED_COLOR = 0xe6bd59;
+/** Discord's limits: 1,024 characters a field, 25 fields, and 6,000 characters across the embed (some room kept). */
+const FIELD_LIMIT = 1024;
+const MAX_FIELDS = 25;
+const EMBED_LIMIT = 5800;
+
+/** War points kept short, as in the app: 1.9M, 64.2K. */
+function shortNumber(value: number): string {
+  return new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(Math.round(value));
+}
+
+/** The app's "Ascend?" column in a few characters. */
+function checkMark(check: AscendCheck): string {
+  if (check.state === "ready") return ` · ✅ ${check.reaches}`;
+  if (check.state === "short") return ` · ⏳ needs ${shortNumber(check.missing)}`;
+  if (check.state === "level") return ` · 🔒 Lv ${check.level}`;
+  return "";
+}
+
+function embedSize(embed: SpendingPostEmbed): number {
+  return embed.author.name.length + embed.title.length + embed.description.length + embed.footer.length
+    + embed.fields.reduce((total, field) => total + field.name.length + field.value.length, 0);
+}
+
+/** Lines packed into as few fields as fit: the first is named, the rest carry on without a name. */
+function packFields(name: string, lines: string[]): { name: string; value: string }[] {
+  const fields: { name: string; value: string }[] = [];
+  let value = "";
+  for (const line of lines) {
+    if (value && value.length + 1 + line.length > FIELD_LIMIT) {
+      fields.push({ name: fields.length ? "\u200b" : name, value });
+      value = "";
+    }
+    value = value ? `${value}\n${line}` : line.slice(0, FIELD_LIMIT);
+  }
+  fields.push({ name: fields.length ? "\u200b" : name, value: value || "Nobody has any saved." });
+  return fields;
+}
+
 /**
- * The post's text: each line that scores that day, numbered, biggest stockpile first. The whole order
- * when it fits in one Discord message; otherwise the top of each line and how many more there are.
- * With `starts`, the post is up before the day and says when it starts; without, the day is on now.
+ * The post, like the app's table: each line that scores that day, with each member's place, name,
+ * war points and ascend check. The whole order when it fits in one Discord embed; otherwise the top
+ * of each line and how many more there are. With `starts`, the post is up before the day and says
+ * when it starts; without, the day is on now.
  */
-export function spendingPostContent(day: number, orders: SpendOrder[], link: string, starts?: Date): string {
+export function spendingPost(day: number, orders: SpendOrder[], hub: string, starts?: Date): { content: string; embed: SpendingPostEmbed } {
   const shown = orders.filter((order) => resourcesOnDay(day).includes(order.resource));
   const snipers = shown.some((order) => order.rows.some((row) => row.sniper && row.state === "line"));
-  const write = (limit: number) => {
-    const blocks = shown.map((order) => {
-      const line = order.rows.filter((row) => row.state === "line");
-      const lines = [`${RESOURCE_EMOJI[order.resource]} **${SPEND_INFO[order.resource].label}**`];
-      if (!line.length) lines.push("Nobody has any saved.");
-      line.slice(0, limit).forEach((row) => lines.push(`${row.place}. ${row.sniper ? "🎯 " : ""}${plainName(row.member.username)}`));
-      if (line.length > limit) lines.push(`+${line.length - limit} more on the Clan Hub`);
-      return lines.join("\n");
-    });
-    return [
-      `📋 **Spending order – Day ${day} (clan day)**`,
+  const link = `${hub}/spending-order`;
+  const write = (limit: number): SpendingPostEmbed => ({
+    color: EMBED_COLOR,
+    author: { name: "Turmoil Clan Hub", iconUrl: `${hub}/app-icons/icon-192.png`, url: link },
+    title: `📋 Spending order – Day ${day} (clan day)`,
+    url: link,
+    description: [
       starts ? `Day ${day} starts ${utcStart(starts)}. The order updates when it starts.` : `Day ${day} is on now. Spend in this order.`,
-      "Biggest stockpiles first. Find your place, and ask questions here.",
-      "",
-      blocks.join("\n\n"),
-      "",
-      ...(snipers ? [`🎯 = in the Day ${day} snipe, so they go first.`] : []),
-      `Full order and your place: ${link}`,
-    ].join("\n");
+      "Biggest stockpiles first, counted in war points.",
+    ].join("\n"),
+    fields: shown.flatMap((order) => {
+      const line = order.rows.filter((row) => row.state === "line");
+      const lines = line.slice(0, limit).map((row) => `${row.place}. ${row.sniper ? "🎯 " : ""}${plainName(row.member.username)} · ${shortNumber(row.points)} pts${checkMark(row.check)}`);
+      if (line.length > limit) lines.push(`+${line.length - limit} more on the Clan Hub`);
+      return packFields(`${RESOURCE_EMOJI[order.resource]} ${SPEND_INFO[order.resource].label} · ${line.length} in line`, lines);
+    }),
+    footer: ["✅ ready to ascend", "⏳ not enough yet", "🔒 summon level under 100", ...(snipers ? [`🎯 in the Day ${day} snipe`] : [])].join(" · "),
+    button: { label: "Open the Spending Order", url: link },
+  });
+  let embed = write(60);
+  for (let limit = 55; limit >= 5 && (embedSize(embed) > EMBED_LIMIT || embed.fields.length > MAX_FIELDS); limit -= 5) embed = write(limit);
+  return { content: "Find your place below, and ask questions here.", embed };
+}
+
+/** The post as Discord's API takes it. No pings (leadership asked for names only). */
+function discordMessage(post: { content: string; embed: SpendingPostEmbed }) {
+  const { embed } = post;
+  return {
+    content: post.content,
+    embeds: [{
+      color: embed.color,
+      author: { name: embed.author.name, icon_url: embed.author.iconUrl, url: embed.author.url },
+      title: embed.title,
+      url: embed.url,
+      description: embed.description,
+      fields: embed.fields.slice(0, MAX_FIELDS).map((field) => ({ name: field.name, value: field.value, inline: false })),
+      footer: { text: embed.footer },
+    }],
+    // A link button (style 5) opens the Hub; it needs nothing from the bot when tapped.
+    components: [{ type: 1, components: [{ type: 2, style: 5, label: embed.button.label, url: embed.button.url }] }],
+    allowed_mentions: { parse: [] },
   };
-  for (let limit = 60; limit > 5; limit -= 5) {
-    const text = write(limit);
-    if (text.length <= POST_LIMIT) return text;
-  }
-  const text = write(5);
-  return text.length > POST_LIMIT ? `${text.slice(0, POST_LIMIT - 1)}…` : text;
 }
 
 async function discordReason(response: Response): Promise<string> {
@@ -253,17 +308,13 @@ async function discordReason(response: Response): Promise<string> {
   return `HTTP ${response.status}`;
 }
 
-interface PostDraft { day: number; week: string; title: string; content: string }
+interface PostDraft { day: number; week: string; title: string; content: string; embed: SpendingPostEmbed }
 
 /** A clan day's post as it would go up now: before the day it says when it starts, on the day that it's on. */
 function draftFor(context: Context, day: number): PostDraft {
   const starts = dayStart(context.week, day);
-  return {
-    day,
-    week: context.week,
-    title: spendingPostTitle(day, starts),
-    content: spendingPostContent(day, buildOrders(context, day), `${appUrl()}/spending-order`, dayIsOn(context, day) ? undefined : starts),
-  };
+  const post = spendingPost(day, buildOrders(context, day), appUrl(), dayIsOn(context, day) ? undefined : starts);
+  return { day, week: context.week, title: spendingPostTitle(day, starts), ...post };
 }
 
 /**
@@ -287,7 +338,7 @@ export async function spendingPostPreview(actor: Member, db?: Database | SqlConn
   await requireLeader(connection, actor.id);
   const { draft, due, posted } = await previewFor(connection, now);
   const settings = await spendingSettings(connection);
-  return { day: draft?.day ?? null, due, title: draft?.title ?? "", content: draft?.content ?? "", enabled: settings.postEnabled, posted };
+  return { day: draft?.day ?? null, due, title: draft?.title ?? "", content: draft?.content ?? "", embed: draft?.embed ?? null, enabled: settings.postEnabled, posted };
 }
 
 /** Opens a clan day's post. Returns false when it's already up (or another run is opening it). */
@@ -302,9 +353,8 @@ async function openPost(connection: SqlConnection, token: string, fetcher: typeo
     const response = await fetcher(`${DISCORD_API}/channels/${channel}/threads`, {
       method: "POST",
       headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
-      // Nobody is pinged (leadership asked for names only); flags 4 = no link previews. Up to two days
-      // open, so Discord's own auto-archive is set past that (3 days); the job closes it when the day ends.
-      body: JSON.stringify({ name: draft.title, auto_archive_duration: 4320, message: { content: draft.content, allowed_mentions: { parse: [] }, flags: 4 } }),
+      // Up to two days open, so Discord's own auto-archive is set past that (3 days); the job closes it when the day ends.
+      body: JSON.stringify({ name: draft.title, auto_archive_duration: 4320, message: discordMessage(draft) }),
     });
     if (!response.ok) throw new ApiError(502, `Discord did not accept the post (${await discordReason(response)}).`, "SPENDING_POST_FAILED");
     const thread = (await response.json()) as { id?: unknown };
@@ -317,23 +367,24 @@ async function openPost(connection: SqlConnection, token: string, fetcher: typeo
   }
 }
 
-/**
- * When a clan day starts, its post (up since the day before) gets the order as it stands then:
- * resources, holidays and snipes may have changed. A forum post's first message has the post's id.
- */
+/** Rewrites a post's first message (a forum post's first message has the post's id). */
+async function editPost(thread: string, draft: PostDraft, token: string, fetcher: typeof fetch): Promise<void> {
+  const response = await fetcher(`${DISCORD_API}/channels/${thread}/messages/${thread}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
+    // flags 0: posts from before the embed had embeds switched off, so switch them back on.
+    body: JSON.stringify({ ...discordMessage(draft), flags: 0 }),
+  });
+  if (!response.ok) throw new ApiError(502, `Discord did not take the updated order (${await discordReason(response)}).`, "SPENDING_POST_FAILED");
+}
+
+/** When a clan day starts, its post (up since the day before) gets the order as it stands then: resources, holidays and snipes may have changed. */
 async function refreshTodaysPost(connection: SqlConnection, token: string, fetcher: typeof fetch, context: Context): Promise<number | null> {
   if (context.nextWar) return null;
   const rows = await connection.query("SELECT thread_id FROM spending_posts WHERE war_week = $1 AND war_day = $2 AND thread_id <> '' AND closed_at IS NULL AND refreshed_at IS NULL",
     [context.week, context.warDay]);
   if (!rows.length) return null;
-  const thread = String(rows[0].thread_id);
-  const draft = draftFor(context, context.warDay);
-  const response = await fetcher(`${DISCORD_API}/channels/${thread}/messages/${thread}`, {
-    method: "PATCH",
-    headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ content: draft.content, allowed_mentions: { parse: [] }, flags: 4 }),
-  });
-  if (!response.ok) throw new ApiError(502, `Discord did not take the updated order (${await discordReason(response)}).`, "SPENDING_POST_FAILED");
+  await editPost(String(rows[0].thread_id), draftFor(context, context.warDay), token, fetcher);
   await connection.query("UPDATE spending_posts SET refreshed_at = $3 WHERE war_week = $1 AND war_day = $2", [context.week, context.warDay, context.now.toISOString()]);
   return context.warDay;
 }
@@ -403,6 +454,25 @@ export async function postSpendingNow(actor: Member, dependencies: Dependencies 
   const day = due.find((item) => !posted.has(item));
   if (day === undefined || !(await openPost(connection, token, dependencies.fetcher ?? fetch, now, draftFor(context, day), dayIsOn(context, day)))) {
     throw new ApiError(409, "That day’s post is already up.", "SPENDING_POST_EXISTS");
+  }
+  return spendingPostPreview(actor, connection, now);
+}
+
+/** Leaders: rewrite the posts that are up with the order as it stands now. */
+export async function updateSpendingPostsNow(actor: Member, dependencies: Dependencies = {}): Promise<SpendingPostPreview> {
+  const connection = dependencies.db ?? await database();
+  const now = dependencies.now ?? new Date();
+  await requireLeader(connection, actor.id);
+  const token = botToken();
+  if (!token) throw new ApiError(503, "The Discord post isn’t set up yet.", "SPENDING_POST_NOT_CONFIGURED");
+  const context = await loadContext(connection, now);
+  const rows = await connection.query("SELECT war_day, thread_id FROM spending_posts WHERE war_week = $1 AND closed_at IS NULL AND thread_id <> '' ORDER BY war_day", [context.week]);
+  if (!rows.length) throw new ApiError(409, "There’s no post up to update.", "NO_SPENDING_POST");
+  for (const row of rows) {
+    const day = Number(row.war_day);
+    await editPost(String(row.thread_id), draftFor(context, day), token, dependencies.fetcher ?? fetch);
+    // Once its day is on, the post has that day's order, so the start-of-day update isn't needed.
+    if (dayIsOn(context, day)) await connection.query("UPDATE spending_posts SET refreshed_at = $3 WHERE war_week = $1 AND war_day = $2", [context.week, day, now.toISOString()]);
   }
   return spendingPostPreview(actor, connection, now);
 }

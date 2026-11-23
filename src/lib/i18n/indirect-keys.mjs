@@ -170,5 +170,5 @@ export const INDIRECT_KEYS = [
   // Spending order (src/lib/spending-order.ts, src/lib/server/spending-order.ts): the tab, rarities from the ascension guide, server messages
   "Spending Order", "Epic", "Legendary", "Ultimate", "Mythic",
   "Only leaders can change the spending order.", "The Discord post isn’t set up yet.",
-  "Switch the Discord post on first.", "There’s no clan day today or tomorrow, so there’s nothing to post yet.", "That day’s post is already up.", "Choose a setting to update.",
+  "Switch the Discord post on first.", "There’s no clan day today or tomorrow, so there’s nothing to post yet.", "That day’s post is already up.", "There’s no post up to update.", "Choose a setting to update.",
 ];
