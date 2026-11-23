@@ -320,6 +320,8 @@ CREATE INDEX IF NOT EXISTS snipe_assemblies_snipe_idx ON snipe_assemblies(snipe_
 -- A leader called the snipe off (not needed): it's archived and closed to answers and check-in.
 ALTER TABLE snipe_plans ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;
 ALTER TABLE snipe_plans ADD COLUMN IF NOT EXISTS cancelled_by TEXT REFERENCES app_members(id);
+-- The snipe's post in #snipe-chat (made when a leader plans it), so it can follow changes and a cancel.
+ALTER TABLE snipe_plans ADD COLUMN IF NOT EXISTS discord_message_id TEXT;
 -- The spending order (War → Spending order): the Discord post switch.
 CREATE TABLE IF NOT EXISTS spending_settings (
   id TEXT PRIMARY KEY,

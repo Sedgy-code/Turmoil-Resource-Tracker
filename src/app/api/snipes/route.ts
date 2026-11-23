@@ -2,7 +2,7 @@ import { after } from "next/server";
 import { requireMember } from "@/lib/server/auth";
 import { assertSameOrigin } from "@/lib/server/config";
 import { createSnipe, listSnipes } from "@/lib/server/planning";
-import { catchUpSnipeRoles } from "@/lib/server/snipe-discord";
+import { catchUpSnipeRoles, postSnipePlan } from "@/lib/server/snipe-discord";
 import { createSnipeSchema } from "@/lib/server/validation";
 import { errorResponse, privateResponse } from "@/lib/server/errors";
 export const runtime = "nodejs";
@@ -20,6 +20,9 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireMember();
-    return privateResponse({ plan: await createSnipe(actor, createSnipeSchema.parse(await request.json())) });
+    const plan = await createSnipe(actor, createSnipeSchema.parse(await request.json()));
+    // The new snipe goes up in #snipe-chat (no pings) once the leader has their answer.
+    after(() => postSnipePlan(plan.id).then(() => undefined));
+    return privateResponse({ plan });
   } catch (error) { return errorResponse(error); }
 }
