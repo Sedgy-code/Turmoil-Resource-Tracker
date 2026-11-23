@@ -338,6 +338,8 @@ function TrackerApp({ view }: { view: View }) {
   const [session, setSession] = useState<SessionResponse | null>(null);
   // Upcoming snipes this member hasn't said Yes or No to: a number on the Snipes tab.
   const snipesToAnswer = session?.snipesToAnswer ?? 0;
+  // A snipe is open (to come or on now): the Snipes tab glows so nobody misses it.
+  const snipeOpen = (session?.snipesOpen ?? 0) > 0;
   useOfflineSupport(session?.user?.id);
   const [sessionError, setSessionError] = useState("");
   const [week, setWeek] = useState(currentWeek());
@@ -615,13 +617,14 @@ function TrackerApp({ view }: { view: View }) {
                 <Link
                   href={VIEW_HREF[tabs[0].view]}
                   key={section}
-                  className={`nav-link ${active ? "active" : ""}`}
+                  className={`nav-link ${active ? "active" : ""}${section === "snipes" && snipeOpen ? " snipe-open" : ""}`}
                   aria-current={active ? "page" : undefined}
                   onClick={() => setMobileOpen(false)}
                 >
                   <NavIcon size={19} />
                   <span>{t(label)}</span>
                   {section === "snipes" && snipesToAnswer > 0 && <SnipeBadge count={snipesToAnswer} />}
+                  {section === "snipes" && snipeOpen && <span className="visually-hidden">{t("A snipe is open")}</span>}
                   {admin && (
                     <span className="nav-admin">
                       <ShieldCheck size={13} />
@@ -886,10 +889,11 @@ function TrackerApp({ view }: { view: View }) {
       </div>
       <nav className="bottom-bar" aria-label={t("Quick navigation")}>
         {SECTIONS.filter((entry) => !entry.admin).map(({ section, short, icon: NavIcon, tabs }) => (
-          <Link key={section} href={VIEW_HREF[tabs[0].view]} className={sectionOf(view).section === section ? "active" : ""} aria-current={sectionOf(view).section === section ? "page" : undefined}>
+          <Link key={section} href={VIEW_HREF[tabs[0].view]} className={[sectionOf(view).section === section ? "active" : "", section === "snipes" && snipeOpen ? "snipe-open" : ""].filter(Boolean).join(" ") || undefined} aria-current={sectionOf(view).section === section ? "page" : undefined}>
             <NavIcon size={20} />
             <span>{t(short)}</span>
             {section === "snipes" && snipesToAnswer > 0 && <SnipeBadge count={snipesToAnswer} />}
+            {section === "snipes" && snipeOpen && <span className="visually-hidden">{t("A snipe is open")}</span>}
           </Link>
         ))}
       </nav>

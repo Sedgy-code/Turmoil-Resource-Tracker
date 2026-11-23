@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { appUrl, configurationIssues, isDemo, isPreviewDeployment } from "@/lib/server/config";
 import { authenticatedMember, SESSION_COOKIE, sessionCookieOptions } from "@/lib/server/auth";
 import { errorResponse, privateResponse } from "@/lib/server/errors";
-import { snipesToAnswer } from "@/lib/server/planning";
+import { openSnipeCount, snipesToAnswer } from "@/lib/server/planning";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
@@ -17,9 +17,15 @@ export async function GET(request: NextRequest) {
     if (process.env.NODE_ENV === "production" && !isPreviewDeployment()) {
       try { canonicalOrigin = appUrl(); } catch { canonicalOrigin = undefined; }
     }
-    // The number on the Snipes tab; the page still loads if it can't be counted.
-    const snipeCount = user ? await snipesToAnswer(user.id).catch(() => 0) : 0;
-    const response = privateResponse({ user, demo, configured, canonicalOrigin, ...(snipeCount ? { snipesToAnswer: snipeCount } : {}) });
+    // The number on the Snipes tab, and whether it glows (a snipe is open); the page still loads if they can't be counted.
+    const [snipeCount, openCount] = user
+      ? await Promise.all([snipesToAnswer(user.id).catch(() => 0), openSnipeCount().catch(() => 0)])
+      : [0, 0];
+    const response = privateResponse({
+      user, demo, configured, canonicalOrigin,
+      ...(snipeCount ? { snipesToAnswer: snipeCount } : {}),
+      ...(openCount ? { snipesOpen: openCount } : {}),
+    });
     // Route responses can refresh cookies; server component renders cannot.
     // Only return the existing opaque token after authentication succeeds.
     if (user && token && !demo)

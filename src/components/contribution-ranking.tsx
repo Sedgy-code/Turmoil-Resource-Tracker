@@ -19,7 +19,7 @@ const METRIC_LABELS: Record<RankingMetric, string> = {
   clanDays: "Spent on clan days",
 };
 
-type Column = "rank" | "member" | "score" | "warPoints" | "vials" | "snipes" | "noShows" | "updates" | "clanDays" | "blackMarks" | "days" | "saved";
+type Column = "rank" | "member" | "score" | "warPoints" | "vials" | "snipes" | "updates" | "clanDays" | "blackMarks" | "days" | "saved";
 
 function scoreClass(score: number) {
   return score < 35 ? "rank-low" : score < 60 ? "rank-mid" : "rank-high";
@@ -50,7 +50,6 @@ export function ContributionRanking() {
     warPoints: (row) => row.warPoints,
     vials: (row) => row.vials,
     snipes: (row) => row.snipes,
-    noShows: (row) => row.noShows,
     updates: (row) => row.updates,
     clanDays: (row) => row.clanDayShare,
     blackMarks: (row) => row.blackMarks,
@@ -70,14 +69,14 @@ export function ContributionRanking() {
         <p>{t("Each member gets a score out of 100 from how they compare with everyone else. Lowest scores are at the top — talk to them first when you need space.")}</p>
         <ul className="rank-weights">{weights.map(([metric, weight]) => <li key={metric}><strong>{weight}%</strong> {t(METRIC_LABELS[metric])}</li>)}</ul>
         <p>{t("Vials: donating at least 80% of what a typical member gives earns full marks, as ascension bonuses differ (5% to 60%).")}</p>
-        <p>{t("Minus 40 for never signing in to the Clan Hub. Minus 5 for each snipe they said Yes to but missed (up to 15).")}</p>
+        <p>{t("Minus 40 for never signing in to the Clan Hub.")}</p>
         <p>{t("Minus 5 for each war where more than 10% of their war points came on days that weren’t clan days (a black mark, up to 15).")}</p>
         {missing.length > 0 && <p className="hoard-typical">{t("Not counted yet (no records): {parts}", { parts: missing.map((metric) => t(METRIC_LABELS[metric])).join(", ") })}</p>}
       </div>
       <div className="rank-controls">
         <button className="button subtle" onClick={() => downloadRows(`turmoil-ranking-${new Date().toISOString().slice(0, 10)}.csv`, [
-          ["Rank", "Member", "Score", "Penalty", "War points (avg)", "Wars played", "Vials donated", "Snipes (8 wk)", "No-shows", "Weekly updates", "On clan days (%)", "Black marks", "Strikes", "Holiday until", "Days in clan", "Joined Discord", "Last saved", "Never signed in"],
-          ...sorted.map((row) => [row.rank, row.member.username, row.score, row.penalty, row.warPoints === null ? "" : Math.round(row.warPoints), row.warsPlayed, row.vials ?? "", row.snipes, row.noShows, row.updates, row.clanDayShare === null ? "" : Math.round(row.clanDayShare * 100), row.blackMarks, row.member.strikes ?? 0, row.member.holidayUntil ?? "", row.daysInClan, row.member.discordJoinedAt?.slice(0, 10) ?? "", row.lastSavedAt ?? "", row.member.neverSignedIn ? "Yes" : ""]),
+          ["Rank", "Member", "Score", "Penalty", "War points (avg)", "Wars played", "Vials donated", "Snipes (8 wk)", "Weekly updates", "On clan days (%)", "Black marks", "Strikes", "Holiday until", "Days in clan", "Joined Discord", "Last saved", "Never signed in"],
+          ...sorted.map((row) => [row.rank, row.member.username, row.score, row.penalty, row.warPoints === null ? "" : Math.round(row.warPoints), row.warsPlayed, row.vials ?? "", row.snipes, row.updates, row.clanDayShare === null ? "" : Math.round(row.clanDayShare * 100), row.blackMarks, row.member.strikes ?? 0, row.member.holidayUntil ?? "", row.daysInClan, row.member.discordJoinedAt?.slice(0, 10) ?? "", row.lastSavedAt ?? "", row.member.neverSignedIn ? "Yes" : ""]),
         ])}><ArrowDownToLine size={15} />{t("Export CSV")}</button>
         <button className="button subtle" onClick={() => void load()} disabled={loading}><RefreshCw size={15} className={loading ? "spin" : undefined} />{t("Refresh")}</button>
       </div>
@@ -87,7 +86,7 @@ export function ContributionRanking() {
         <thead><tr>
           {header("rank", "#")}{header("member", t("Member"))}{header("score", t("Score"))}
           {header("warPoints", t("War points (avg)"))}{header("vials", t("Vials donated"))}{header("snipes", t("Snipes (8 wk)"))}
-          {header("noShows", t("No-shows"))}{header("updates", t("Weekly updates"))}{header("clanDays", t("On clan days"))}{header("blackMarks", t("Black marks"))}
+          {header("updates", t("Weekly updates"))}{header("clanDays", t("On clan days"))}{header("blackMarks", t("Black marks"))}
           {header("days", t("Days in clan"))}{header("saved", t("Last saved"))}
         </tr></thead>
         <tbody>{sorted.map((row) => <tr key={row.member.id} {...fold.row(row.member.id)}>
@@ -98,7 +97,6 @@ export function ContributionRanking() {
           <td data-label={t("War points (avg)")}>{amount(row.warPoints)}{row.warPoints !== null && <small className="rank-sub">{t("{count} of {total} wars", { count: row.warsPlayed, total: data.records.wars })}</small>}</td>
           <td data-label={t("Vials donated")}>{amount(row.vials)}</td>
           <td data-label={t("Snipes (8 wk)")}>{row.snipes || "—"}</td>
-          <td data-label={t("No-shows")} className={row.noShows ? "hoard-up" : undefined}>{row.noShows || "—"}</td>
           <td data-label={t("Weekly updates")}>{row.updates} / 8</td>
           <td data-label={t("On clan days")}>{row.clanDayShare === null ? "—" : `${Math.round(row.clanDayShare * 100)}%`}</td>
           <td data-label={t("Black marks")} className={row.blackMarks ? "hoard-up" : undefined}>{row.blackMarks || "—"}</td>

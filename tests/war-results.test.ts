@@ -320,7 +320,7 @@ test("vials: donating at least 80% of a typical donor's amount earns full marks"
   });
 });
 
-test("saying Yes and not turning up costs 5 points, but never for a snipe that was cancelled", async () => {
+test("saying Yes to a snipe and not turning up never costs points, cancelled or not", async () => {
   const { contributionRanking } = await import("../src/lib/server/ranking");
   await withDatabase(async (db) => {
     const admin = await addMember(db, "leader", "ADMIN");
@@ -338,9 +338,9 @@ test("saying Yes and not turning up costs 5 points, but never for a snipe that w
     };
     const row = async () => (await contributionRanking(admin, db)).rows.find(({ member }) => member.id === missed.id)!;
     await addSnipe(true);
-    assert.deepEqual([(await row()).noShows, (await row()).penalty], [0, 0], "cancelled: no penalty");
     await addSnipe(false);
-    assert.deepEqual([(await row()).noShows, (await row()).penalty], [1, 5], "a real snipe still counts");
+    assert.equal((await row()).penalty, 0, "snipes are often called off, so no-shows aren't held against anyone");
+    assert.equal("noShows" in (await row()), false);
   });
 });
 
