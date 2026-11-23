@@ -1171,9 +1171,18 @@ body {
 .bottom-bar a.active { color: #ffd56b; text-shadow: 0 0 10px #e6bd5999; background: linear-gradient(180deg, #3b2f0f, #1b160a); box-shadow: inset 0 0 0 1px #e2ad3c55, 0 0 16px #e2ad3c22; }
 .bottom-bar a.active svg { filter: drop-shadow(0 0 7px #e6bd59cc); }
 .table-tabs button.active { text-shadow: 0 0 10px #e6bd5966; }
+/* A snipe is open: the Snipes tab's icon and name glow gold and gently pulse, so nobody misses it. */
+.nav-link.snipe-open, .bottom-bar a.snipe-open { color: #ffd76a; }
+.nav-link.snipe-open > svg:first-child, .bottom-bar a.snipe-open > svg:first-child { color: #ffd76a; animation: snipe-open-glow 1.8s ease-in-out infinite; }
+@keyframes snipe-open-glow {
+  0%, 100% { filter: drop-shadow(0 0 3px #ffd76a88); }
+  50% { filter: drop-shadow(0 0 10px #ffd76aff) drop-shadow(0 0 18px #e6bd5999); }
+}
 @media (prefers-reduced-motion: reduce) {
   .nav-link, .section-tabs a, .bottom-bar a, .table-tabs button { transition: none; }
   .nav-link:active, .bottom-bar a:active { transform: none; }
+  /* Still glows, without the pulse. */
+  .nav-link.snipe-open > svg:first-child, .bottom-bar a.snipe-open > svg:first-child { animation: none; filter: drop-shadow(0 0 8px #ffd76acc); }
 }
 @media (max-width: 380px) {
   .topbar-points-label { display: none; }

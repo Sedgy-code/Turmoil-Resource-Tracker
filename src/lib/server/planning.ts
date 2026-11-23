@@ -117,6 +117,14 @@ export async function snipesToAnswer(memberId: string, db?: Database, now = new 
   return Number(rows[0]?.count ?? 0);
 }
 
+/** Snipes still to come or on now (until check-in closes), not called off: the Snipes tab glows while there are any. */
+export async function openSnipeCount(db?: Database, now = new Date()): Promise<number> {
+  const connection = db ?? await database();
+  const rows = await connection.query(`SELECT COUNT(*)::int AS count FROM snipe_plans
+    WHERE archived = FALSE AND cancelled_at IS NULL AND starts_at > $1`, [new Date(now.getTime() - CHECKIN_CLOSES_AFTER_MS).toISOString()]);
+  return Number(rows[0]?.count ?? 0);
+}
+
 export async function listSnipes(actor: Member, db?: Database): Promise<SnipesResponse> {
   const connection = db ?? await database();
   return connection.transaction(async (tx) => {

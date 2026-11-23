@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { initializeSchema, openDatabase, type Database } from "../src/lib/server/db";
 import { memberFromRow } from "../src/lib/server/mappers";
 import { checkIn } from "../src/lib/server/discord-interactions";
-import { cancelSnipe, checkInToSnipe, listSnipes, respondToSnipe, snipesToAnswer, updateSnipe } from "../src/lib/server/planning";
+import { cancelSnipe, checkInToSnipe, listSnipes, openSnipeCount, respondToSnipe, snipesToAnswer, updateSnipe } from "../src/lib/server/planning";
 import { assembleMessages, assembleSnipers, cancelMessages, catchUpSnipeRoles, giveSnipeRole, SNIPE_CHANNEL_ID, snipeRoleId, tellSnipersCancelled } from "../src/lib/server/snipe-discord";
 
 let db: Database;
@@ -228,4 +228,18 @@ test("the snipers are told in #snipe-chat when a snipe is cancelled", async () =
   // Discord said no: the cancel still stands, and the leader is told it wasn't posted.
   assert.equal(await tellSnipersCancelled(snipe, "Boss", ["200"], discord({ post: 403 }).fetcher), false);
   assert.equal(cancelMessages(snipe, "Boss", Array.from({ length: 41 }, (_, index) => String(index + 1))).length, 2);
+});
+
+test("the Snipes tab glows while a snipe is to come or on now, never for one called off or long over", async () => {
+  const at = new Date("2031-03-04T12:00:00Z");
+  const before = await openSnipeCount(db, at);
+  const soon = randomUUID();
+  const over = randomUUID();
+  await db.query(`INSERT INTO snipe_plans (id, title, starts_at, activities, created_by) VALUES
+    ($1, 'Soon', '2031-03-04T23:30:00.000Z', '["hammers"]'::jsonb, $3),
+    ($2, 'Over', '2031-03-04T08:00:00.000Z', '["hammers"]'::jsonb, $3)`, [soon, over, bossId]);
+  assert.equal(await openSnipeCount(db, at), before + 1, "to come: glows; started 4 hours ago (check-in closed): doesn't");
+  assert.equal(await openSnipeCount(db, new Date("2031-03-05T01:00:00Z")), before + 1, "on now (check-in still open): glows");
+  await db.query("UPDATE snipe_plans SET archived = TRUE, cancelled_at = $2 WHERE id = $1", [soon, at.toISOString()]);
+  assert.equal(await openSnipeCount(db, at), before, "called off: no glow");
 });

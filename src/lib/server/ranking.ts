@@ -99,14 +99,8 @@ export async function contributionRanking(actor: Member, db?: Database, now = ne
   const vials = await recordTotals("vials");
 
   const snipes = await snipeRecognition(connection, now);
-  // No-shows: said Yes, others checked in, they didn't. A snipe leaders cancelled never counts.
-  const promised = await connection.query(`SELECT response.member_id, COUNT(*)::int AS count FROM snipe_responses response
-    JOIN snipe_plans plan ON plan.id = response.snipe_id
-    WHERE response.answer = 'yes' AND plan.starts_at >= $1 AND plan.starts_at <= $2 AND plan.cancelled_at IS NULL
-      AND EXISTS (SELECT 1 FROM snipe_attendance attendance WHERE attendance.snipe_id = plan.id)
-      AND NOT EXISTS (SELECT 1 FROM snipe_attendance attendance WHERE attendance.snipe_id = plan.id AND attendance.member_id = response.member_id)
-    GROUP BY response.member_id`, [`${sinceWeek}T00:00:00Z`, now.toISOString()]);
-  const noShows = new Map(promised.map((row) => [String(row.member_id), Number(row.count)]));
+  // Saying Yes to a snipe and not checking in costs nothing: snipes are often called off when they
+  // aren't needed, so a no-show isn't held against anyone (leadership's call).
   const updates = await connection.query(`SELECT member_id, COUNT(*)::int AS count FROM dew_weekly_earnings
     WHERE reason = 'resources' AND week_start >= $1 GROUP BY member_id`, [sinceWeek]);
   const updateCounts = new Map(updates.map((row) => [String(row.member_id), Number(row.count)]));
@@ -140,7 +134,6 @@ export async function contributionRanking(actor: Member, db?: Database, now = ne
     warsPlayed: wars.totals.get(member.id)?.appeared ?? 0,
     vials: vials.count ? vials.totals.get(member.id)?.sum ?? 0 : null,
     snipes: snipes.recent[member.id] ?? 0,
-    noShows: noShows.get(member.id) ?? 0,
     updates: updateCounts.get(member.id) ?? 0,
     clanDays: dayWeeks.length ? clanDayShare(member.id) : null,
     clanDayShare: dayWeeks.length ? clanDayShare(member.id) : null,
@@ -166,8 +159,7 @@ export async function contributionRanking(actor: Member, db?: Database, now = ne
     const parts = Object.fromEntries(available.map((metric) => [metric, part(metric, Number(row[metric] ?? 0))])) as Partial<Record<RankingMetric, number>>;
     const base = totalWeight ? available.reduce((sum, metric) => sum + (parts[metric] ?? 0) * RANKING_WEIGHTS[metric], 0) / totalWeight * 100 : 50;
     // Never signing in to the Clan Hub at all is the biggest red flag.
-    const penalty = (row.member.neverSignedIn ? NEVER_SIGNED_IN_PENALTY : 0) + Math.min(15, row.noShows * 5)
-      + Math.min(BLACK_MARK_CAP, row.blackMarks * BLACK_MARK_PENALTY);
+    const penalty = (row.member.neverSignedIn ? NEVER_SIGNED_IN_PENALTY : 0) + Math.min(BLACK_MARK_CAP, row.blackMarks * BLACK_MARK_PENALTY);
     return { ...row, parts, penalty, score: Math.min(100, Math.max(0, Math.round(base - penalty))), isNew: row.daysInClan < NEW_MEMBER_DAYS && joinedRecently(row.member), rank: 0 };
   });
   rows.sort((a, b) => a.score - b.score || (a.lastSavedAt ?? "").localeCompare(b.lastSavedAt ?? ""));

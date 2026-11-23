@@ -48,6 +48,8 @@ export interface SessionResponse {
   canonicalOrigin?: string;
   /** Upcoming snipes the member hasn't answered yet (shown on the Snipes tab). */
   snipesToAnswer?: number;
+  /** Snipes still to come or on now: the Snipes tab glows while there are any. */
+  snipesOpen?: number;
 }
 
 export interface DashboardResponse {
@@ -322,8 +324,6 @@ export interface ContributionRow {
   /** Vials donated across the last few vial records. */
   vials: number | null;
   snipes: number;
-  /** Said Yes to a snipe but wasn't ticked as attending. */
-  noShows: number;
   /** Weeks with a complete resource save, out of the last 8. */
   updates: number;
   /** Share (0–1) of their war points scored on the clan's chosen days, over recent wars. */
