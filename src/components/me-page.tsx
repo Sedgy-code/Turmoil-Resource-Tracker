@@ -185,7 +185,7 @@ export function MePage({ data, notify, refresh, onSignOut, onOpenGuide }: {
       <Link className="me-row" href="/status"><Users size={19} aria-hidden="true" /><span>{t("Status board")}</span><ArrowRight size={16} aria-hidden="true" /></Link>
       <Link className="me-row" href="/members"><ShieldCheck size={19} aria-hidden="true" /><span>{t("Members")}</span><ArrowRight size={16} aria-hidden="true" /></Link>
       <Link className="me-row" href="/contribution-ranking"><Trophy size={19} aria-hidden="true" /><span>{t("Ranking")}</span><ArrowRight size={16} aria-hidden="true" /></Link>
-      <Link className="me-row" href="/hoarding-watch"><Eye size={19} aria-hidden="true" /><span>{t("Hoarding")}</span><ArrowRight size={16} aria-hidden="true" /></Link>
+      <Link className="me-row" href="/hoarding-watch"><Eye size={19} aria-hidden="true" /><span>{t("Player Resource Management")}</span><ArrowRight size={16} aria-hidden="true" /></Link>
     </section>}
 
     <button type="button" className="button secondary me-sign-out" onClick={onSignOut}><LogOut size={17} />{t("Sign out")}</button>

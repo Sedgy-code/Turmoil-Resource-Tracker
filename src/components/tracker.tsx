@@ -150,7 +150,7 @@ const viewNames = {
   spending: "Spending Order",
   snipes: "Snipes",
   store: "Reward Shop",
-  hoarding: "Hoarding Watch",
+  hoarding: "Player Resource Management",
   warResults: "War Results",
   vials: "Vials",
   ranking: "Contribution Ranking",
@@ -194,7 +194,7 @@ const SECTIONS: { section: Section; label: string; short: string; icon: Icon; ta
   { section: "snipes", label: "Snipes", short: "Snipes", icon: Crosshair, tabs: [{ view: "snipes", label: "Snipes" }] },
   { section: "clan", label: "Clan", short: "Clan", icon: Trophy, tabs: [{ view: "clan", label: "Rankings" }, { view: "warResults", label: "War Results" }, { view: "vials", label: "Vials" }, { view: "tech", label: "Clan Tech" }, { view: "weeks", label: "Weekly History" }] },
   { section: "me", label: "Me", short: "Me", icon: CircleUserRound, tabs: [{ view: "me", label: "Me" }, { view: "store", label: "Reward Shop" }] },
-  { section: "leadership", label: "Leadership", short: "Leadership", icon: ShieldCheck, admin: true, tabs: [{ view: "status", label: "Status board" }, { view: "members", label: "Members" }, { view: "ranking", label: "Ranking" }, { view: "hoarding", label: "Hoarding" }, { view: "settings", label: "Settings" }] },
+  { section: "leadership", label: "Leadership", short: "Leadership", icon: ShieldCheck, admin: true, tabs: [{ view: "status", label: "Status board" }, { view: "members", label: "Members" }, { view: "ranking", label: "Ranking" }, { view: "hoarding", label: "Player Resource Management" }, { view: "settings", label: "Settings" }] },
 ];
 const sectionOf = (view: View) => SECTIONS.find((entry) => entry.tabs.some((tab) => tab.view === view))!;
 /** Resources with war points on the dashboard (Clan Tech Vials, stored as "potions", are tracked only). */
@@ -752,7 +752,7 @@ function TrackerApp({ view }: { view: View }) {
                       : view === "me" ? "Your numbers, your Clan Points and your settings."
                       : view === "status" ? "Every member’s week at a glance. Remind the ones who haven’t saved."
                       : view === "settings" ? "Clan Hub settings for leadership."
-                      : view === "hoarding" ? "Spot members who hold a lot but don’t spend it. Only admins can see this page."
+                      : view === "hoarding" ? "Who’s hoarding, who saves well, and who adds the least in wars. Only admins can see this page."
                       : view === "warResults" ? "Final clan war scores, read from the end-of-war screenshots."
                       : view === "vials" ? "Clan tech vial donations, read from the donation screenshots."
                       : view === "ranking" ? "Everyone ranked by how much they contribute. The bottom of the list is who to talk to first when space is needed."

@@ -4,8 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import { LoaderCircle, NotebookPen, RefreshCw } from "lucide-react";
 import { numberFormat } from "@/lib/resources";
 import { useT } from "@/lib/i18n";
-import type { HoardingLevel, HoardingReason, HoardingResponse, HoardingRow, HoardingRules, WarSpendingResponse, WarSpendingRow } from "@/lib/types";
+import type { ContributionRankingResponse, HoardingLevel, HoardingReason, HoardingResponse, HoardingRow, HoardingRules, WarSpendingResponse, WarSpendingRow } from "@/lib/types";
 import { currentWeek, formatWeek, shiftWeek } from "@/lib/resources";
+import { lowContributors } from "@/lib/low-contributors";
 import { useSortable } from "./sortable";
 import { useStackFold } from "./stack-fold";
 import { MemberAvatar, MemberName } from "./member-identity";
@@ -172,24 +173,56 @@ function WarSpending() {
   </section>;
 }
 
+function LowContributors({ ranking }: { ranking: ContributionRankingResponse | null }) {
+  const t = useT();
+  if (!ranking) return <section className="panel hoard-state"><LoaderCircle size={24} className="spin" /></section>;
+  const wars = ranking.records.wars;
+  if (!wars) return <section className="panel hoard-state"><p>{t("No war results yet. Upload them on War Results to see who adds the least in wars.")}</p></section>;
+  const { rows, typical } = lowContributors(ranking);
+  const today = new Date().toISOString().slice(0, 10);
+  return <>
+    <p className="hoard-typical hoard-low-intro">{t("Average war points per war over the last {wars} wars, from War Results (missing a war counts as 0). Listed: under half of a typical member’s {points}.", { wars, points: numberFormat(Math.round(typical)) })}</p>
+    {rows.length === 0 ? <section className="panel hoard-state"><p>{t("Nobody is far below a typical member right now.")}</p></section> : <div className="hoard-list">
+      {rows.map((row) => <article key={row.member.id} className="panel hoard-card hoard-watch">
+        <header>
+          <MemberAvatar member={row.member} small />
+          <strong><MemberName member={row.member} /></strong>
+          {row.isNew && <span className="rank-new">{t("New")}</span>}
+          {row.member.holidayUntil && row.member.holidayUntil >= today && <span className="hoard-level hoard-level-ok">{t("Holiday")}</span>}
+        </header>
+        <dl className="hoard-facts">
+          <div><dt>{t("Average per war")}</dt><dd>{numberFormat(Math.round(row.warPoints ?? 0))}{typical > 0 && <small>{t("{percent}% of typical", { percent: Math.round((row.warPoints ?? 0) / typical * 100) })}</small>}</dd></div>
+          <div><dt>{t("Wars played")}</dt><dd>{t("{count} of {total} wars", { count: row.warsPlayed, total: wars })}</dd></div>
+          <div><dt>{t("Days in clan")}</dt><dd>{row.daysInClan}</dd></div>
+        </dl>
+      </article>)}
+    </div>}
+  </>;
+}
+
 export function HoardingWatch({ notify }: { notify: (message: string, error?: boolean) => void }) {
   const t = useT();
   const [report, setReport] = useState<HoardingResponse | null>(null);
+  // The Ranking's war numbers, for Low contributors.
+  const [ranking, setRanking] = useState<ContributionRankingResponse | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [filter, setFilter] = useState<"flagged" | "savers" | "all">("flagged");
+  const [filter, setFilter] = useState<"hoarding" | "savers" | "low" | "all">("hoarding");
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
+    const rankingLoad = request<ContributionRankingResponse>("/api/ranking").then(setRanking).catch(() => setRanking({ rows: [], weights: {}, records: { wars: 0, vials: 0 }, generatedAt: "" }));
     try { setReport(await request<HoardingResponse>("/api/hoarding")); }
     catch (e) { setError(e instanceof Error ? e.message : "Please try again."); }
-    finally { setLoading(false); }
+    finally { await rankingLoad; setLoading(false); }
   }, []);
   useEffect(() => { void load(); }, [load]);
   if (!report) return <section className="panel hoard-state">{error ? <><p>{t(error)}</p><button className="button primary" onClick={() => void load()}>{t("Try again")}</button></> : <LoaderCircle size={24} className="spin" />}</section>;
-  const flagged = report.rows.filter((row) => row.level === "high" || row.level === "watch");
+  const hoarding = report.rows.filter((row) => row.level === "high" || row.level === "watch");
   const savers = report.rows.filter((row) => row.level === "saver");
-  const rows = filter === "flagged" ? flagged : filter === "savers" ? savers : report.rows;
+  const low = lowContributors(ranking);
+  const rows = filter === "hoarding" ? hoarding : filter === "savers" ? savers : report.rows;
+  const empty = filter === "hoarding" ? "Nobody is hoarding right now." : filter === "savers" ? "No good savers right now." : "Nobody is flagged right now.";
   const updateNote = (memberId: string, note: string) => setReport((current) => current && ({
     ...current, rows: current.rows.map((row) => row.member.id === memberId ? { ...row, note, noteBy: note ? row.noteBy : null } : row),
   }));
@@ -204,11 +237,12 @@ export function HoardingWatch({ notify }: { notify: (message: string, error?: bo
     </section>
     {/* Who to look at comes first; the war-by-war view and the rules come after. */}
     <div className="table-tabs hoard-tabs">
-      <button className={filter === "flagged" ? "active" : ""} onClick={() => setFilter("flagged")}>{t("Flagged")}<span>{flagged.length}</span></button>
+      <button className={filter === "hoarding" ? "active" : ""} onClick={() => setFilter("hoarding")}>{t("Hoarding")}<span>{hoarding.length}</span></button>
       <button className={filter === "savers" ? "active" : ""} onClick={() => setFilter("savers")}>{t("Good savers")}<span>{savers.length}</span></button>
+      <button className={filter === "low" ? "active" : ""} onClick={() => setFilter("low")}>{t("Low contributors")}{ranking && <span>{low.rows.length}</span>}</button>
       <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>{t("All members")}<span>{report.rows.length}</span></button>
     </div>
-    {rows.length === 0 ? <section className="panel hoard-state"><p>{t("Nobody is flagged right now.")}</p></section> : <div className="hoard-list">
+    {filter === "low" ? <LowContributors ranking={ranking} /> : rows.length === 0 ? <section className="panel hoard-state"><p>{t(empty)}</p></section> : <div className="hoard-list">
       {rows.map((row) => {
         const saved = daysAgo(row.lastSavedAt);
         const spent = daysAgo(row.lastSpendAt);

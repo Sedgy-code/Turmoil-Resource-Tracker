@@ -13,7 +13,7 @@ export function LeadershipSettings() {
       <h2><Settings2 size={16} />{t("Clan settings")}</h2>
       <ul className="settings-links">
         <li><Link href="/war-points">{t("War point rates")}</Link> — {t("on the Points Calculator page (Edit rates).")}</li>
-        <li><Link href="/hoarding-watch">{t("Saver vs hoarder rules")}</Link> — {t("on the Hoarding page.")}</li>
+        <li><Link href="/hoarding-watch">{t("Saver vs hoarder rules")}</Link> — {t("on the Player Resource Management page.")}</li>
         <li><Link href="/members">{t("Clan capacity, strikes and holidays")}</Link> — {t("on the Members page.")}</li>
         <li><Link href="/spending-order">{t("Daily post in #spending-order")}</Link> — {t("on the Spending Order page.")}</li>
       </ul>
