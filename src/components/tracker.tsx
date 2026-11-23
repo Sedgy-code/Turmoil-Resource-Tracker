@@ -12,6 +12,7 @@ import { WarResults, WarTotalsHistory } from "./war-results";
 import { SnipeChampions } from "./snipe-champions";
 import { ContributionRanking } from "./contribution-ranking";
 import { WarWeek } from "./war-week";
+import { ResourcesVote } from "./resources-vote";
 import { SpendingOrder } from "./spending-order";
 import { MemberHistoryPanel } from "./member-history";
 import { ClanTech } from "./clan-tech";
@@ -843,14 +844,18 @@ function TrackerApp({ view }: { view: View }) {
           ) : data && view === "status" ? (
             <StatusBoard notify={notify} />
           ) : data && dataMatches && view === "resources" ? (
-            <ResourceForm
-              data={data}
-              week={week}
-              memberId={params.get("member")}
-              snapshotId={snapshotId}
-              notify={notify}
-              refresh={refresh}
-            />
+            <>
+              {/* Days 6–7: vote for the next war's clan days right where you update (only on your own, current form). */}
+              {!snapshotId && week === currentWeek() && (!params.get("member") || params.get("member") === user.id) && <ResourcesVote memberId={user.id} notify={notify} />}
+              <ResourceForm
+                data={data}
+                week={week}
+                memberId={params.get("member")}
+                snapshotId={snapshotId}
+                notify={notify}
+                refresh={refresh}
+              />
+            </>
           ) : data && view === "vials" ? (
             <WarResults kind="vials" members={data.members} meId={user.id} admin={user.role === "ADMIN"} notify={notify} />
           ) : data && view === "ranking" ? (
