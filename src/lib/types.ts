@@ -1,4 +1,4 @@
-import type { ResourceValues, SummoningCosts, PlanningDetails } from "./resources";
+import type { ResourceKey, ResourceValues, SummoningCosts, PlanningDetails } from "./resources";
 
 export type MemberRole = "ADMIN" | "MEMBER";
 
@@ -389,3 +389,67 @@ export interface ContributionRankingResponse {
   generatedAt: string;
 }
 
+
+/** What the spending order lines up: the three pillars whose resources score on clan days (hammers have no line). */
+export type SpendResource = "skills" | "pets" | "mounts";
+export type GuideRarity = "Epic" | "Legendary" | "Ultimate" | "Mythic";
+/**
+ * Whether a member has saved enough to ascend a pillar, by the official Forge Master Discord guide
+ * (a first ascension), worked out with the member's own discount and extra chance.
+ */
+export type AscendCheck =
+  | { state: "ready"; have: number; need: number; reaches: GuideRarity }
+  | { state: "short"; have: number; need: number; missing: number; reaches: GuideRarity | null }
+  | { state: "level"; level: number }
+  | { state: "none" };
+export interface SpendRow {
+  member: Member;
+  /** Place in the line (1 = first); done and away members have none. */
+  place: number | null;
+  /** War points the member's saved resources for this pillar can score (what the line is ordered by). */
+  points: number;
+  /** The saved amounts behind it, e.g. skill tickets, or eggs/pets and eggshells. */
+  amounts: { key: ResourceKey; value: number }[];
+  state: "turn" | "wait" | "done" | "away";
+  /** While waiting: how many members must finish before it's your turn. */
+  ahead: number;
+  /** Said Yes to (or checked in for) that day's snipe: they go first. */
+  sniper: boolean;
+  /** Planning to ascend this pillar this week (Home). */
+  ascending: boolean;
+  check: AscendCheck;
+  /** Done: who marked it (a leader's name when it wasn't the member). */
+  doneBy?: string | null;
+}
+export interface SpendOrder {
+  resource: SpendResource;
+  /** The clan day this order is for (today, or the next one where this resource scores); null when there isn't one. */
+  day: number | null;
+  /** That clan day is today. */
+  today: boolean;
+  /** How many members have a turn at once (leaders set it). */
+  turns: number;
+  rows: SpendRow[];
+}
+export interface SpendingOrderResponse {
+  /** The war it's for, by the Monday before its Day 1. */
+  week: string;
+  /** Today's war day (1–7). */
+  warDay: number;
+  /** Days 6 and 7: the war's spending is over, so the order is for the next war. */
+  nextWar: boolean;
+  clanDays: number[];
+  orders: SpendOrder[];
+  /** Leaders only: the Discord forum post. */
+  post?: { enabled: boolean; configured: boolean; openDay: number | null };
+}
+export interface SpendingPostPreview {
+  /** The clan day the post is for (today's, or the next one). */
+  day: number | null;
+  today: boolean;
+  title: string;
+  content: string;
+  enabled: boolean;
+  /** Today's post is already up in Discord. */
+  posted: boolean;
+}

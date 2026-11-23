@@ -162,13 +162,16 @@ test("closed messages fall back to a mention in the reminder channel; a failed s
 
 test("members can mark themselves away and allow reminders from the Me page", async () => {
   const me = await member(quietId);
-  await assert.rejects(updateMySettings(me, { awayUntil: "2026-10-01" }, db, thursday), /between today and 90 days/);
-  await assert.rejects(updateMySettings(me, { awayUntil: "2027-06-01" }, db, thursday), /between today and 90 days/);
-  const away = await updateMySettings(me, { awayUntil: "2026-11-05", remindersAllowed: true }, db, thursday);
+  // Relative to the real clock: a member's holiday only shows while it hasn't ended yet.
+  const now = new Date();
+  const day = (offset: number) => new Date(now.getTime() + offset * 86_400_000).toISOString().slice(0, 10);
+  await assert.rejects(updateMySettings(me, { awayUntil: day(-20) }, db, now), /between today and 90 days/);
+  await assert.rejects(updateMySettings(me, { awayUntil: day(200) }, db, now), /between today and 90 days/);
+  const away = await updateMySettings(me, { awayUntil: day(14), remindersAllowed: true }, db, now);
   assert.equal(away.remindersAllowed, true);
   const history = await memberHistory(await member(adminId), quietId, db);
   assert.ok(history.events.some((event) => event.kind === "holiday" && event.by === "Quiet"));
-  const back = await updateMySettings(away, { awayUntil: null }, db, thursday);
+  const back = await updateMySettings(away, { awayUntil: null }, db, now);
   assert.equal(back.holidayUntil, undefined);
   assert.ok((await memberHistory(await member(adminId), quietId, db)).events.some((event) => event.kind === "holiday-ended"));
 });

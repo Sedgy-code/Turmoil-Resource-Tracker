@@ -31,6 +31,10 @@
     {
       "path": "/api/cron/leadership-reminder?for=warday",
       "schedule": "0 21 * * 2-6"
+    },
+    {
+      "path": "/api/cron/spending-order",
+      "schedule": "5 0 * * *"
     }
   ]
 }

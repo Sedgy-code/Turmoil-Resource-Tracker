@@ -305,3 +305,26 @@
 .planning-howto > summary::after { content: "⌄"; margin-inline-start: 8px; font-size: 16px; line-height: 1; }
 .planning-howto[open] > summary::after { content: "⌃"; }
 .planning-howto .planning-footnote { margin: 0; padding: 4px 0 12px; }
+
+/* Snipe tables: the clan's total for each column, so leaders can see what one activity alone could score at the snipe. */
+.planning-table tfoot .planning-totals-row th,
+.planning-table tfoot .planning-totals-row td { font-weight: 750; color: var(--text); border-top: 2px solid #e6bd5966; border-bottom: 0; background: #1a170c; white-space: nowrap; }
+.planning-table tfoot .planning-totals-row td.planning-gold { color: var(--gold); }
+.app-shell .planning-table tfoot .planning-totals-row th { padding: 10px 14px 10px 24px; font-size: 14px; text-align: left; }
+.app-shell .planning-table tfoot .planning-totals-row td { padding: 10px 14px; font-size: 14px; }
+@media (max-width: 700px) {
+  /* On phones the totals are one more card, framed in gold, under the member cards. */
+  .app-shell table.stack-table > tfoot { display: block; margin-top: 8px; }
+  .app-shell table.stack-table > tfoot > tr {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px 12px; padding: 12px 13px;
+    border: 1.5px solid #e2ad3cb0; border-radius: 14px; background: linear-gradient(180deg, #1d1a10, #0f0d07);
+  }
+  .app-shell table.stack-table > tfoot > tr > td,
+  .app-shell table.stack-table > tfoot > tr > th {
+    display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 0 !important; border: 0 !important;
+    background: none !important; text-align: start !important; white-space: normal; font-size: 15px; overflow-wrap: anywhere;
+  }
+  .app-shell table.stack-table > tfoot > tr > [data-label]::before { content: attr(data-label); color: #a0b4d4; font-size: 11.5px; font-weight: 600; }
+  .app-shell table.stack-table > tfoot > tr > .stack-title { grid-column: 1 / -1; font-size: 16px; }
+  .app-shell table.stack-table > tfoot > tr > .stack-wide { grid-column: span 2; }
+}
