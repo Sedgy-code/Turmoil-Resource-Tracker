@@ -191,6 +191,8 @@ function PostPanel({ order, notify, onChange }: { order: SpendingOrderResponse; 
   const showPreview = useCallback(async () => {
     try { setPreview(await request<SpendingPostPreview>("/api/spending-order/post")); } catch (error) { notify(t(errorText(error)), true); }
   }, [notify, t]);
+  // Load once so leaders see straight away whether a post is up (and can update it); refresh while the preview is open.
+  useEffect(() => { void showPreview(); }, [showPreview]);
   useEffect(() => { if (open) void showPreview(); }, [open, showPreview, order]);
   async function toggle() {
     setBusy(true);
@@ -313,7 +315,7 @@ export function SpendingOrder({ data, notify }: { data: DashboardResponse; notif
       <YourPlace line={line} row={myRow} />
       <LineTable line={line} meId={me.id} />
       <p className="planning-footnote spend-footnote">
-        {t("Order: members in that day’s snipe first, then the biggest stockpile, counted in war points (the same estimate as the snipe planner).")}{" "}
+        {t("Order: members in that day’s snipe first, then members ascending that pillar this week, then the biggest stockpile, counted in war points (the same estimate as the snipe planner).")}{" "}
         {t("Ascend? uses the official Forge Master Discord ascension guide (first ascension), with your own discount and extra chance from My Resources. Pillars unlock at summon level {level}.", { level: ASCEND_LEVEL })}
       </p>
     </section>

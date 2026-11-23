@@ -73,7 +73,7 @@ test("each line is for today's clan day, or the next one where it scores", () =>
   assert.deepEqual(orderWeek(DAY_6), { week: "2026-11-30", warDay: 6, nextWar: true });
 });
 
-test("snipers go first, then the biggest stockpile; members away are skipped", () => {
+test("snipers go first, then members ascending that pillar, then the biggest stockpile; members away are skipped", () => {
   const members = [person("a", "Ana"), person("b", "Bo"), person("c", "Cy"), person("d", "Di", "2026-11-27"), person("e", "Ed"), person("f", "Fay")];
   const entries = [
     entry("a", { skillTickets: 50_000 }),
@@ -83,18 +83,19 @@ test("snipers go first, then the biggest stockpile; members away are skipped", (
     entry("e", { skillTickets: 70_000 }),
     entry("f", {}), // nothing saved for skills: not in the order
   ];
+  // Cy is in the snipe (and ascending); Ana is ascending skills; Ed is ascending pets only; Di is away (and ascending).
+  const ascending = new Map([["c", ["skills" as const]], ["a", ["skills" as const]], ["e", ["pets" as const]], ["d", ["skills" as const]]]);
   const line = buildOrder({
-    resource: "skills", members, entries, rates: DEFAULT_WAR_RATES, ascending: new Map([["c", ["skills" as const]]]),
+    resource: "skills", members, entries, rates: DEFAULT_WAR_RATES, ascending,
     snipers: new Set(["c"]), date: "2026-11-26", day: 3, today: true,
   });
   assert.deepEqual(line.rows.map((row) => [row.member.username, row.state, row.place]), [
-    ["Cy", "line", 1], ["Bo", "line", 2], ["Ed", "line", 3], ["Ana", "line", 4], ["Di", "away", null],
+    ["Cy", "line", 1], ["Ana", "line", 2], ["Bo", "line", 3], ["Ed", "line", 4], ["Di", "away", null],
   ]);
   assert.deepEqual([line.day, line.today], [3, true]);
-  assert.equal(line.rows[0].sniper, true);
-  assert.equal(line.rows[0].ascending, true);
+  assert.deepEqual(line.rows.map((row) => [row.sniper, row.ascending]), [[true, true], [false, true], [false, false], [false, false], [false, true]]);
   // 90,000 tickets at 200 for 5 = 2,250 skill summons × 225 points.
-  assert.equal(line.rows[1].points, 2_250 * 225);
+  assert.equal(line.rows[2].points, 2_250 * 225);
   // Back from holiday by Day 5, and no snipe that day: Di is back in the order, biggest first.
   const later = buildOrder({ resource: "skills", members, entries, rates: DEFAULT_WAR_RATES, ascending: new Map(), snipers: new Set(), date: "2026-11-28", day: 5, today: false });
   assert.deepEqual(later.rows.map((row) => [row.member.username, row.place]), [["Di", 1], ["Bo", 2], ["Ed", 3], ["Ana", 4], ["Cy", 5]]);
@@ -106,7 +107,7 @@ test("the post is an embed like the app's table, in English, never pinging anyon
   assert.equal(plainName("*Star*_x @everyone"), "\\*Star\\*\\_x @\u200beveryone");
   const members = [person("a", "Ana"), person("b", "Bo"), person("c", "Cy", "2026-11-30"), person("d", "Di"), person("e", "Ed")];
   const line = buildOrder({
-    resource: "skills", members, rates: DEFAULT_WAR_RATES, ascending: new Map(), snipers: new Set(["a"]), date: "2026-11-26", day: 3, today: true,
+    resource: "skills", members, rates: DEFAULT_WAR_RATES, ascending: new Map([["d", ["skills" as const]]]), snipers: new Set(["a"]), date: "2026-11-26", day: 3, today: true,
     entries: [
       entry("a", { skillTickets: 50_000 }), entry("b", { skillTickets: 90_000 }), entry("c", { skillTickets: 1_000 }),
       entry("d", { skillTickets: 30_000 }), entry("e", { skillTickets: 20_000 }, { skillLevel: 82 }),
@@ -117,18 +118,18 @@ test("the post is an embed like the app's table, in English, never pinging anyon
   assert.equal(embed.title, "📋 Spending order – Day 3 (clan day)");
   assert.equal(embed.url, "https://tracker.example/spending-order");
   assert.equal(embed.author.iconUrl, "https://tracker.example/app-icons/icon-192.png");
-  assert.equal(embed.description, "Day 3 is on now. Spend in this order.\nBiggest stockpiles first, counted in war points.");
-  // Like the app: place, name, war points and the ascend check. Cy is away, so skipped.
+  assert.equal(embed.description, "Day 3 is on now. Spend in this order.\n🎯 Snipers first, then ⏫ ascending, then the biggest stockpiles (war points).");
+  // Like the app: place, name, war points and the ascend check. Di is ascending, so next after the snipe. Cy is away, so skipped.
   assert.deepEqual(embed.fields, [{
     name: "🎟️ Skills · 4 in line",
     value: [
       "1. 🎯 Ana · 281.3K pts · ✅ Legendary",
-      "2. Bo · 506.3K pts · ✅ Legendary",
-      "3. Di · 168.8K pts · ⏳ needs 19.6K",
+      "2. ⏫ Di · 168.8K pts · ⏳ needs 19.6K",
+      "3. Bo · 506.3K pts · ✅ Legendary",
       "4. Ed · 112.5K pts · 🔒 Lv 82",
     ].join("\n"),
   }]);
-  assert.equal(embed.footer, "✅ ready to ascend · ⏳ not enough yet · 🔒 summon level under 100 · 🎯 in the Day 3 snipe");
+  assert.equal(embed.footer, "✅ ready to ascend · ⏳ not enough yet · 🔒 summon level under 100 · ⏫ ascending this week · 🎯 in the Day 3 snipe");
   assert.deepEqual(embed.button, { label: "Open the Spending Order", url: "https://tracker.example/spending-order" });
   // Up the day before: it says when the day starts, and that the order will update.
   const early = spendingPost(3, [line], "https://tracker.example", new Date("2026-11-26T00:00:00Z")).embed;
@@ -200,6 +201,11 @@ test("everyone sees the order; only leaders switch the post; Days 6–7 look at 
   const skills = onDay2.orders.find((line) => line.resource === "skills")!;
   assert.deepEqual([skills.day, skills.today], [3, false]);
   assert.deepEqual(skills.rows.map((row) => [row.member.username, row.place]), [["Bo", 1], ["Ana", 2], ["Cy", 3]]);
+  // Cy says on Home they're ascending skills this week: up after the snipe, ahead of bigger stockpiles.
+  await db.query("INSERT INTO member_ascensions (member_id, week_start, pillars) VALUES ($1, $2, 'skills')", [cy.id, WEEK]);
+  const withCy = (await getSpendingOrder(ana, db, DAY_2)).orders.find((line) => line.resource === "skills")!;
+  assert.deepEqual(withCy.rows.map((row) => [row.member.username, row.place, row.ascending]), [["Bo", 1, false], ["Cy", 2, true], ["Ana", 3, false]]);
+  await db.query("DELETE FROM member_ascensions WHERE member_id = $1", [cy.id]);
   assert.equal(onDay2.orders.find((line) => line.resource === "mounts")!.day, null);
   // On Day 1 the Skills order is for today, so the Day 3 snipe doesn't count yet.
   const onDay1 = (await getSpendingOrder(ana, db, DAY_1)).orders.find((line) => line.resource === "skills")!;

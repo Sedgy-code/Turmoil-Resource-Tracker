@@ -174,7 +174,10 @@ export function buildOrder(input: OrderInput): SpendOrder {
     });
   }
   const amount = (row: SpendRow) => row.amounts[0]?.value ?? 0;
+  // Members away last; then that day's snipers; then members ascending this pillar this week
+  // (or, at Ascension 3, pushing the new tiers); then the biggest stockpile.
   rows.sort((a, b) => Number(a.state === "away") - Number(b.state === "away") || Number(b.sniper) - Number(a.sniper)
+    || Number(b.ascending) - Number(a.ascending)
     || b.points - a.points || amount(b) - amount(a)
     || a.member.username.localeCompare(b.member.username, undefined, { sensitivity: "base", numeric: true }));
   rows.filter((row) => row.state === "line").forEach((row, index) => { row.place = index + 1; });
