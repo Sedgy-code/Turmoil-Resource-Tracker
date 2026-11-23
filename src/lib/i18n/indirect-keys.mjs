@@ -29,7 +29,7 @@ export const INDIRECT_KEYS = [
   // Monthly awards (src/lib/awards.ts)
   "Top War Scorer", "Top Vial Donor", "Snipe Star", "Never Missed a Save", "war points", "vials", "snipes", "weeks",
   // Navigation
-  "Dashboard", "My Resources", "Manage Members", "Weekly History", "Estimated War Points", "Snipe Plans", "Reward Shop", "Hoarding Watch",
+  "Dashboard", "My Resources", "Manage Members", "Weekly History", "Estimated War Points", "Snipe Plans", "Reward Shop", "Player Resource Management", "Nobody is hoarding right now.", "No good savers right now.",
   "Spot members who hold a lot but don’t spend it. Only admins can see this page.",
   "War Results", "Final clan war scores, read from the end-of-war screenshots.",
   "Vial Donations", "Contribution Ranking", "Snipes joined", "War points", "Vials donated", "Weekly updates", "Spent in wars", "Spent on clan days", "Clan tech vial donations, read from the donation screenshots.",

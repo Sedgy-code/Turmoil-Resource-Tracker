@@ -66,7 +66,7 @@ export function LeaderTodoCard() {
       <Link href="/status"><Users size={16} aria-hidden="true" />{t("Status board")}</Link>
       <Link href="/members"><ShieldCheck size={16} aria-hidden="true" />{t("Members")}</Link>
       <Link href="/contribution-ranking"><Trophy size={16} aria-hidden="true" />{t("Ranking")}</Link>
-      <Link href="/hoarding-watch"><ClipboardList size={16} aria-hidden="true" />{t("Hoarding")}</Link>
+      <Link href="/hoarding-watch"><ClipboardList size={16} aria-hidden="true" />{t("Player Resource Management")}</Link>
     </nav>
   </section>;
 }

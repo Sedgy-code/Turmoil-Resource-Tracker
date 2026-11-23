@@ -22,7 +22,7 @@ export const BLACK_MARK_CAP = 15;
  * Weekly Clan Hub updates count the most: the clan rules ask everyone to keep their numbers fresh,
  * and the war plan depends on it. Snipes count only a little: not everyone can be online for them,
  * and time zones decide a lot. "Clan days" is the share of a member's war points scored on the
- * days leadership picked. Hoarding isn't part of the score: leaders follow it on the Hoarding page.
+ * days leadership picked. Hoarding isn't part of the score: leaders follow it on the Player Resource Management page.
  */
 export const RANKING_WEIGHTS: Record<RankingMetric, number> = {
   warPoints: 25,
