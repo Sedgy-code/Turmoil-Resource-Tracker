@@ -181,15 +181,16 @@ function PostPanel({ order, notify, onChange }: { order: SpendingOrderResponse; 
   async function postNow() {
     setBusy(true);
     try {
-      setPreview(await request<SpendingPostPreview>("/api/spending-order/post", { method: "POST", body: "{}" }));
-      notify(t("Today’s post is up in #spending-order."));
+      const posted = await request<SpendingPostPreview>("/api/spending-order/post", { method: "POST", body: "{}" });
+      setPreview(posted);
+      notify(t("Day {day}’s post is up in #spending-order.", { day: posted.day ?? "" }));
     } catch (error) { notify(t(errorText(error)), true); } finally { setBusy(false); }
   }
   return <section className="planning-panel spend-post" aria-labelledby="spend-post-title">
     <div className="spend-post-head">
       <div>
         <h2 id="spend-post-title"><Send size={16} />{t("Daily post in #spending-order")}</h2>
-        <p>{t("Posts open just after each clan day starts (00:00 UTC) and close when it ends. Names only: nobody is pinged.")}</p>
+        <p>{t("Each clan day’s post goes up the day before, so members can talk about it. It updates when the day starts (00:00 UTC) and closes when the day ends. Names only: nobody is pinged.")}</p>
         {!post.configured && <p className="planning-notice">{t("The #spending-order channel isn’t connected yet.")}</p>}
       </div>
       <div className="planning-tabs spend-switch" role="group" aria-label={t("Daily post in #spending-order")}>
@@ -199,8 +200,8 @@ function PostPanel({ order, notify, onChange }: { order: SpendingOrderResponse; 
     </div>
     <div className="planning-inline-actions spend-post-actions">
       <button type="button" className="planning-button planning-button-subtle" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? <EyeOff size={15} /> : <Eye size={15} />}{t(open ? "Hide preview" : "Show preview")}</button>
-      {post.enabled && preview?.today && !preview.posted && <button type="button" className="planning-button" disabled={busy || !post.configured} onClick={() => void postNow()}>{busy ? <LoaderCircle size={15} className="spin" /> : <Send size={15} />}{t("Post today’s now")}</button>}
-      {preview?.today && preview.posted && <span className="planning-chip"><Check size={13} />{t("Today’s post is up.")}</span>}
+      {post.enabled && preview?.due && !preview.posted && <button type="button" className="planning-button" disabled={busy || !post.configured} onClick={() => void postNow()}>{busy ? <LoaderCircle size={15} className="spin" /> : <Send size={15} />}{t("Post Day {day} now", { day: preview.day ?? "" })}</button>}
+      {preview?.posted && <span className="planning-chip"><Check size={13} />{t("Day {day}’s post is up.", { day: preview.day ?? "" })}</span>}
     </div>
     {open && (preview
       ? preview.day === null

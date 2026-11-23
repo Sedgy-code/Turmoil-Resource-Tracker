@@ -35,6 +35,10 @@
     {
       "path": "/api/cron/spending-order",
       "schedule": "5 0 * * *"
+    },
+    {
+      "path": "/api/cron/spending-order?run=midday",
+      "schedule": "5 12 * * *"
     }
   ]
 }

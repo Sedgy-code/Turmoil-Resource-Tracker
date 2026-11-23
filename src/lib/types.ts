@@ -436,15 +436,16 @@ export interface SpendingOrderResponse {
   clanDays: number[];
   orders: SpendOrder[];
   /** Leaders only: the Discord forum post. */
-  post?: { enabled: boolean; configured: boolean; openDay: number | null };
+  post?: { enabled: boolean; configured: boolean; openDays: number[] };
 }
 export interface SpendingPostPreview {
-  /** The clan day the post is for (today's, or the next one). */
+  /** The clan day the post is for: the next one due (tomorrow's, or today's), else the next clan day. */
   day: number | null;
-  today: boolean;
+  /** It can go up now: posts go up the day before their clan day. */
+  due: boolean;
   title: string;
   content: string;
   enabled: boolean;
-  /** Today's post is already up in Discord. */
+  /** That day's post is already up in Discord. */
   posted: boolean;
 }

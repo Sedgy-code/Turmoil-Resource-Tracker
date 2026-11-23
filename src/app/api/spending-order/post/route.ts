@@ -13,7 +13,7 @@ export async function GET() {
   } catch (error) { return errorResponse(error); }
 }
 
-/** Leaders: open today's post now instead of waiting for the next day's start. */
+/** Leaders: open the post that's due (tomorrow's, or today's) now instead of waiting for the job. */
 export async function POST(request: Request) {
   try {
     assertSameOrigin(request);

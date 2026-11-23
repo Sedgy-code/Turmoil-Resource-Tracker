@@ -118,9 +118,33 @@ function buildOrders(context: Context, forDay?: number): SpendOrder[] {
   });
 }
 
-async function openPostDay(connection: SqlConnection, week: string): Promise<number | null> {
-  const rows = await connection.query("SELECT war_day FROM spending_posts WHERE war_week = $1 AND closed_at IS NULL AND thread_id <> '' ORDER BY war_day DESC LIMIT 1", [week]);
-  return rows.length ? Number(rows[0].war_day) : null;
+/** The war's clan days whose post is up and not closed yet (the day before a clan day, there can be two). */
+async function openPostDays(connection: SqlConnection, week: string): Promise<number[]> {
+  const rows = await connection.query("SELECT war_day FROM spending_posts WHERE war_week = $1 AND closed_at IS NULL AND thread_id <> '' ORDER BY war_day", [week]);
+  return rows.map((row) => Number(row.war_day));
+}
+
+/** The war's clan days that already have a post. */
+async function postedDays(connection: SqlConnection, week: string): Promise<Set<number>> {
+  const rows = await connection.query("SELECT war_day FROM spending_posts WHERE war_week = $1 AND thread_id <> ''", [week]);
+  return new Set(rows.map((row) => Number(row.war_day)));
+}
+
+/**
+ * Clan days whose post can go up now: tomorrow's (posts go up the day before, so members can talk
+ * about the order), and today's if it never went up. On Day 7, tomorrow is the next war's Day 1.
+ */
+function dueDays(context: Context): number[] {
+  const days: number[] = [];
+  if (!context.nextWar && context.clanDays.includes(context.warDay)) days.push(context.warDay);
+  const tomorrow = context.nextWar ? (context.warDay === 7 ? 1 : null) : context.warDay + 1;
+  if (tomorrow !== null && tomorrow <= 5 && context.clanDays.includes(tomorrow)) days.push(tomorrow);
+  return days.filter((day) => resourcesOnDay(day).length > 0);
+}
+
+/** Whether a clan day has started (it's today), rather than being tomorrow or later. */
+function dayIsOn(context: Context, day: number): boolean {
+  return !context.nextWar && day === context.warDay;
 }
 
 function botToken(): string | null {
@@ -141,7 +165,7 @@ export async function getSpendingOrder(actor: Member, db?: Database | SqlConnect
     nextWar: context.nextWar,
     clanDays: context.clanDays,
     orders: buildOrders(context),
-    ...(me.role === "ADMIN" ? { post: { enabled: context.settings.postEnabled, configured: !!botToken() && !!channelId(), openDay: await openPostDay(connection, context.week) } } : {}),
+    ...(me.role === "ADMIN" ? { post: { enabled: context.settings.postEnabled, configured: !!botToken() && !!channelId(), openDays: await openPostDays(connection, context.week) } } : {}),
   };
 }
 
@@ -160,8 +184,9 @@ export async function updateSpendingSettings(actor: Member, input: { postEnabled
 
 /* ---------------------------------------------------------------------------------------------
  * The #spending-order forum post: one per clan day, names only (nobody is pinged), English only
- * (the server's translation bot does the rest). Opened just after the day starts (00:00 UTC) with
- * the order as it stands then, and closed and archived when the day ends.
+ * (the server's translation bot does the rest). Opened the day before, so members can talk about
+ * the order; updated with the order as it stands when the day starts (00:00 UTC); and closed and
+ * archived when the day ends.
  * ------------------------------------------------------------------------------------------- */
 
 const RESOURCE_EMOJI: Record<SpendResource, string> = { skills: "🎟️", pets: "🥚", mounts: "🐎" };
@@ -181,11 +206,17 @@ export function spendingPostTitle(day: number, date: Date): string {
   return `Day ${day} – ${list} · ${when}`.slice(0, 100);
 }
 
+/** "00:00 UTC Tue 24 Nov" */
+function utcStart(date: Date): string {
+  return `00:00 UTC ${new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" }).format(date)}`;
+}
+
 /**
  * The post's text: each line that scores that day, numbered, biggest stockpile first. The whole order
  * when it fits in one Discord message; otherwise the top of each line and how many more there are.
+ * With `starts`, the post is up before the day and says when it starts; without, the day is on now.
  */
-export function spendingPostContent(day: number, orders: SpendOrder[], link: string): string {
+export function spendingPostContent(day: number, orders: SpendOrder[], link: string, starts?: Date): string {
   const shown = orders.filter((order) => resourcesOnDay(day).includes(order.resource));
   const snipers = shown.some((order) => order.rows.some((row) => row.sniper && row.state === "line"));
   const write = (limit: number) => {
@@ -199,11 +230,12 @@ export function spendingPostContent(day: number, orders: SpendOrder[], link: str
     });
     return [
       `📋 **Spending order – Day ${day} (clan day)**`,
+      starts ? `Day ${day} starts ${utcStart(starts)}. The order updates when it starts.` : `Day ${day} is on now. Spend in this order.`,
       "Biggest stockpiles first. Find your place, and ask questions here.",
       "",
       blocks.join("\n\n"),
       "",
-      ...(snipers ? ["🎯 = in today's snipe, so they go first."] : []),
+      ...(snipers ? [`🎯 = in the Day ${day} snipe, so they go first.`] : []),
       `Full order and your place: ${link}`,
     ].join("\n");
   };
@@ -221,60 +253,89 @@ async function discordReason(response: Response): Promise<string> {
   return `HTTP ${response.status}`;
 }
 
-/** What today's post says (or the next clan day's, when today isn't one). */
-async function previewFor(connection: SqlConnection, now: Date): Promise<{ day: number | null; today: boolean; title: string; content: string; week: string }> {
-  const context = await loadContext(connection, now);
-  const from = context.nextWar ? 1 : context.warDay;
-  const day = context.clanDays.find((item) => item >= from && resourcesOnDay(item).length > 0) ?? null;
-  if (day === null) return { day: null, today: false, title: "", content: "", week: context.week };
-  const orders = buildOrders(context, day);
+interface PostDraft { day: number; week: string; title: string; content: string }
+
+/** A clan day's post as it would go up now: before the day it says when it starts, on the day that it's on. */
+function draftFor(context: Context, day: number): PostDraft {
+  const starts = dayStart(context.week, day);
   return {
     day,
-    today: !context.nextWar && day === context.warDay,
-    title: spendingPostTitle(day, dayStart(context.week, day)),
-    content: spendingPostContent(day, orders, `${appUrl()}/spending-order`),
     week: context.week,
+    title: spendingPostTitle(day, starts),
+    content: spendingPostContent(day, buildOrders(context, day), `${appUrl()}/spending-order`, dayIsOn(context, day) ? undefined : starts),
   };
 }
 
-/** Leaders: the post as it would look right now, before anything goes to Discord. */
-export async function spendingPostPreview(actor: Member, db?: Database, now = new Date()): Promise<SpendingPostPreview> {
-  const connection = db ?? await database();
-  await requireLeader(connection, actor.id);
-  const preview = await previewFor(connection, now);
-  const settings = await spendingSettings(connection);
-  const posted = preview.today && preview.day !== null
-    ? (await connection.query("SELECT 1 FROM spending_posts WHERE war_week = $1 AND war_day = $2 AND thread_id <> ''", [preview.week, preview.day])).length > 0
-    : false;
-  return { day: preview.day, today: preview.today, title: preview.title, content: preview.content, enabled: settings.postEnabled, posted };
+/**
+ * The post leaders see in the preview: the next one due that isn't up yet, else the one that's up,
+ * else the next clan day's (not due yet).
+ */
+async function previewFor(connection: SqlConnection, now: Date): Promise<{ draft: PostDraft | null; due: boolean; posted: boolean }> {
+  const context = await loadContext(connection, now);
+  const posted = await postedDays(connection, context.week);
+  const due = dueDays(context);
+  const from = context.nextWar ? 1 : context.warDay;
+  const day = due.find((item) => !posted.has(item)) ?? due[0]
+    ?? context.clanDays.find((item) => item >= from && resourcesOnDay(item).length > 0) ?? null;
+  if (day === null) return { draft: null, due: false, posted: false };
+  return { draft: draftFor(context, day), due: due.includes(day), posted: posted.has(day) };
 }
 
-/** Opens today's post when today is a clan day and it isn't up yet. Returns the day posted, or null. */
-async function openTodaysPost(connection: SqlConnection, token: string, fetcher: typeof fetch, now: Date): Promise<number | null> {
-  const preview = await previewFor(connection, now);
-  if (!preview.today || preview.day === null) return null;
+/** Leaders: the post as it would look right now, before anything goes to Discord. */
+export async function spendingPostPreview(actor: Member, db?: Database | SqlConnection, now = new Date()): Promise<SpendingPostPreview> {
+  const connection = db ?? await database();
+  await requireLeader(connection, actor.id);
+  const { draft, due, posted } = await previewFor(connection, now);
+  const settings = await spendingSettings(connection);
+  return { day: draft?.day ?? null, due, title: draft?.title ?? "", content: draft?.content ?? "", enabled: settings.postEnabled, posted };
+}
+
+/** Opens a clan day's post. Returns false when it's already up (or another run is opening it). */
+async function openPost(connection: SqlConnection, token: string, fetcher: typeof fetch, now: Date, draft: PostDraft, on: boolean): Promise<boolean> {
   const channel = channelId();
-  if (!channel) return null;
-  // Claim the day first, so two runs at once never open two posts.
-  const claimed = await connection.query(`INSERT INTO spending_posts (war_week, war_day, channel_id, thread_id, opened_at) VALUES ($1, $2, $3, '', $4)
-    ON CONFLICT (war_week, war_day) DO NOTHING RETURNING war_day`, [preview.week, preview.day, channel, now.toISOString()]);
-  if (!claimed.length) return null;
+  if (!channel) return false;
+  // Claim the day first, so two runs at once never open two posts. A post opened on its day needs no update when it starts.
+  const claimed = await connection.query(`INSERT INTO spending_posts (war_week, war_day, channel_id, thread_id, opened_at, refreshed_at) VALUES ($1, $2, $3, '', $4, $5)
+    ON CONFLICT (war_week, war_day) DO NOTHING RETURNING war_day`, [draft.week, draft.day, channel, now.toISOString(), on ? now.toISOString() : null]);
+  if (!claimed.length) return false;
   try {
     const response = await fetcher(`${DISCORD_API}/channels/${channel}/threads`, {
       method: "POST",
       headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
-      // Nobody is pinged (leadership asked for names only); flags 4 = no link previews.
-      body: JSON.stringify({ name: preview.title, auto_archive_duration: 1440, message: { content: preview.content, allowed_mentions: { parse: [] }, flags: 4 } }),
+      // Nobody is pinged (leadership asked for names only); flags 4 = no link previews. Up to two days
+      // open, so Discord's own auto-archive is set past that (3 days); the job closes it when the day ends.
+      body: JSON.stringify({ name: draft.title, auto_archive_duration: 4320, message: { content: draft.content, allowed_mentions: { parse: [] }, flags: 4 } }),
     });
     if (!response.ok) throw new ApiError(502, `Discord did not accept the post (${await discordReason(response)}).`, "SPENDING_POST_FAILED");
     const thread = (await response.json()) as { id?: unknown };
     if (!thread?.id) throw new ApiError(502, "Discord did not accept the post.", "SPENDING_POST_FAILED");
-    await connection.query("UPDATE spending_posts SET thread_id = $3 WHERE war_week = $1 AND war_day = $2", [preview.week, preview.day, String(thread.id)]);
-    return preview.day;
+    await connection.query("UPDATE spending_posts SET thread_id = $3 WHERE war_week = $1 AND war_day = $2", [draft.week, draft.day, String(thread.id)]);
+    return true;
   } catch (error) {
-    await connection.query("DELETE FROM spending_posts WHERE war_week = $1 AND war_day = $2 AND thread_id = ''", [preview.week, preview.day]);
+    await connection.query("DELETE FROM spending_posts WHERE war_week = $1 AND war_day = $2 AND thread_id = ''", [draft.week, draft.day]);
     throw error;
   }
+}
+
+/**
+ * When a clan day starts, its post (up since the day before) gets the order as it stands then:
+ * resources, holidays and snipes may have changed. A forum post's first message has the post's id.
+ */
+async function refreshTodaysPost(connection: SqlConnection, token: string, fetcher: typeof fetch, context: Context): Promise<number | null> {
+  if (context.nextWar) return null;
+  const rows = await connection.query("SELECT thread_id FROM spending_posts WHERE war_week = $1 AND war_day = $2 AND thread_id <> '' AND closed_at IS NULL AND refreshed_at IS NULL",
+    [context.week, context.warDay]);
+  if (!rows.length) return null;
+  const thread = String(rows[0].thread_id);
+  const draft = draftFor(context, context.warDay);
+  const response = await fetcher(`${DISCORD_API}/channels/${thread}/messages/${thread}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ content: draft.content, allowed_mentions: { parse: [] }, flags: 4 }),
+  });
+  if (!response.ok) throw new ApiError(502, `Discord did not take the updated order (${await discordReason(response)}).`, "SPENDING_POST_FAILED");
+  await connection.query("UPDATE spending_posts SET refreshed_at = $3 WHERE war_week = $1 AND war_day = $2", [context.week, context.warDay, context.now.toISOString()]);
+  return context.warDay;
 }
 
 /** Archives and locks a post so the day's talk stays readable but closed. */
@@ -288,12 +349,13 @@ async function closeThread(threadId: string, token: string, fetcher: typeof fetc
 }
 
 /**
- * The daily job (vercel.json, just after 00:00 UTC): closes posts for days that have ended, then
- * opens today's post when today is a clan day and the post is switched on.
+ * The job (vercel.json: just after 00:00 UTC, and again at 12:05 UTC for clan days picked late):
+ * closes posts for days that have ended; then, when the post is switched on, updates the post for
+ * the day that just started, and opens the posts that are due (tomorrow's, or today's if it never went up).
  */
-export async function syncSpendingPosts(dependencies: Dependencies = {}): Promise<{ closed: number; opened: number | null; skipped?: string }> {
+export async function syncSpendingPosts(dependencies: Dependencies = {}): Promise<{ closed: number; refreshed: number | null; opened: number[]; skipped?: string }> {
   const token = botToken();
-  if (!token) return { closed: 0, opened: null, skipped: "not configured" };
+  if (!token) return { closed: 0, refreshed: null, opened: [], skipped: "not configured" };
   const connection = dependencies.db ?? await database();
   const now = dependencies.now ?? new Date();
   const fetcher = dependencies.fetcher ?? fetch;
@@ -307,11 +369,26 @@ export async function syncSpendingPosts(dependencies: Dependencies = {}): Promis
       closed++;
     }
   }
-  if (!(await spendingSettings(connection)).postEnabled) return { closed, opened: null, skipped: "switched off" };
-  return { closed, opened: await openTodaysPost(connection, token, fetcher, now) };
+  if (!(await spendingSettings(connection)).postEnabled) return { closed, refreshed: null, opened: [], skipped: "switched off" };
+  const context = await loadContext(connection, now);
+  // Each step on its own: one failing doesn't stop the rest, and the next run tries again.
+  let failure: unknown = null;
+  let refreshed: number | null = null;
+  try { refreshed = await refreshTodaysPost(connection, token, fetcher, context); } catch (error) { failure = error; }
+  const opened: number[] = [];
+  for (const day of dueDays(context)) {
+    try {
+      if (await openPost(connection, token, fetcher, now, draftFor(context, day), dayIsOn(context, day))) opened.push(day);
+    } catch (error) { failure ??= error; }
+  }
+  if (failure) {
+    console.error("Spending order post:", failure);
+    if (refreshed === null && !opened.length) throw failure;
+  }
+  return { closed, refreshed, opened };
 }
 
-/** Leaders: open today's post straight away (switched on, a clan day, and not posted yet). */
+/** Leaders: open the post that's due now (tomorrow's, or today's) instead of waiting for the job. */
 export async function postSpendingNow(actor: Member, dependencies: Dependencies = {}): Promise<SpendingPostPreview> {
   const connection = dependencies.db ?? await database();
   const now = dependencies.now ?? new Date();
@@ -319,10 +396,13 @@ export async function postSpendingNow(actor: Member, dependencies: Dependencies 
   const token = botToken();
   if (!token || !channelId()) throw new ApiError(503, "The Discord post isn’t set up yet.", "SPENDING_POST_NOT_CONFIGURED");
   if (!(await spendingSettings(connection)).postEnabled) throw new ApiError(409, "Switch the Discord post on first.", "SPENDING_POST_OFF");
-  const preview = await previewFor(connection, now);
-  if (!preview.today) throw new ApiError(409, "Today isn’t a clan day, so there’s nothing to post.", "NOT_A_CLAN_DAY");
-  const opened = await openTodaysPost(connection, token, dependencies.fetcher ?? fetch, now);
-  if (opened === null) throw new ApiError(409, "Today’s post is already up.", "SPENDING_POST_EXISTS");
+  const context = await loadContext(connection, now);
+  const due = dueDays(context);
+  if (!due.length) throw new ApiError(409, "There’s no clan day today or tomorrow, so there’s nothing to post yet.", "NOT_A_CLAN_DAY");
+  const posted = await postedDays(connection, context.week);
+  const day = due.find((item) => !posted.has(item));
+  if (day === undefined || !(await openPost(connection, token, dependencies.fetcher ?? fetch, now, draftFor(context, day), dayIsOn(context, day)))) {
+    throw new ApiError(409, "That day’s post is already up.", "SPENDING_POST_EXISTS");
+  }
   return spendingPostPreview(actor, connection, now);
 }
-
