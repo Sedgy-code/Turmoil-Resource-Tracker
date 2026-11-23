@@ -349,10 +349,3 @@ button.home-link { padding: 0; border: 0; background: none; font: inherit; font-
 .home-ascend-warning strong svg { flex-shrink: 0; color: #ffc65c; }
 .home-ascend-warning p { margin: 0; font-size: 13.5px; line-height: 1.45; }
 .home-job-text small .home-link { display: inline-flex; align-items: center; gap: 4px; }
-
-/* Your turn on a clan day: spend, then say you're done. */
-.home-your-turn { border: 1.5px solid #2fe46cc4; background: radial-gradient(110% 60% at 0% 0%, #0f3420 0%, transparent 60%), linear-gradient(180deg, #071510, #050c0a); box-shadow: 0 0 24px -6px #2fe46c77; }
-.home-your-turn .home-kicker svg { color: var(--hw-glow); }
-.home-turn-lines { display: grid; gap: 8px; margin: 10px 0 12px; }
-.home-turn-lines .home-hero-cta { width: 100%; justify-content: center; }
-.home-turn-lines .home-hero-cta:disabled { opacity: 0.6; cursor: wait; }

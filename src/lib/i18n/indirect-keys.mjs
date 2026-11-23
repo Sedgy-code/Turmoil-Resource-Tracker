@@ -120,8 +120,8 @@ export const INDIRECT_KEYS = [
   "Hold", "Today isn’t a clan day. Keep your resources and spend them on the next clan day.",
   "Black mark", "Given in a war when more than 10% of your war points came on days that weren’t clan days.",
   "Snipe", "A set time when members spend together, all at once, to get ahead of another clan. Say Yes if you can be online then.",
-  "Ascending", "Ticking a pillar means you plan to ascend it this week, not that you can start. Wait for your turn on War → Spending order before you push.",
-  "Spending order", "Who spends first on a clan day. Members in that day’s snipe go first, then the biggest stockpiles. When it’s your turn, spend, then tap I’m done so the next person moves up.",
+  "Ascending", "Ticking a pillar means you plan to ascend it this week, not that you can start. Check your place on War → Spending order before you push.",
+  "Spending order", "Who spends first on a clan day. Members in that day’s snipe go first, then the biggest stockpiles.",
   "Clan Tech Race", "A week-long race where clans donate Clan Tech Vials. Each day at 00:00 UTC the lowest clans are knocked out.",
   "Potential war points", "An estimate of the war points the clan could score if everyone spent what they’ve saved on the right days.",
   // Reward names (src/lib/dew.ts DEW_ITEMS)
@@ -169,6 +169,6 @@ export const INDIRECT_KEYS = [
   "Unable to calculate this estimate. Reduce the selected activities or saved resource counts.",
   // Spending order (src/lib/spending-order.ts, src/lib/server/spending-order.ts): the tab, rarities from the ascension guide, server messages
   "Spending Order", "Epic", "Legendary", "Ultimate", "Mythic",
-  "Only leaders can change the spending order.", "Only leaders can mark someone else as done.", "The Discord post isn’t set up yet.",
+  "Only leaders can change the spending order.", "The Discord post isn’t set up yet.",
   "Switch the Discord post on first.", "Today isn’t a clan day, so there’s nothing to post.", "Today’s post is already up.", "Choose a setting to update.",
 ];

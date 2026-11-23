@@ -404,22 +404,19 @@ export type AscendCheck =
   | { state: "none" };
 export interface SpendRow {
   member: Member;
-  /** Place in the line (1 = first); done and away members have none. */
+  /** Place in the order (1 = first); members away on holiday have none. */
   place: number | null;
-  /** War points the member's saved resources for this pillar can score (what the line is ordered by). */
+  /** War points the member's saved resources for this pillar can score (what the order is by). */
   points: number;
   /** The saved amounts behind it, e.g. skill tickets, or eggs/pets and eggshells. */
   amounts: { key: ResourceKey; value: number }[];
-  state: "turn" | "wait" | "done" | "away";
-  /** While waiting: how many members must finish before it's your turn. */
-  ahead: number;
+  /** In the order, or skipped because they're away. */
+  state: "line" | "away";
   /** Said Yes to (or checked in for) that day's snipe: they go first. */
   sniper: boolean;
   /** Planning to ascend this pillar this week (Home). */
   ascending: boolean;
   check: AscendCheck;
-  /** Done: who marked it (a leader's name when it wasn't the member). */
-  doneBy?: string | null;
 }
 export interface SpendOrder {
   resource: SpendResource;
@@ -427,8 +424,6 @@ export interface SpendOrder {
   day: number | null;
   /** That clan day is today. */
   today: boolean;
-  /** How many members have a turn at once (leaders set it). */
-  turns: number;
   rows: SpendRow[];
 }
 export interface SpendingOrderResponse {

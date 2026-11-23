@@ -9,10 +9,10 @@ import { initializeSchema, openDatabase, type Database } from "../src/lib/server
 import { ApiError } from "../src/lib/server/errors";
 import { memberFromRow } from "../src/lib/server/mappers";
 import {
-  doneUpdateMessage, getSpendingOrder, plainName, postSpendingNow, setSpendingDone, spendingPostContent, spendingPostPreview,
+  getSpendingOrder, plainName, postSpendingNow, spendingPostContent, spendingPostPreview,
   spendingPostTitle, syncSpendingPosts, updateSpendingSettings,
 } from "../src/lib/server/spending-order";
-import { spendDoneSchema, spendSettingsSchema } from "../src/lib/server/validation";
+import { spendSettingsSchema } from "../src/lib/server/validation";
 
 // The war of Monday 23 November 2026: Day 1 is Tuesday 24th, Day 3 Thursday 26th, Day 6 Sunday 29th.
 const WEEK = "2026-11-23";
@@ -73,7 +73,7 @@ test("each line is for today's clan day, or the next one where it scores", () =>
   assert.deepEqual(orderWeek(DAY_6), { week: "2026-11-30", warDay: 6, nextWar: true });
 });
 
-test("snipers go first, then the biggest stockpile; the first few have a turn and finishing moves the line", () => {
+test("snipers go first, then the biggest stockpile; members away are skipped", () => {
   const members = [person("a", "Ana"), person("b", "Bo"), person("c", "Cy"), person("d", "Di", "2026-11-27"), person("e", "Ed"), person("f", "Fay")];
   const entries = [
     entry("a", { skillTickets: 50_000 }),
@@ -81,53 +81,56 @@ test("snipers go first, then the biggest stockpile; the first few have a turn an
     entry("c", { skillTickets: 10_000 }),
     entry("d", { skillTickets: 99_000 }),
     entry("e", { skillTickets: 70_000 }),
-    entry("f", {}), // nothing saved for skills: not in the line
+    entry("f", {}), // nothing saved for skills: not in the order
   ];
-  const input = {
-    resource: "skills" as const, members, entries, rates: DEFAULT_WAR_RATES, ascending: new Map([["c", ["skills" as const]]]),
-    snipers: new Set(["c"]), done: new Map<string, string | null>(), turns: 2, date: "2026-11-26", day: 3, today: true,
-  };
-  const line = buildOrder(input);
+  const line = buildOrder({
+    resource: "skills", members, entries, rates: DEFAULT_WAR_RATES, ascending: new Map([["c", ["skills" as const]]]),
+    snipers: new Set(["c"]), date: "2026-11-26", day: 3, today: true,
+  });
   assert.deepEqual(line.rows.map((row) => [row.member.username, row.state, row.place]), [
-    ["Cy", "turn", 1], ["Bo", "turn", 2], ["Ed", "wait", 3], ["Ana", "wait", 4], ["Di", "away", null],
+    ["Cy", "line", 1], ["Bo", "line", 2], ["Ed", "line", 3], ["Ana", "line", 4], ["Di", "away", null],
   ]);
+  assert.deepEqual([line.day, line.today], [3, true]);
   assert.equal(line.rows[0].sniper, true);
   assert.equal(line.rows[0].ascending, true);
-  assert.equal(line.rows[3].ahead, 2);
   // 90,000 tickets at 200 for 5 = 2,250 skill summons × 225 points.
   assert.equal(line.rows[1].points, 2_250 * 225);
-  // Bo finishes: Ed moves up to a turn, Bo is listed as done.
-  const next = buildOrder({ ...input, done: new Map([["b", null]]) });
-  assert.deepEqual(next.rows.map((row) => [row.member.username, row.state]), [["Cy", "turn"], ["Ed", "turn"], ["Ana", "wait"], ["Bo", "done"], ["Di", "away"]]);
+  // Back from holiday by Day 5, and no snipe that day: Di is back in the order, biggest first.
+  const later = buildOrder({ resource: "skills", members, entries, rates: DEFAULT_WAR_RATES, ascending: new Map(), snipers: new Set(), date: "2026-11-28", day: 5, today: false });
+  assert.deepEqual(later.rows.map((row) => [row.member.username, row.place]), [["Di", 1], ["Bo", 2], ["Ed", 3], ["Ana", 4], ["Cy", 5]]);
 });
 
-test("the post says it in English with names only, never pinging anyone", () => {
+test("the post lists the order in English with names only, never pinging anyone", () => {
   assert.equal(spendingPostTitle(3, new Date("2026-11-26T00:00:00Z")), "Day 3 – Skills and Pets · Thu 26 Nov");
   assert.equal(spendingPostTitle(2, new Date("2026-11-25T00:00:00Z")), "Day 2 – Mounts · Wed 25 Nov");
-  assert.equal(plainName("*Star*_x @everyone"), "\\*Star\\*\\_x @​everyone");
-  const members = [person("a", "Ana"), person("b", "Bo")];
+  assert.equal(plainName("*Star*_x @everyone"), "\\*Star\\*\\_x @\u200beveryone");
+  const members = [person("a", "Ana"), person("b", "Bo"), person("c", "Cy", "2026-11-30")];
   const line = buildOrder({
-    resource: "skills", members, entries: [entry("a", { skillTickets: 50_000 }), entry("b", { skillTickets: 90_000 })], rates: DEFAULT_WAR_RATES,
-    ascending: new Map(), snipers: new Set(["a"]), done: new Map(), turns: 1, date: "2026-11-26", day: 3, today: true,
+    resource: "skills", members, entries: [entry("a", { skillTickets: 50_000 }), entry("b", { skillTickets: 90_000 }), entry("c", { skillTickets: 1_000 })],
+    rates: DEFAULT_WAR_RATES, ascending: new Map(), snipers: new Set(["a"]), date: "2026-11-26", day: 3, today: true,
   });
   const text = spendingPostContent(3, [line], "https://tracker.example/spending-order");
   assert.match(text, /Spending order – Day 3 \(clan day\)/);
-  assert.match(text, /✅ Your turn \(1 at once\): 🎯 Ana/);
-  assert.match(text, /⏳ Next: Bo/);
+  assert.match(text, /🎟️ \*\*Skills\*\*\n1\. 🎯 Ana\n2\. Bo\n/);
+  assert.doesNotMatch(text, /Cy/); // away: skipped
   assert.match(text, /in today's snipe/);
-  assert.doesNotMatch(text, /<@/);
-  assert.doesNotMatch(text, /[぀-ヿ一-鿿가-힯]/u);
-  assert.equal(doneUpdateMessage("Ana", "skills", true, ["Bo"]), "✅ **Ana** is done with Skills. Your turn now: **Bo**.");
-  assert.equal(doneUpdateMessage("Ana", "skills", false, []), "↩️ **Ana** is back in the Skills line.");
+  assert.doesNotMatch(text, /<@|Your turn|I'm done/);
+  assert.doesNotMatch(text, /[\u3040-\u30ff\u4e00-\u9fff\uac00-\ud7af]/u);
+  // A long order is cut to fit one Discord message, saying how many more there are.
+  const many = Array.from({ length: 120 }, (_, index) => person(`m${index}`, `Member number ${index} with a long name`));
+  const long = buildOrder({
+    resource: "skills", members: many, entries: many.map((member, index) => entry(member.id, { skillTickets: 10_000 + index })),
+    rates: DEFAULT_WAR_RATES, ascending: new Map(), snipers: new Set(), date: "2026-11-26", day: 3, today: true,
+  });
+  const cut = spendingPostContent(3, [long], "https://tracker.example/spending-order");
+  assert.ok(cut.length <= 2000);
+  assert.match(cut, /\+\d+ more on the Clan Hub/);
 });
 
-test("only the three lines and sensible turn counts can be sent", () => {
-  assert.deepEqual(spendDoneSchema.parse({ resource: "pets", done: true }), { resource: "pets", done: true });
-  assert.throws(() => spendDoneSchema.parse({ resource: "forge", done: true }));
-  assert.throws(() => spendDoneSchema.parse({ resource: "pets", done: true, memberId: "not-a-uuid" }));
-  assert.deepEqual(spendSettingsSchema.parse({ turns: { skills: 4 } }), { turns: { skills: 4 } });
-  assert.throws(() => spendSettingsSchema.parse({ turns: { skills: 0 } }));
-  assert.throws(() => spendSettingsSchema.parse({ turns: { forge: 2 } }));
+test("only the post switch can be sent", () => {
+  assert.deepEqual(spendSettingsSchema.parse({ postEnabled: true }), { postEnabled: true });
+  assert.throws(() => spendSettingsSchema.parse({ turns: { skills: 2 } }));
+  assert.throws(() => spendSettingsSchema.parse({ postEnabled: true, turns: { skills: 2 } }));
   assert.throws(() => spendSettingsSchema.parse({}));
 });
 
@@ -155,7 +158,7 @@ async function saveBank(member: Member, resources: Partial<ResourceValues>) {
   [member.id, JSON.stringify(bank.resources), JSON.stringify(bank.summoningCosts), JSON.stringify(bank.planningDetails), DAY_1.toISOString()]);
 }
 
-test("members finish their own turn, leaders can finish anyone's and set the turns; Days 6–7 look at the next war", async () => {
+test("everyone sees the order; only leaders switch the post; Days 6–7 look at the next war", async () => {
   const leader = await addMember("Lead", "ADMIN");
   const ana = await addMember("Ana");
   const bo = await addMember("Bo");
@@ -164,7 +167,7 @@ test("members finish their own turn, leaders can finish anyone's and set the tur
   await saveBank(bo, { skillTickets: 60_000, eggsPetsTotal: 100 });
   await saveBank(cy, { skillTickets: 40_000, eggshellsTotal: 5_000 });
   await db.query("INSERT INTO clan_war_days (war_week, days) VALUES ($1, '1,3')", [WEEK]);
-  // Bo said Yes to Day 3's skills snipe, so Bo goes first in the Skills line that day.
+  // Bo said Yes to Day 3's skills snipe, so Bo goes first in the Skills order that day.
   const snipe = randomUUID();
   await db.query("INSERT INTO snipe_plans (id, title, starts_at, activities, created_by) VALUES ($1, 'Day 3 – Skills', '2026-11-26T23:30:00Z', '[\"skillSummons\"]'::jsonb, $2)", [snipe, leader.id]);
   await db.query("INSERT INTO snipe_responses (snipe_id, member_id, answer) VALUES ($1, $2, 'yes')", [snipe, bo.id]);
@@ -172,32 +175,26 @@ test("members finish their own turn, leaders can finish anyone's and set the tur
   const onDay2 = await getSpendingOrder(ana, db, DAY_2);
   assert.equal(onDay2.post, undefined); // only leaders see the post's state
   const skills = onDay2.orders.find((line) => line.resource === "skills")!;
-  assert.deepEqual([skills.day, skills.today, skills.turns], [3, false, 3]);
-  assert.deepEqual(skills.rows.map((row) => row.member.username), ["Bo", "Ana", "Cy"]);
+  assert.deepEqual([skills.day, skills.today], [3, false]);
+  assert.deepEqual(skills.rows.map((row) => [row.member.username, row.place]), [["Bo", 1], ["Ana", 2], ["Cy", 3]]);
   assert.equal(onDay2.orders.find((line) => line.resource === "mounts")!.day, null);
+  // On Day 1 the Skills order is for today, so the Day 3 snipe doesn't count yet.
+  const onDay1 = (await getSpendingOrder(ana, db, DAY_1)).orders.find((line) => line.resource === "skills")!;
+  assert.deepEqual([onDay1.day, onDay1.today, onDay1.rows[0].member.username], [1, true, "Ana"]);
 
-  await assert.rejects(setSpendingDone(ana, { resource: "skills", done: true, memberId: bo.id }, { db, now: DAY_3 }), (error) => error instanceof ApiError && error.code === "ADMIN_REQUIRED");
-  await assert.rejects(updateSpendingSettings(ana, { turns: { skills: 1 } }, { db, now: DAY_3 }), (error) => error instanceof ApiError && error.code === "ADMIN_REQUIRED");
-  const fewer = await updateSpendingSettings(leader, { turns: { skills: 1 } }, { db, now: DAY_3 });
-  assert.equal(fewer.post?.enabled, false);
-  assert.deepEqual(fewer.orders.find((line) => line.resource === "skills")!.rows.map((row) => row.state), ["turn", "wait", "wait"]);
-  const mine = await setSpendingDone(bo, { resource: "skills", done: true }, { db, now: DAY_3 });
-  assert.deepEqual(mine.orders.find((line) => line.resource === "skills")!.rows.map((row) => [row.member.username, row.state]), [["Ana", "turn"], ["Cy", "wait"], ["Bo", "done"]]);
-  const marked = await setSpendingDone(leader, { resource: "skills", done: true, memberId: ana.id }, { db, now: DAY_3 });
-  const doneRow = marked.orders.find((line) => line.resource === "skills")!.rows.find((row) => row.member.id === ana.id)!;
-  assert.deepEqual([doneRow.state, doneRow.doneBy], ["done", "Lead"]);
-  const undone = await setSpendingDone(leader, { resource: "skills", done: false, memberId: ana.id }, { db, now: DAY_3 });
-  assert.equal(undone.orders.find((line) => line.resource === "skills")!.rows[0].member.id, ana.id);
-  // Battle day: this war's spending is over, so it's the next war's line, and nobody is done yet.
+  await assert.rejects(updateSpendingSettings(ana, { postEnabled: true }, { db, now: DAY_3 }), (error) => error instanceof ApiError && error.code === "ADMIN_REQUIRED");
+  const leaders = await getSpendingOrder(leader, db, DAY_3);
+  assert.deepEqual([leaders.post?.enabled, leaders.post?.openDay], [false, null]);
+  const off = await updateSpendingSettings(leader, { postEnabled: false }, { db, now: DAY_3 });
+  assert.equal(off.post?.enabled, false);
+  // Battle day: this war's spending is over, so it's the next war's order.
   const battle = await getSpendingOrder(bo, db, DAY_6);
   assert.deepEqual([battle.nextWar, battle.week, battle.clanDays], [true, "2026-11-30", []]);
-  assert.ok(battle.orders.every((line) => line.rows.every((row) => row.state !== "done")));
 });
 
-test("the clan-day post opens once, follows the line as members finish, and closes when the day ends", async () => {
+test("the clan-day post opens once with the order, and closes when the day ends", async () => {
   Object.assign(process.env, { NODE_ENV: "test", APP_URL: "https://tracker.example", DISCORD_BOT_TOKEN: "bot-token", DISCORD_SPENDING_CHANNEL_ID: "555" });
   const leader = (await db.query("SELECT * FROM app_members WHERE username = 'Lead'")).map(memberFromRow)[0];
-  const ana = (await db.query("SELECT * FROM app_members WHERE username = 'Ana'")).map(memberFromRow)[0];
   const calls: { url: string; method: string; body: Record<string, unknown> }[] = [];
   const fetcher = (async (url: string, init: RequestInit) => {
     calls.push({ url, method: String(init.method ?? "GET"), body: init.body ? JSON.parse(String(init.body)) : {} });
@@ -218,27 +215,13 @@ test("the clan-day post opens once, follows the line as members finish, and clos
   assert.equal(calls[0].url, "https://discord.com/api/v10/channels/555/threads");
   const message = calls[0].body.message as { content: string; allowed_mentions: unknown };
   assert.deepEqual(message.allowed_mentions, { parse: [] });
-  assert.match(message.content, /🎟️ \*\*Skills\*\*/);
-  assert.match(message.content, /🥚 \*\*Pets\*\*/);
+  assert.match(message.content, /🎟️ \*\*Skills\*\*\n1\. 🎯 Bo\n2\. Ana\n3\. Cy/);
+  assert.match(message.content, /🥚 \*\*Pets\*\*\n1\. Ana\n/);
   assert.match(message.content, /https:\/\/tracker\.example\/spending-order/);
   // A second run the same day opens nothing new.
   assert.deepEqual(await syncSpendingPosts({ db, fetcher, now: DAY_3 }), { closed: 0, opened: null });
   assert.equal(calls.length, 1);
   await assert.rejects(postSpendingNow(leader, { db, fetcher, now: DAY_3 }), (error) => error instanceof ApiError && error.code === "SPENDING_POST_EXISTS");
-
-  // Ana finishes Skills: the post's first message is rewritten and one line says who's up.
-  calls.length = 0;
-  await setSpendingDone(ana, { resource: "skills", done: true }, { db, fetcher, now: DAY_3 });
-  assert.deepEqual(calls.map((call) => [call.method, call.url]), [
-    ["PATCH", "https://discord.com/api/v10/channels/777/messages/777"],
-    ["POST", "https://discord.com/api/v10/channels/777/messages"],
-  ]);
-  assert.match(String(calls[1].body.content), /^✅ \*\*Ana\*\* is done with Skills\./);
-  assert.deepEqual(calls[1].body.allowed_mentions, { parse: [] });
-  // Mounts don't score on Day 3, so the post isn't touched.
-  calls.length = 0;
-  await setSpendingDone(ana, { resource: "mounts", done: true }, { db, fetcher, now: DAY_3 }).catch(() => undefined);
-  assert.equal(calls.length, 0);
 
   // Day 4 starts: Day 3's post is archived and locked; Day 4 isn't a clan day, so nothing opens.
   calls.length = 0;

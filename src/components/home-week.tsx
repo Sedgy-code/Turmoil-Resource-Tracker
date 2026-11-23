@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useState, type ComponentType, type ReactNode } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, Check, ChevronsUp, Clock, Gift, Hand, LoaderCircle, RefreshCw, ShieldCheck, Star, Swords, Target, X, type LucideProps } from "lucide-react";
+import { AlertTriangle, ArrowRight, Check, ChevronsUp, Clock, Gift, Hand, RefreshCw, ShieldCheck, Star, Swords, Target, X, type LucideProps } from "lucide-react";
 import "@fontsource/knewave/400.css";
 import { ASCENSION_PILLARS, ASCENSIONS_UPDATED, PILLAR_LABELS } from "@/lib/ascension";
 import { countdown, raceEnd, warDay, warWeekOf } from "@/lib/war-calendar";
 import { useLanguage, useT } from "@/lib/i18n";
 import type { AscendCheck, AscensionPillar, AscensionsResponse, DashboardResponse, DewResponse, Member, SnipePlan, SnipesResponse, SpendResource } from "@/lib/types";
-import { ascendCheck, SPEND_INFO, SPEND_RESOURCES } from "@/lib/spending-order";
+import { ascendCheck, SPEND_RESOURCES } from "@/lib/spending-order";
 import { currentWeek, numberFormat } from "@/lib/resources";
 import { FoldButton, useFold } from "./home-fold";
 import { TermHelp, WelcomeCard } from "./first-visit";
@@ -21,7 +21,6 @@ import { PILLAR_ICONS, VialIcon } from "./resource-icons";
 import { MemberAvatar } from "./member-identity";
 import { NextWarVote } from "./next-war-vote";
 import { todayAdvice, useClanDayVotes, useClanDays, useNow, type TodayTone } from "./war-week";
-import { useSpendingOrder } from "./spending-order";
 import "./home-week.css";
 
 const DAY = 86_400_000;
@@ -232,7 +231,6 @@ export function HomeWeek({ data, notify, leader }: { data: DashboardResponse; no
     </section>}
     {/* "Spend or hold?" comes first: the one answer members open the Hub for most days. */}
     <HomeToday now={now} notify={notify} memberId={me.id} />
-    <YourTurn memberId={me.id} notify={notify} />
     <HomeHero update={update} saved={savedEntries.length} total={data.stats.totalMembers} faces={faces} mine={saved} week={week} />
     <section className={`home-card home-jobs-card${jobsOpen ? "" : " folded"}`} aria-labelledby="home-jobs-title">
       <div className="home-card-head">
@@ -258,7 +256,7 @@ export function HomeWeek({ data, notify, leader }: { data: DashboardResponse; no
           <div className="home-job-text">
             <strong>{ascensionTitle}<TermHelp term="ascending" /></strong>
             {!answered && <small>{t("Tap what you plan to ascend, or No.")}</small>}
-            {answered && ascension.length > 0 && <small>{t("This asks for a turn. Wait for your turn on the spending order before you push.")} <Link className="home-link" href="/spending-order">{t("Spending Order")}<ArrowRight size={14} aria-hidden="true" /></Link></small>}
+            {answered && ascension.length > 0 && <small>{t("Check your place on the Spending Order before you push.")} <Link className="home-link" href="/spending-order">{t("Spending Order")}<ArrowRight size={14} aria-hidden="true" /></Link></small>}
           </div>
           <div className="home-chips" role="group" aria-label={t("Planning to ascend this week?")}>
             <button aria-pressed={answered && ascension.length === 0} onClick={() => { setWarning(null); void ascend([]); }}><span>{t("No")}</span></button>
@@ -409,39 +407,4 @@ function AscendWarning({ pillar, check, onCancel, onConfirm }: { pillar: Ascensi
       <button type="button" onClick={onConfirm}>{t("Plan it anyway")}</button>
     </div>
   </div>;
-}
-
-/** On a clan day, when it's your turn in a line: spend, then one tap to say you're done. */
-function YourTurn({ memberId, notify }: { memberId: string; notify: (message: string, error?: boolean) => void }) {
-  const t = useT();
-  const { order, markDone } = useSpendingOrder();
-  const [busy, setBusy] = useState<SpendResource | null>(null);
-  if (!order) return null;
-  const lines = order.orders.filter((line) => line.today && line.rows.some((row) => row.member.id === memberId && row.state === "turn"));
-  if (!lines.length) return null;
-  async function done(resource: SpendResource) {
-    setBusy(resource);
-    try {
-      await markDone(resource, true);
-      notify(t("Marked done. The next person moves up."));
-    } catch (e) {
-      notify(t(e instanceof Error ? e.message : "Please try again."), true);
-    } finally {
-      setBusy(null);
-    }
-  }
-  return <section className="home-card home-your-turn" aria-labelledby="home-your-turn-title">
-    <div className="home-card-head"><h2 id="home-your-turn-title" className="home-kicker"><Star size={19} />{t("Your turn to spend")}</h2></div>
-    <p className="home-today-main">{t("Spend now, then tap I’m done.")}</p>
-    <div className="home-turn-lines">
-      {lines.map((line) => {
-        const Icon = PILLAR_ICONS[SPEND_INFO[line.resource].pillar];
-        return <button key={line.resource} type="button" className="home-hero-cta" disabled={busy !== null} onClick={() => void done(line.resource)}>
-          {busy === line.resource ? <LoaderCircle size={20} className="spin" /> : <Icon size={22} />}
-          <span>{t("I’m done: {line}", { line: t(SPEND_INFO[line.resource].label) })}</span>
-        </button>;
-      })}
-    </div>
-    <Link className="home-link" href="/spending-order">{t("Spending Order")}<ArrowRight size={15} /></Link>
-  </section>;
 }
