@@ -5,7 +5,7 @@ import { syncSpendingPosts } from "@/lib/server/spending-order";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Called by the Vercel cron in vercel.json just after each day starts; Vercel sends the CRON_SECRET as a bearer token. */
+/** Called by the Vercel crons in vercel.json (just after each day starts, and at 12:05 UTC); Vercel sends the CRON_SECRET as a bearer token. */
 export async function GET(request: Request) {
   try {
     const secret = process.env.CRON_SECRET;

@@ -330,7 +330,7 @@ CREATE TABLE IF NOT EXISTS spending_settings (
 -- Turns and the done button were taken out (the order is all the clan needs), so their storage goes too.
 ALTER TABLE spending_settings DROP COLUMN IF EXISTS turns;
 DROP TABLE IF EXISTS spending_done;
--- One #spending-order forum post per clan day, closed (archived and locked) when the day ends.
+-- One #spending-order forum post per clan day, opened the day before and closed (archived and locked) when the day ends.
 CREATE TABLE IF NOT EXISTS spending_posts (
   war_week DATE NOT NULL CHECK (EXTRACT(ISODOW FROM war_week) = 1),
   war_day SMALLINT NOT NULL CHECK (war_day BETWEEN 1 AND 5),
@@ -340,4 +340,6 @@ CREATE TABLE IF NOT EXISTS spending_posts (
   closed_at TIMESTAMPTZ,
   PRIMARY KEY (war_week, war_day)
 );
+-- When the post got the order as it stood at the start of its day (set straight away for a post opened on the day).
+ALTER TABLE spending_posts ADD COLUMN IF NOT EXISTS refreshed_at TIMESTAMPTZ;
 `;
