@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useState, type ComponentType, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, ChevronsUp, Clock, Gift, Hand, RefreshCw, ShieldCheck, Star, Swords, Target, X, type LucideProps } from "lucide-react";
+import { AlertTriangle, ArrowRight, Check, ChevronsUp, Clock, Gift, Hand, LoaderCircle, RefreshCw, ShieldCheck, Star, Swords, Target, X, type LucideProps } from "lucide-react";
 import "@fontsource/knewave/400.css";
 import { ASCENSION_PILLARS, ASCENSIONS_UPDATED, PILLAR_LABELS } from "@/lib/ascension";
 import { countdown, raceEnd, warDay, warWeekOf } from "@/lib/war-calendar";
-import { currentWeek } from "@/lib/resources";
 import { useLanguage, useT } from "@/lib/i18n";
-import type { AscensionPillar, AscensionsResponse, DashboardResponse, DewResponse, Member, SnipePlan, SnipesResponse } from "@/lib/types";
+import type { AscendCheck, AscensionPillar, AscensionsResponse, DashboardResponse, DewResponse, Member, SnipePlan, SnipesResponse, SpendResource } from "@/lib/types";
+import { ascendCheck, SPEND_INFO, SPEND_RESOURCES } from "@/lib/spending-order";
+import { currentWeek, numberFormat } from "@/lib/resources";
 import { FoldButton, useFold } from "./home-fold";
 import { TermHelp, WelcomeCard } from "./first-visit";
 import { celebrate } from "./celebrate";
@@ -20,6 +21,7 @@ import { PILLAR_ICONS, VialIcon } from "./resource-icons";
 import { MemberAvatar } from "./member-identity";
 import { NextWarVote } from "./next-war-vote";
 import { todayAdvice, useClanDayVotes, useClanDays, useNow, type TodayTone } from "./war-week";
+import { useSpendingOrder } from "./spending-order";
 import "./home-week.css";
 
 const DAY = 86_400_000;
@@ -131,13 +133,16 @@ export function HomeWeek({ data, notify, leader }: { data: DashboardResponse; no
     .slice(0, 4);
   const update = ownEntry ? t("Update my resources") : t("Add my resources");
 
-  // Job 2: are you ascending this week, and what? (No is an answer too.)
+  // Job 2: are you planning to ascend this week, and what? (No is an answer too.) It asks for a turn;
+  // it isn't a go-ahead. Ticking a pillar you don't look ready for asks first, with the official
+  // ascension guide's number worked out for you.
   const answered = ascension !== undefined && ascension !== null;
   const ascensionTitle = !answered
-    ? t("Are you ascending this week?")
+    ? t("Planning to ascend this week?")
     : ascension.length
-      ? t("Ascending: {what}", { what: ascension.map((pillar) => t(PILLAR_LABELS[pillar])).join(", ") })
+      ? t("Planning to ascend: {what}", { what: ascension.map((pillar) => t(PILLAR_LABELS[pillar])).join(", ") })
       : t("Not ascending this week");
+  const [warning, setWarning] = useState<{ pillar: AscensionPillar; next: AscensionPillar[]; check: AscendCheck } | null>(null);
   async function ascend(next: AscensionPillar[]) {
     const before = ascension;
     setAscension(next);
@@ -153,6 +158,20 @@ export function HomeWeek({ data, notify, leader }: { data: DashboardResponse; no
     const current = ascension ?? [];
     return current.includes(pillar) ? current.filter((item) => item !== pillar) : [...current, pillar];
   };
+  /** Ticking Skills, Pets or Mounts without enough saved (or below summon level 100) asks first. */
+  function choosePillar(pillar: AscensionPillar) {
+    const next = togglePillar(pillar);
+    const resource = SPEND_RESOURCES.find((item) => item === pillar);
+    if (resource && !(ascension ?? []).includes(pillar)) {
+      const check = ascendCheck(resource, ownEntry);
+      if (check.state === "short" || check.state === "level") {
+        setWarning({ pillar, next, check });
+        return;
+      }
+    }
+    setWarning(null);
+    void ascend(next);
+  }
 
   // Job 3: answer the next snipe (the first one still waiting for an answer).
   const upcoming = (plans ?? [])
@@ -213,6 +232,7 @@ export function HomeWeek({ data, notify, leader }: { data: DashboardResponse; no
     </section>}
     {/* "Spend or hold?" comes first: the one answer members open the Hub for most days. */}
     <HomeToday now={now} notify={notify} memberId={me.id} />
+    <YourTurn memberId={me.id} notify={notify} />
     <HomeHero update={update} saved={savedEntries.length} total={data.stats.totalMembers} faces={faces} mine={saved} week={week} />
     <section className={`home-card home-jobs-card${jobsOpen ? "" : " folded"}`} aria-labelledby="home-jobs-title">
       <div className="home-card-head">
@@ -237,17 +257,19 @@ export function HomeWeek({ data, notify, leader }: { data: DashboardResponse; no
           <JobMark tone="slate" done={answered}><ChevronsUp size={21} /></JobMark>
           <div className="home-job-text">
             <strong>{ascensionTitle}<TermHelp term="ascending" /></strong>
-            {!answered && <small>{t("Tap what you’re ascending, or No.")}</small>}
+            {!answered && <small>{t("Tap what you plan to ascend, or No.")}</small>}
+            {answered && ascension.length > 0 && <small>{t("This asks for a turn. Wait for your turn on the spending order before you push.")} <Link className="home-link" href="/spending-order">{t("Spending Order")}<ArrowRight size={14} aria-hidden="true" /></Link></small>}
           </div>
-          <div className="home-chips" role="group" aria-label={t("Are you ascending this week?")}>
-            <button aria-pressed={answered && ascension.length === 0} onClick={() => void ascend([])}><span>{t("No")}</span></button>
+          <div className="home-chips" role="group" aria-label={t("Planning to ascend this week?")}>
+            <button aria-pressed={answered && ascension.length === 0} onClick={() => { setWarning(null); void ascend([]); }}><span>{t("No")}</span></button>
             {ASCENSION_PILLARS.map((pillar) => {
               const Icon = PILLAR_ICONS[pillar];
-              return <button key={pillar} aria-pressed={!!ascension?.includes(pillar)} onClick={() => void ascend(togglePillar(pillar))}>
+              return <button key={pillar} aria-pressed={!!ascension?.includes(pillar) || warning?.pillar === pillar} onClick={() => choosePillar(pillar)}>
                 <Icon size={24} /><span>{t(PILLAR_LABELS[pillar])}</span>
               </button>;
             })}
           </div>
+          {warning && <AscendWarning pillar={warning.pillar} check={warning.check} onCancel={() => setWarning(null)} onConfirm={() => { const next = warning.next; setWarning(null); void ascend(next); }} />}
         </li>}
         {snipe && <li className={`home-job${answer ? " done" : ""}`}>
           <JobMark tone="slate" done={!!answer}><Target size={20} /></JobMark>
@@ -367,3 +389,59 @@ function HomeToday({ now, notify, memberId }: { now: Date; notify: (message: str
   </>;
 }
 
+
+/** The resource the ascension guide counts for each pillar, by its name on My Resources. */
+const CURRENCY_LABELS: Record<SpendResource, string> = { skills: "Skill Tickets", pets: "Eggshells total", mounts: "Mount Keys" };
+
+/** Before ticking a pillar the member doesn't look ready for: the guide's number for them, and a choice. */
+function AscendWarning({ pillar, check, onCancel, onConfirm }: { pillar: AscensionPillar; check: AscendCheck; onCancel: () => void; onConfirm: () => void }) {
+  const t = useT();
+  const resource = SPEND_RESOURCES.find((item) => item === pillar);
+  return <div className="home-ascend-warning" role="alert">
+    <strong><AlertTriangle size={16} aria-hidden="true" />{t("Not ready to ascend {pillar} yet", { pillar: t(PILLAR_LABELS[pillar]) })}</strong>
+    <p>{check.state === "level"
+      ? t("Your summon level is {level}. You can ascend at 100.", { level: check.level })
+      : check.state === "short" && resource
+        ? t("{resource}: you have {have}. The official guide suggests {need} for you.", { resource: t(CURRENCY_LABELS[resource]), have: numberFormat(check.have), need: numberFormat(check.need) })
+        : ""}</p>
+    <div className="home-choice">
+      <button type="button" onClick={onCancel}>{t("Keep saving")}</button>
+      <button type="button" onClick={onConfirm}>{t("Plan it anyway")}</button>
+    </div>
+  </div>;
+}
+
+/** On a clan day, when it's your turn in a line: spend, then one tap to say you're done. */
+function YourTurn({ memberId, notify }: { memberId: string; notify: (message: string, error?: boolean) => void }) {
+  const t = useT();
+  const { order, markDone } = useSpendingOrder();
+  const [busy, setBusy] = useState<SpendResource | null>(null);
+  if (!order) return null;
+  const lines = order.orders.filter((line) => line.today && line.rows.some((row) => row.member.id === memberId && row.state === "turn"));
+  if (!lines.length) return null;
+  async function done(resource: SpendResource) {
+    setBusy(resource);
+    try {
+      await markDone(resource, true);
+      notify(t("Marked done. The next person moves up."));
+    } catch (e) {
+      notify(t(e instanceof Error ? e.message : "Please try again."), true);
+    } finally {
+      setBusy(null);
+    }
+  }
+  return <section className="home-card home-your-turn" aria-labelledby="home-your-turn-title">
+    <div className="home-card-head"><h2 id="home-your-turn-title" className="home-kicker"><Star size={19} />{t("Your turn to spend")}</h2></div>
+    <p className="home-today-main">{t("Spend now, then tap I’m done.")}</p>
+    <div className="home-turn-lines">
+      {lines.map((line) => {
+        const Icon = PILLAR_ICONS[SPEND_INFO[line.resource].pillar];
+        return <button key={line.resource} type="button" className="home-hero-cta" disabled={busy !== null} onClick={() => void done(line.resource)}>
+          {busy === line.resource ? <LoaderCircle size={20} className="spin" /> : <Icon size={22} />}
+          <span>{t("I’m done: {line}", { line: t(SPEND_INFO[line.resource].label) })}</span>
+        </button>;
+      })}
+    </div>
+    <Link className="home-link" href="/spending-order">{t("Spending Order")}<ArrowRight size={15} /></Link>
+  </section>;
+}

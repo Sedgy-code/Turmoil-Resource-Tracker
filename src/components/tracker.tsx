@@ -12,6 +12,7 @@ import { WarResults, WarTotalsHistory } from "./war-results";
 import { SnipeChampions } from "./snipe-champions";
 import { ContributionRanking } from "./contribution-ranking";
 import { WarWeek } from "./war-week";
+import { SpendingOrder } from "./spending-order";
 import { MemberHistoryPanel } from "./member-history";
 import { ClanTech } from "./clan-tech";
 import { MonthlyAwardsPanel } from "./monthly-awards";
@@ -132,7 +133,7 @@ import type {
   WarRates,
 } from "@/lib/types";
 
-type View = "dashboard" | "resources" | "members" | "weeks" | "war" | "warWeek" | "snipes" | "store" | "hoarding" | "warResults" | "vials" | "ranking" | "settings" | "tech" | "clan" | "me" | "status";
+type View = "dashboard" | "resources" | "members" | "weeks" | "war" | "warWeek" | "spending" | "snipes" | "store" | "hoarding" | "warResults" | "vials" | "ranking" | "settings" | "tech" | "clan" | "me" | "status";
 const ADMIN_VIEWS: View[] = ["members", "hoarding", "ranking", "settings", "status"];
 type Icon = ComponentType<{
   size?: number;
@@ -146,6 +147,7 @@ const viewNames = {
   weeks: "Weekly History",
   war: "Points Calculator",
   warWeek: "This Week",
+  spending: "Spending Order",
   snipes: "Snipes",
   store: "Reward Shop",
   hoarding: "Hoarding Watch",
@@ -162,6 +164,7 @@ const VIEW_HREF: Record<View, string> = {
   dashboard: "/",
   resources: "/resources",
   warWeek: "/war",
+  spending: "/spending-order",
   snipes: "/snipes",
   war: "/war-points",
   warResults: "/war-results",
@@ -187,7 +190,7 @@ type Section = "home" | "resources" | "war" | "snipes" | "clan" | "me" | "leader
 const SECTIONS: { section: Section; label: string; short: string; icon: Icon; tabs: { view: View; label: string }[]; admin?: boolean }[] = [
   { section: "home", label: "Home", short: "Home", icon: House, tabs: [{ view: "dashboard", label: "Home" }] },
   { section: "resources", label: "My Resources", short: "Resources", icon: Backpack, tabs: [{ view: "resources", label: "My Resources" }] },
-  { section: "war", label: "War", short: "War", icon: Swords, tabs: [{ view: "warWeek", label: "This Week" }, { view: "war", label: "Points Calculator" }] },
+  { section: "war", label: "War", short: "War", icon: Swords, tabs: [{ view: "warWeek", label: "This Week" }, { view: "spending", label: "Spending Order" }, { view: "war", label: "Points Calculator" }] },
   { section: "snipes", label: "Snipes", short: "Snipes", icon: Crosshair, tabs: [{ view: "snipes", label: "Snipes" }] },
   { section: "clan", label: "Clan", short: "Clan", icon: Trophy, tabs: [{ view: "clan", label: "Rankings" }, { view: "warResults", label: "War Results" }, { view: "vials", label: "Vials" }, { view: "tech", label: "Clan Tech" }, { view: "weeks", label: "Weekly History" }] },
   { section: "me", label: "Me", short: "Me", icon: CircleUserRound, tabs: [{ view: "me", label: "Me" }, { view: "store", label: "Reward Shop" }] },
@@ -752,6 +755,7 @@ function TrackerApp({ view }: { view: View }) {
                       : view === "ranking" ? "Everyone ranked by how much they contribute. The bottom of the list is who to talk to first when space is needed."
                       : view === "war" ? "Pick activities to estimate the clan’s war points."
                       : view === "warWeek" ? "What scores on each war day, and how much the clan has saved for it."
+                      : view === "spending" ? "Who spends first on each clan day, and whether you’re ready to ascend."
                         : view === "snipes" ? "Plan events and say when you can join."
                           : view === "store" ? "Earn Clan Points by saving your resources each week, voting for clan days and joining snipes."
                             : "Saved weekly totals for the clan.")}
@@ -862,6 +866,8 @@ function TrackerApp({ view }: { view: View }) {
             <Weeks data={data} week={week} selectWeek={selectWeek} notify={notify} refresh={refresh} />
           ) : data && view === "warWeek" ? (
             <WarWeek data={data} rates={warRates} admin={user.role === "ADMIN"} notify={notify} />
+          ) : data && view === "spending" ? (
+            <SpendingOrder data={data} notify={notify} />
           ) : data && view === "war" ? (
             <WarPlanner data={data} notify={notify} refresh={refresh} />
           ) : data && view === "snipes" ? (

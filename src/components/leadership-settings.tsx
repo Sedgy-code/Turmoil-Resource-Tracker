@@ -15,6 +15,7 @@ export function LeadershipSettings() {
         <li><Link href="/war-points">{t("War point rates")}</Link> — {t("on the Points Calculator page (Edit rates).")}</li>
         <li><Link href="/hoarding-watch">{t("Saver vs hoarder rules")}</Link> — {t("on the Hoarding page.")}</li>
         <li><Link href="/members">{t("Clan capacity, strikes and holidays")}</Link> — {t("on the Members page.")}</li>
+        <li><Link href="/spending-order">{t("Turns at once and the daily Discord post")}</Link> — {t("on the Spending Order page.")}</li>
       </ul>
     </section>
   </div>;

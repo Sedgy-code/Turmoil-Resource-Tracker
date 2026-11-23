@@ -320,4 +320,31 @@ CREATE INDEX IF NOT EXISTS snipe_assemblies_snipe_idx ON snipe_assemblies(snipe_
 -- A leader called the snipe off (not needed): it's archived and closed to answers and check-in.
 ALTER TABLE snipe_plans ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;
 ALTER TABLE snipe_plans ADD COLUMN IF NOT EXISTS cancelled_by TEXT REFERENCES app_members(id);
+-- The spending order (War → Spending order): turns at once set by leaders, and the Discord post switch.
+CREATE TABLE IF NOT EXISTS spending_settings (
+  id TEXT PRIMARY KEY,
+  turns JSONB NOT NULL DEFAULT '{}'::jsonb,
+  post_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  updated_by TEXT REFERENCES app_members(id),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+-- Members who finished their turn in a war's line (they tap "I'm done", or a leader marks them).
+CREATE TABLE IF NOT EXISTS spending_done (
+  war_week DATE NOT NULL CHECK (EXTRACT(ISODOW FROM war_week) = 1),
+  resource TEXT NOT NULL CHECK (resource IN ('skills','pets','mounts')),
+  member_id TEXT NOT NULL REFERENCES app_members(id),
+  done_by TEXT NOT NULL REFERENCES app_members(id),
+  done_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (war_week, resource, member_id)
+);
+-- One #spending-order forum post per clan day, closed (archived and locked) when the day ends.
+CREATE TABLE IF NOT EXISTS spending_posts (
+  war_week DATE NOT NULL CHECK (EXTRACT(ISODOW FROM war_week) = 1),
+  war_day SMALLINT NOT NULL CHECK (war_day BETWEEN 1 AND 5),
+  channel_id TEXT NOT NULL DEFAULT '',
+  thread_id TEXT NOT NULL DEFAULT '',
+  opened_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  closed_at TIMESTAMPTZ,
+  PRIMARY KEY (war_week, war_day)
+);
 `;

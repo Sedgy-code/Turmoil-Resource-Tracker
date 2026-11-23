@@ -27,7 +27,8 @@ export const TERMS = {
   hold: { word: "Hold", text: "Today isn’t a clan day. Keep your resources and spend them on the next clan day." },
   blackMark: { word: "Black mark", text: "Given in a war when more than 10% of your war points came on days that weren’t clan days." },
   snipe: { word: "Snipe", text: "A set time when members spend together, all at once, to get ahead of another clan. Say Yes if you can be online then." },
-  ascending: { word: "Ascending", text: "Ascending your Forge, Skills, Mounts or Pets in the game this week. Everyone can see it, so leaders can plan the war around it." },
+  ascending: { word: "Ascending", text: "Ticking a pillar means you plan to ascend it this week, not that you can start. Wait for your turn on War → Spending order before you push." },
+  spendingOrder: { word: "Spending order", text: "Who spends first on a clan day. Members in that day’s snipe go first, then the biggest stockpiles. When it’s your turn, spend, then tap I’m done so the next person moves up." },
   techRace: { word: "Clan Tech Race", text: "A week-long race where clans donate Clan Tech Vials. Each day at 00:00 UTC the lowest clans are knocked out." },
   warPoints: { word: "Potential war points", text: "An estimate of the war points the clan could score if everyone spent what they’ve saved on the right days." },
 } as const;
