@@ -22,7 +22,15 @@ export const announcementSchema = z.object({
   }).strict()).max(4).optional(),
   /** Optional link button under the post, such as "Open the Spending Order". */
   button: z.object({ label: z.string().trim().min(1).max(80), url: httpsLink }).strict().optional(),
+  /** Only when a leader asks for it: the post starts with @everyone and pings the whole server. */
+  pingEveryone: z.boolean().optional(),
 });
+
+/** Admins: take down a post the bot (or the reminder webhook) made, by its channel and message id. */
+export const announcementDeleteSchema = z.object({
+  channel: z.string().trim().min(1).max(100),
+  messageId: z.string().trim().regex(/^\d{5,25}$/, "Use the message's id."),
+}).strict();
 
 /** The Hub's gold, so posts look like the app. */
 const EMBED_COLOR = 0xe6bd59;
@@ -65,9 +73,32 @@ export function channelWords(name: string): string {
   return name.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+/** The one channel a leader named (by its name as people say it, or its id). */
+function pickChannel(postable: { id: string; name: string }[], asked: string): { id: string; name: string } {
+  const wanted = channelWords(asked);
+  const matches = postable.filter((channel) => channel.id === asked || channelWords(channel.name) === wanted);
+  if (matches.length !== 1)
+    throw new ApiError(
+      404,
+      `No single channel called “${asked}”. Channels the bot can see: ${postable.map((channel) => channel.name).join(", ")}`,
+      "CHANNEL_NOT_FOUND",
+    );
+  return matches[0];
+}
+
+/** The reminder webhook's URL, when it lives in that channel. */
+async function webhookIn(fetcher: typeof fetch, channelId: string): Promise<string | null> {
+  const webhook = process.env.DISCORD_REMINDER_WEBHOOK_URL;
+  if (!webhook || !WEBHOOK_URL.test(webhook)) return null;
+  const info = await fetcher(webhook);
+  const hook = info.ok ? ((await info.json()) as { channel_id?: unknown }) : null;
+  return hook?.channel_id === channelId ? webhook : null;
+}
+
 /**
  * Admins only: posts a message in one of the clan server's channels as the site's bot.
- * Mentions are switched off so a post can never ping @everyone, and link previews are hidden.
+ * Mentions are switched off so a post never pings anyone, unless the leader asks to ping
+ * @everyone; link previews are hidden.
  */
 export async function postAnnouncement(
   actor: Member,
@@ -79,26 +110,18 @@ export async function postAnnouncement(
   const { token, guild } = botSetup();
   const fetcher = dependencies.fetcher ?? fetch;
   const headers = { Authorization: `Bot ${token}`, "Content-Type": "application/json" };
-  const postable = await postableChannels(fetcher, token, guild);
-  const wanted = channelWords(input.channel);
-  const matches = postable.filter((channel) => channel.id === input.channel || channelWords(channel.name) === wanted);
-  if (matches.length !== 1)
-    throw new ApiError(
-      404,
-      `No single channel called “${input.channel}”. Channels the bot can see: ${postable.map((channel) => channel.name).join(", ")}`,
-      "CHANNEL_NOT_FOUND",
-    );
-
-  const target = matches[0];
+  const target = pickChannel(await postableChannels(fetcher, token, guild), input.channel);
   const embeds = (input.embeds ?? []).map((embed) => ({
     color: EMBED_COLOR,
     title: embed.title,
     ...(embed.description ? { description: embed.description } : {}),
     ...(embed.image ? { image: { url: embed.image } } : {}),
   }));
+  const everyone = input.pingEveryone === true;
   const base = {
-    content: input.content,
-    allowed_mentions: { parse: [] },
+    content: everyone && !input.content.includes("@everyone") ? `@everyone\n${input.content}`.slice(0, 2000) : input.content,
+    // Only @everyone, and only when asked: never roles or people.
+    allowed_mentions: { parse: everyone ? ["everyone"] : [] },
     // flags 4 = no link previews, so the post stays short. It would hide the post's own cards too, so not with cards.
     ...(embeds.length ? { embeds } : { flags: 4 }),
   };
@@ -111,17 +134,41 @@ export async function postAnnouncement(
 
   // The bot may not be allowed to post in that channel, but the weekly reminder's webhook
   // (which posts as the Turmoil bot) may live there. Use it when it does.
-  const webhook = process.env.DISCORD_REMINDER_WEBHOOK_URL;
-  if (webhook && WEBHOOK_URL.test(webhook)) {
-    const info = await fetcher(webhook);
-    const hook = info.ok ? ((await info.json()) as { channel_id?: unknown }) : null;
-    if (hook?.channel_id === target.id) {
-      // A plain webhook can't send buttons, so the post goes without one.
-      const sent = await fetcher(`${webhook}?wait=true`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(base) });
-      if (sent.ok) return { channel: target.name, messageId: await messageId(sent), via: "webhook" };
-    }
+  const webhook = await webhookIn(fetcher, target.id);
+  if (webhook) {
+    // A plain webhook can't send buttons, so the post goes without one.
+    const sent = await fetcher(`${webhook}?wait=true`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(base) });
+    if (sent.ok) return { channel: target.name, messageId: await messageId(sent), via: "webhook" };
   }
   throw new ApiError(502, `Discord did not accept the post (${reason}). The bot needs permission to send messages in #${target.name}.`, "ANNOUNCE_FAILED");
+}
+
+/**
+ * Admins only: deletes a post the bot made, or one the reminder webhook made in that channel
+ * (each can only delete its own posts). Used to replace an announcement, for example.
+ */
+export async function deleteAnnouncement(
+  actor: Member,
+  input: z.infer<typeof announcementDeleteSchema>,
+  dependencies: { db?: Database; fetcher?: typeof fetch } = {},
+): Promise<{ channel: string; messageId: string; via: "bot" | "webhook" }> {
+  const db = dependencies.db ?? await database();
+  await requireAdmin(db, actor);
+  const { token, guild } = botSetup();
+  const fetcher = dependencies.fetcher ?? fetch;
+  const target = pickChannel(await postableChannels(fetcher, token, guild), input.channel);
+  const deleted = await fetcher(`${DISCORD_API}/channels/${target.id}/messages/${input.messageId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bot ${token}`, "X-Audit-Log-Reason": "Replaced by a leader from the Clan Hub" },
+  });
+  if (deleted.ok) return { channel: target.name, messageId: input.messageId, via: "bot" };
+  const reason = await discordReason(deleted);
+  const webhook = await webhookIn(fetcher, target.id);
+  if (webhook) {
+    const removed = await fetcher(`${webhook}/messages/${input.messageId}`, { method: "DELETE" });
+    if (removed.ok) return { channel: target.name, messageId: input.messageId, via: "webhook" };
+  }
+  throw new ApiError(502, `Discord did not delete the post (${reason}).`, "ANNOUNCE_DELETE_FAILED");
 }
 
 const WEBHOOK_URL = /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\//;
