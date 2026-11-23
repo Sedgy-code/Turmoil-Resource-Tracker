@@ -188,16 +188,5 @@ export const hoardingRulesSchema = z.object({
   spendPercent: z.number().min(0).max(100),
   wars: z.number().int().min(1).max(10),
 }).strict();
-const spendResourceSchema = z.enum(["skills", "pets", "mounts"]);
-/** "I'm done" (or Undo) on a spending order line; leaders can do it for another member. */
-export const spendDoneSchema = z.object({
-  resource: spendResourceSchema,
-  done: z.boolean(),
-  memberId: z.string().uuid().optional(),
-}).strict();
-const turnsSchema = z.number().int().min(1).max(30);
-/** Leaders: how many members have a turn at once in each line, and the Discord post switch. */
-export const spendSettingsSchema = z.object({
-  turns: z.object({ skills: turnsSchema.optional(), pets: turnsSchema.optional(), mounts: turnsSchema.optional() }).strict().optional(),
-  postEnabled: z.boolean().optional(),
-}).strict().refine((value) => value.turns !== undefined || value.postEnabled !== undefined, "Choose a setting to update.");
+/** Leaders: switch the daily #spending-order post on or off. */
+export const spendSettingsSchema = z.object({ postEnabled: z.boolean() }).strict();

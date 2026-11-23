@@ -14,7 +14,7 @@ export async function GET() {
   } catch (error) { return errorResponse(error); }
 }
 
-/** Leaders: turns at once for each line, and the Discord post switch. */
+/** Leaders: the daily Discord post switch. */
 export async function PUT(request: Request) {
   try {
     assertSameOrigin(request);

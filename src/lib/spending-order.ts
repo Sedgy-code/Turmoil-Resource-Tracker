@@ -8,8 +8,7 @@ import { nextWarWeek, warDay, warWeekOf } from "./war-calendar";
  * The spending order: who spends first on a clan day, so members can see where they stand instead
  * of asking. One line per pillar whose resources score on clan days (hammers have no line). Members
  * in that day's snipe go first, then the biggest stockpile, measured in the war points it can score
- * (the same estimate as the snipe planner). Leaders set how many have a turn at once; when a member
- * taps "I'm done" the next one moves up.
+ * (the same estimate as the snipe planner). Members away on holiday are skipped.
  */
 
 export const SPEND_RESOURCES: readonly SpendResource[] = ["skills", "pets", "mounts"];
@@ -31,10 +30,6 @@ export const SPEND_INFO: Record<SpendResource, {
   pets: { label: "Pets", pillar: "pets", activities: ["eggMerges", "eggSummonMerges"], amounts: ["eggsPetsTotal", "eggshellsTotal"], currency: "eggshellsTotal", level: "eggLevel" },
   mounts: { label: "Mounts", pillar: "mounts", activities: ["mountSummons", "newMountMerges", "mountMerges"], amounts: ["mountKeys", "mountsToMerge"], currency: "mountKeys", level: "mountLevel" },
 };
-
-/** Leaders start with this many turns at once for each line. */
-export const DEFAULT_TURNS = 3;
-export const MAX_TURNS = 30;
 
 /** The war days (1–5) where a resource scores: Skills on 1 and 3, Pets on 3 and 5, Mounts on 2 and 4. */
 export function scoringDays(resource: SpendResource): number[] {
@@ -148,21 +143,17 @@ export interface OrderInput {
   ascending: ReadonlyMap<string, readonly AscensionPillar[]>;
   /** In that day's snipe: they go first. */
   snipers: ReadonlySet<string>;
-  /** Members who tapped "I'm done" (or a leader marked), with who marked it when it was a leader. */
-  done: ReadonlyMap<string, string | null>;
-  turns: number;
   /** YYYY-MM-DD (UTC): members on holiday until at least this date are skipped. */
   date: string;
   day: number | null;
   today: boolean;
 }
 
-/** One pillar's line: snipers first, then the biggest stockpile; the first few (not done) have a turn. */
+/** One pillar's order: snipers first, then the biggest stockpile; members away are listed last, without a place. */
 export function buildOrder(input: OrderInput): SpendOrder {
   const { resource } = input;
   const info = SPEND_INFO[resource];
   const entries = new Map(input.entries.map((entry) => [entry.memberId, entry]));
-  const turns = Math.max(1, Math.min(MAX_TURNS, Math.floor(input.turns) || DEFAULT_TURNS));
   const rows: SpendRow[] = [];
   for (const member of input.members) {
     const entry = entries.get(member.id);
@@ -171,37 +162,21 @@ export function buildOrder(input: OrderInput): SpendOrder {
     const points = pillarPoints(resource, entry, input.rates);
     // Nothing saved for this pillar: nothing to line up for.
     if (points <= 0 && amounts.every((amount) => amount.value <= 0)) continue;
-    const done = input.done.has(member.id);
-    const away = !done && !!member.holidayUntil && member.holidayUntil >= input.date;
     rows.push({
       member,
       place: null,
       points,
       amounts,
-      state: done ? "done" : away ? "away" : "wait",
-      ahead: 0,
+      state: member.holidayUntil && member.holidayUntil >= input.date ? "away" : "line",
       sniper: input.snipers.has(member.id),
       ascending: !!input.ascending.get(member.id)?.includes(info.pillar),
       check: ascendCheck(resource, entry),
-      ...(done ? { doneBy: input.done.get(member.id) ?? null } : {}),
     });
   }
   const amount = (row: SpendRow) => row.amounts[0]?.value ?? 0;
-  rows.sort((a, b) => Number(b.sniper) - Number(a.sniper) || b.points - a.points || amount(b) - amount(a)
+  rows.sort((a, b) => Number(a.state === "away") - Number(b.state === "away") || Number(b.sniper) - Number(a.sniper)
+    || b.points - a.points || amount(b) - amount(a)
     || a.member.username.localeCompare(b.member.username, undefined, { sensitivity: "base", numeric: true }));
-  const line = rows.filter((row) => row.state === "wait");
-  line.forEach((row, index) => {
-    row.place = index + 1;
-    if (index < turns) row.state = "turn";
-    else row.ahead = index + 1 - turns;
-  });
-  // In the line first, then done, then away.
-  const rank = { turn: 0, wait: 0, done: 1, away: 2 } as const;
-  return {
-    resource,
-    day: input.day,
-    today: input.today,
-    turns,
-    rows: [...rows].sort((a, b) => rank[a.state] - rank[b.state] || (a.place ?? 0) - (b.place ?? 0)),
-  };
+  rows.filter((row) => row.state === "line").forEach((row, index) => { row.place = index + 1; });
+  return { resource, day: input.day, today: input.today, rows };
 }

@@ -1,7 +1,6 @@
 /* War → Spending order: who spends first on a clan day. Phone first: one line at a time. */
 .spend-page { gap: 12px; }
 .spend-banner .war-week-kicker { display: inline-flex; align-items: center; gap: 6px; }
-.spend-banner .spend-how { margin-top: 8px; color: #d9ded6; font-size: 13px; line-height: 1.5; }
 
 /* The three lines: big tap targets, the day each is for underneath. */
 .spend-picker { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
@@ -29,21 +28,11 @@
 .spend-you strong { font-size: 16px; color: var(--text); }
 .spend-you small { font-size: 13px; color: var(--muted); }
 .spend-you .home-link { font-size: 13px; color: var(--gold); }
-.spend-you.state-turn { border: 1.5px solid var(--emerald); background: linear-gradient(180deg, #10261a, #0b1510); }
-.spend-you.state-done { border-color: #3b4a42; opacity: .9; }
-.spend-you-badge { align-self: flex-start; display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; background: var(--emerald); color: #08210f; font-size: 12px; font-weight: 800; }
-.spend-you .planning-button { flex: none; }
-.spend-done-button { min-height: 44px; }
 
 .spend-check-text { margin: 4px 0 0; display: flex; gap: 6px; align-items: flex-start; font-size: 12.5px; line-height: 1.45; color: var(--muted); }
 .spend-check-text svg { flex: none; margin-top: 2px; }
 .spend-check-text.ready { color: #9fe3b4; }
 .spend-check-text.short { color: #f0d58a; }
-
-.spend-turns { display: flex; align-items: center; gap: 8px; margin: 0 14px 10px; color: var(--muted); font-size: 13px; }
-.spend-turns span { margin-inline-end: auto; }
-.spend-turns strong { min-width: 26px; text-align: center; color: var(--text); font-size: 16px; }
-.spend-turns .planning-button { min-width: 40px; min-height: 36px; padding: 6px 10px; }
 
 /* The line itself. */
 .spend-table { min-width: 620px; }
@@ -55,8 +44,6 @@
 .spend-sniper { color: #ff8a7a; flex: none; }
 .spend-ascending { color: #8fd0ff; flex: none; }
 .spend-tag { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 750; white-space: nowrap; }
-.spend-tag.turn { background: var(--emerald); color: #08210f; }
-.spend-tag.done { background: #22302a; color: var(--muted); border: 1px solid #33443b; }
 .spend-tag.away { background: #2a2214; color: #f0d58a; border: 1px solid #4a3d22; }
 .spend-points { color: var(--gold); font-weight: 750; }
 .spend-amounts { white-space: nowrap; }
@@ -66,8 +53,6 @@
 .spend-check.ready { color: #8fe6a9; }
 .spend-check.short { color: #f0c96a; }
 .spend-check.level, .spend-check.none { color: var(--subtle); }
-.spend-admin .planning-button { padding: 6px 10px; font-size: 12px; min-height: 34px; white-space: nowrap; }
-.app-shell .spend-table tbody tr.spend-done > td, .app-shell .spend-table tbody tr.spend-done > th,
 .app-shell .spend-table tbody tr.spend-away > td, .app-shell .spend-table tbody tr.spend-away > th { opacity: .7; }
 .spend-place-mark { margin-inline-end: 2px; }
 .spend-footnote { font-size: 12px; line-height: 1.6; }
@@ -90,12 +75,8 @@
 @media (max-width: 700px) {
   .spend-line-head { padding: 14px 14px 4px; }
   .spend-you { margin: 6px 10px 10px; padding: 12px; flex-wrap: wrap; }
-  .spend-you .planning-button { width: 100%; justify-content: center; }
-  .spend-turns { margin: 0 10px 8px; }
   .app-shell table.spend-table > tbody > tr > .stack-title { font-size: 15px; }
   .app-shell table.spend-table > tbody > tr > .spend-amounts { grid-column: span 2; }
   .app-shell table.spend-table > tbody > tr > .spend-check-cell { grid-column: 1 / -1; }
-  .app-shell table.spend-table > tbody > tr > .spend-admin { grid-column: 1 / -1; }
-  .app-shell table.spend-table > tbody > tr > .spend-admin .planning-button { width: 100%; justify-content: center; }
   .spend-post { padding: 14px; }
 }

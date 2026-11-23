@@ -1,5 +1,5 @@
 import { currentWeek } from "../resources";
-import { buildOrder, DEFAULT_TURNS, orderDay, orderWeek, resourcesOnDay, SPEND_INFO, SPEND_RESOURCES } from "../spending-order";
+import { buildOrder, orderDay, orderWeek, resourcesOnDay, SPEND_INFO, SPEND_RESOURCES } from "../spending-order";
 import type { AscensionPillar, Member, ResourceEntry, SpendingOrderResponse, SpendingPostPreview, SpendOrder, SpendResource, WarActivity, WarRates } from "../types";
 import { parsePillars } from "./ascensions";
 import { appUrl, isDemo } from "./config";
@@ -14,7 +14,7 @@ const DISCORD_API = "https://discord.com/api/v10";
 /** #📋-spending-order, a forum channel in the Turmoil server (DISCORD_SPENDING_CHANNEL_ID overrides it). */
 export const SPENDING_CHANNEL_ID = "1574254432357584898";
 
-interface SpendingSettings { turns: Record<SpendResource, number>; postEnabled: boolean }
+interface SpendingSettings { postEnabled: boolean }
 
 interface Context {
   now: Date;
@@ -26,7 +26,6 @@ interface Context {
   entries: ResourceEntry[];
   rates: WarRates;
   ascending: Map<string, AscensionPillar[]>;
-  done: { memberId: string; resource: SpendResource; doneBy: string; byName: string }[];
   /** Snipes in that war (not cancelled): the war day each is on, what it scores with, and who's in it. */
   snipes: { day: number; activities: WarActivity[]; members: Set<string> }[];
   settings: SpendingSettings;
@@ -54,13 +53,8 @@ async function requireLeader(connection: SqlConnection, actorId: string): Promis
 }
 
 export async function spendingSettings(connection: SqlConnection): Promise<SpendingSettings> {
-  const rows = await connection.query("SELECT turns, post_enabled FROM spending_settings WHERE id = 'clan'");
-  const saved = rows.length ? jsonValue<Partial<Record<SpendResource, number>>>(rows[0].turns) ?? {} : {};
-  const turns = Object.fromEntries(SPEND_RESOURCES.map((resource) => {
-    const value = Number(saved[resource]);
-    return [resource, Number.isInteger(value) && value >= 1 ? value : DEFAULT_TURNS];
-  })) as Record<SpendResource, number>;
-  return { turns, postEnabled: rows[0]?.post_enabled === true };
+  const rows = await connection.query("SELECT post_enabled FROM spending_settings WHERE id = 'clan'");
+  return { postEnabled: rows[0]?.post_enabled === true };
 }
 
 async function loadContext(connection: SqlConnection, now: Date): Promise<Context> {
@@ -74,8 +68,6 @@ async function loadContext(connection: SqlConnection, now: Date): Promise<Contex
   const days = await clanDays(connection, week);
   // This week's answers on Home ("Planning to ascend this week?").
   const ascensionRows = await connection.query("SELECT member_id, pillars FROM member_ascensions WHERE week_start = $1", [currentWeek(now)]);
-  const doneRows = await connection.query(`SELECT d.member_id, d.resource, d.done_by, COALESCE(NULLIF(m.display_name, ''), m.username) AS by_name
-    FROM spending_done d JOIN app_members m ON m.id = d.done_by WHERE d.war_week = $1`, [week]);
   // The war's Days 1–5: snipes start just before a day's reset, so they fall inside that day.
   const from = dayStart(week, 1).toISOString();
   const to = dayStart(week, 6).toISOString();
@@ -96,7 +88,6 @@ async function loadContext(connection: SqlConnection, now: Date): Promise<Contex
   return {
     now, week, warDay, nextWar, clanDays: days, members, entries, rates,
     ascending: new Map(ascensionRows.map((row) => [String(row.member_id), parsePillars(String(row.pillars))])),
-    done: doneRows.map((row) => ({ memberId: String(row.member_id), resource: row.resource as SpendResource, doneBy: String(row.done_by), byName: String(row.by_name) })),
     snipes,
     settings: await spendingSettings(connection),
   };
@@ -118,13 +109,11 @@ function buildOrders(context: Context, forDay?: number): SpendOrder[] {
         if (snipe.day === target.day && snipe.activities.some((activity) => activities.includes(activity))) snipe.members.forEach((id) => snipers.add(id));
       }
     }
-    const done = new Map(context.done.filter((item) => item.resource === resource)
-      .map((item) => [item.memberId, item.doneBy === item.memberId ? null : item.byName]));
     // Holidays are checked against the day the line is for.
     const date = (target.day !== null ? dayStart(context.week, target.day) : context.now).toISOString().slice(0, 10);
     return buildOrder({
       resource, members: context.members, entries: context.entries, rates: context.rates, ascending: context.ascending,
-      snipers, done, turns: context.settings.turns[resource], date, day: target.day, today: target.today,
+      snipers, date, day: target.day, today: target.today,
     });
   });
 }
@@ -158,68 +147,30 @@ export async function getSpendingOrder(actor: Member, db?: Database | SqlConnect
 
 interface Dependencies { db?: Database; fetcher?: typeof fetch; now?: Date }
 
-/**
- * "I'm done" (or Undo) for one line in this war. Members mark themselves; leaders can mark anyone.
- * Today's Discord post is updated when the change is in one of its lines.
- */
-export async function setSpendingDone(actor: Member, input: { resource: SpendResource; done: boolean; memberId?: string }, dependencies: Dependencies = {}): Promise<SpendingOrderResponse> {
-  const connection = dependencies.db ?? await database();
-  const now = dependencies.now ?? new Date();
-  const me = await activeMember(connection, actor.id);
-  const targetId = input.memberId ?? me.id;
-  if (targetId !== me.id && me.role !== "ADMIN") throw new ApiError(403, "Only leaders can mark someone else as done.", "ADMIN_REQUIRED");
-  const targets = await connection.query("SELECT * FROM app_members WHERE id = $1 AND active = TRUE", [targetId]);
-  if (!targets.length) throw new ApiError(404, "This member could not be found.", "MEMBER_NOT_FOUND");
-  const target = memberFromRow(targets[0]);
-  const { week } = orderWeek(now);
-  const before = buildOrders(await loadContext(connection, now)).find((order) => order.resource === input.resource);
-  if (input.done) {
-    await connection.query(`INSERT INTO spending_done (war_week, resource, member_id, done_by, done_at) VALUES ($1, $2, $3, $4, $5)
-      ON CONFLICT (war_week, resource, member_id) DO NOTHING`, [week, input.resource, target.id, me.id, now.toISOString()]);
-  } else {
-    await connection.query("DELETE FROM spending_done WHERE war_week = $1 AND resource = $2 AND member_id = $3", [week, input.resource, target.id]);
-  }
-  const after = await getSpendingOrder(me, connection, now);
-  await refreshTodaysPost(connection, { ...dependencies, now }, {
-    name: target.username, resource: input.resource, done: input.done,
-    before, after: after.orders.find((order) => order.resource === input.resource),
-  }).catch((error) => console.error("Spending order post not updated", error));
-  return after;
-}
-
-/** Leaders: turns at once for each line, and whether the bot posts in #spending-order each clan day. */
-export async function updateSpendingSettings(actor: Member, input: { turns?: Partial<Record<SpendResource, number>>; postEnabled?: boolean }, dependencies: Dependencies = {}): Promise<SpendingOrderResponse> {
+/** Leaders: whether the bot posts in #spending-order each clan day. */
+export async function updateSpendingSettings(actor: Member, input: { postEnabled: boolean }, dependencies: Dependencies = {}): Promise<SpendingOrderResponse> {
   const connection = dependencies.db ?? await database();
   const now = dependencies.now ?? new Date();
   const leader = await requireLeader(connection, actor.id);
-  const current = await spendingSettings(connection);
-  const turns = { ...current.turns, ...Object.fromEntries(Object.entries(input.turns ?? {}).filter(([, value]) => value !== undefined)) };
-  const postEnabled = input.postEnabled ?? current.postEnabled;
-  await connection.query(`INSERT INTO spending_settings (id, turns, post_enabled, updated_by, updated_at) VALUES ('clan', $1::jsonb, $2, $3, $4)
-    ON CONFLICT (id) DO UPDATE SET turns = EXCLUDED.turns, post_enabled = EXCLUDED.post_enabled, updated_by = EXCLUDED.updated_by, updated_at = EXCLUDED.updated_at`,
-  [JSON.stringify(turns), postEnabled, leader.id, now.toISOString()]);
-  if (input.turns) await refreshTodaysPost(connection, { ...dependencies, now }).catch((error) => console.error("Spending order post not updated", error));
+  await connection.query(`INSERT INTO spending_settings (id, post_enabled, updated_by, updated_at) VALUES ('clan', $1, $2, $3)
+    ON CONFLICT (id) DO UPDATE SET post_enabled = EXCLUDED.post_enabled, updated_by = EXCLUDED.updated_by, updated_at = EXCLUDED.updated_at`,
+  [input.postEnabled, leader.id, now.toISOString()]);
   return getSpendingOrder(leader, connection, now);
 }
 
 /* ---------------------------------------------------------------------------------------------
  * The #spending-order forum post: one per clan day, names only (nobody is pinged), English only
- * (the server's translation bot does the rest). Opened just after the day starts (00:00 UTC),
- * kept up to date as members finish, then closed and archived when the day ends.
+ * (the server's translation bot does the rest). Opened just after the day starts (00:00 UTC) with
+ * the order as it stands then, and closed and archived when the day ends.
  * ------------------------------------------------------------------------------------------- */
 
 const RESOURCE_EMOJI: Record<SpendResource, string> = { skills: "🎟️", pets: "🥚", mounts: "🐎" };
-const SHOW_NEXT = 6;
-const SHOW_DONE = 12;
+/** Discord messages are capped at 2,000 characters. */
+const POST_LIMIT = 2000;
 
 /** Names exactly as written: Discord formatting characters are shown, not applied. */
 export function plainName(name: string): string {
   return name.replace(/([\\*_~`|>#[\]()-])/g, "\\$1").replace(/@/g, "@\u200b");
-}
-
-function nameList(names: string[], limit: number): string {
-  const shown = names.slice(0, limit).join(", ");
-  return names.length > limit ? `${shown} (+${names.length - limit} more)` : shown;
 }
 
 /** "Day 3 – Skills and Pets · Thu 26 Nov" (forum post titles are at most 100 characters). */
@@ -230,39 +181,38 @@ export function spendingPostTitle(day: number, date: Date): string {
   return `Day ${day} – ${list} · ${when}`.slice(0, 100);
 }
 
-/** The post's text: for each line that scores that day, whose turn it is, who's next and who's done. */
+/**
+ * The post's text: each line that scores that day, numbered, biggest stockpile first. The whole order
+ * when it fits in one Discord message; otherwise the top of each line and how many more there are.
+ */
 export function spendingPostContent(day: number, orders: SpendOrder[], link: string): string {
   const shown = orders.filter((order) => resourcesOnDay(day).includes(order.resource));
-  const label = (row: SpendOrder["rows"][number]) => `${row.sniper ? "🎯 " : ""}${plainName(row.member.username)}`;
-  const blocks = shown.map((order) => {
-    const turn = order.rows.filter((row) => row.state === "turn").map(label);
-    const next = order.rows.filter((row) => row.state === "wait").map(label);
-    const done = order.rows.filter((row) => row.state === "done").map((row) => plainName(row.member.username));
-    const lines = [`${RESOURCE_EMOJI[order.resource]} **${SPEND_INFO[order.resource].label}**`];
-    if (!turn.length && !next.length) lines.push(done.length ? "Everyone has finished." : "Nobody has any saved.");
-    if (turn.length) lines.push(`✅ Your turn (${order.turns} at once): ${turn.join(", ")}`);
-    if (next.length) lines.push(`⏳ Next: ${nameList(next, SHOW_NEXT)}`);
-    if (done.length) lines.push(`✔️ Done: ${nameList(done, SHOW_DONE)}`);
-    return lines.join("\n");
-  });
-  const snipers = shown.some((order) => order.rows.some((row) => row.sniper && (row.state === "turn" || row.state === "wait")));
-  const text = [
-    `📋 **Spending order – Day ${day} (clan day)**`,
-    "Go in this order. When you've finished, tap **I'm done** on the Clan Hub so the next person moves up. Ask questions here.",
-    "",
-    blocks.join("\n\n"),
-    "",
-    ...(snipers ? ["🎯 = in today's snipe, so they go first."] : []),
-    `Full order and your place: ${link}`,
-  ].join("\n");
-  return text.length > 2000 ? `${text.slice(0, 1990)}…` : text;
-}
-
-/** The line posted in the thread when someone finishes (or a leader takes it back). */
-export function doneUpdateMessage(name: string, resource: SpendResource, done: boolean, nowTurn: string[]): string {
-  const label = SPEND_INFO[resource].label;
-  const first = done ? `✅ **${plainName(name)}** is done with ${label}.` : `↩️ **${plainName(name)}** is back in the ${label} line.`;
-  return nowTurn.length ? `${first} Your turn now: ${nowTurn.map((item) => `**${plainName(item)}**`).join(", ")}.` : first;
+  const snipers = shown.some((order) => order.rows.some((row) => row.sniper && row.state === "line"));
+  const write = (limit: number) => {
+    const blocks = shown.map((order) => {
+      const line = order.rows.filter((row) => row.state === "line");
+      const lines = [`${RESOURCE_EMOJI[order.resource]} **${SPEND_INFO[order.resource].label}**`];
+      if (!line.length) lines.push("Nobody has any saved.");
+      line.slice(0, limit).forEach((row) => lines.push(`${row.place}. ${row.sniper ? "🎯 " : ""}${plainName(row.member.username)}`));
+      if (line.length > limit) lines.push(`+${line.length - limit} more on the Clan Hub`);
+      return lines.join("\n");
+    });
+    return [
+      `📋 **Spending order – Day ${day} (clan day)**`,
+      "Biggest stockpiles first. Find your place, and ask questions here.",
+      "",
+      blocks.join("\n\n"),
+      "",
+      ...(snipers ? ["🎯 = in today's snipe, so they go first."] : []),
+      `Full order and your place: ${link}`,
+    ].join("\n");
+  };
+  for (let limit = 60; limit > 5; limit -= 5) {
+    const text = write(limit);
+    if (text.length <= POST_LIMIT) return text;
+  }
+  const text = write(5);
+  return text.length > POST_LIMIT ? `${text.slice(0, POST_LIMIT - 1)}…` : text;
 }
 
 async function discordReason(response: Response): Promise<string> {
@@ -335,38 +285,6 @@ async function closeThread(threadId: string, token: string, fetcher: typeof fetc
   // Without Manage Threads the bot can still archive its own post.
   const archived = await fetcher(`${DISCORD_API}/channels/${threadId}`, { method: "PATCH", headers, body: JSON.stringify({ archived: true }) }).catch(() => null);
   return !!archived?.ok || archived?.status === 404 || locked?.status === 404;
-}
-
-/**
- * Brings today's open post up to date: the first message is rewritten with the current lines and,
- * when someone finished (or a leader took it back), one short line says who's up now.
- */
-async function refreshTodaysPost(
-  connection: SqlConnection,
-  dependencies: Dependencies & { now: Date },
-  change?: { name: string; resource: SpendResource; done: boolean; before?: SpendOrder; after?: SpendOrder },
-): Promise<void> {
-  const token = botToken();
-  if (!token) return;
-  const { week, warDay, nextWar } = orderWeek(dependencies.now);
-  if (nextWar) return;
-  const rows = await connection.query("SELECT thread_id FROM spending_posts WHERE war_week = $1 AND war_day = $2 AND closed_at IS NULL AND thread_id <> ''", [week, warDay]);
-  if (!rows.length) return;
-  if (change && !resourcesOnDay(warDay).includes(change.resource)) return;
-  const thread = String(rows[0].thread_id);
-  const fetcher = dependencies.fetcher ?? fetch;
-  const headers = { Authorization: `Bot ${token}`, "Content-Type": "application/json" };
-  const context = await loadContext(connection, dependencies.now);
-  const content = spendingPostContent(warDay, buildOrders(context, warDay), `${appUrl()}/spending-order`);
-  // A forum post's first message has the post's own id.
-  await fetcher(`${DISCORD_API}/channels/${thread}/messages/${thread}`, { method: "PATCH", headers, body: JSON.stringify({ content, allowed_mentions: { parse: [] }, flags: 4 }) });
-  if (!change) return;
-  const before = new Set(change.before?.rows.filter((row) => row.state === "turn").map((row) => row.member.id) ?? []);
-  const nowTurn = (change.after?.rows ?? []).filter((row) => row.state === "turn" && !before.has(row.member.id)).map((row) => row.member.username);
-  await fetcher(`${DISCORD_API}/channels/${thread}/messages`, {
-    method: "POST", headers,
-    body: JSON.stringify({ content: doneUpdateMessage(change.name, change.resource, change.done, nowTurn), allowed_mentions: { parse: [] }, flags: 4 }),
-  });
 }
 
 /**

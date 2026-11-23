@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Check, ChevronsUp, Eye, EyeOff, Hand, Lock, LoaderCircle, Minus, Plus, RotateCcw, Send, Star, Target } from "lucide-react";
+import { Check, ChevronsUp, Eye, EyeOff, Hand, Lock, LoaderCircle, Send, Star, Target } from "lucide-react";
 import { errorText } from "@/lib/error-text";
 import { useLanguage } from "@/lib/i18n";
 import { numberFormat } from "@/lib/resources";
@@ -16,8 +16,6 @@ import { useStackFold } from "./stack-fold";
 import "./war-week.css";
 import "./spending-order.css";
 
-/** Sent when someone taps "I'm done" or Undo, so Home and this page catch up straight away. */
-export const SPENDING_UPDATED = "turmoil-spending-updated";
 const PICKED_KEY = "turmoil-spending-line";
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
@@ -27,8 +25,8 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   return result as T;
 }
 
-/** The spending order, kept fresh: every 30 seconds while the page is open, and when a member finishes. */
-export function useSpendingOrder() {
+/** The spending order, kept fresh: every 30 seconds while the page is open and visible. */
+function useSpendingOrder() {
   const [order, setOrder] = useState<SpendingOrderResponse | null>(null);
   const [failed, setFailed] = useState(false);
   const load = useCallback(async () => {
@@ -45,22 +43,13 @@ export function useSpendingOrder() {
     const interval = setInterval(visible, 30_000);
     window.addEventListener("focus", visible);
     document.addEventListener("visibilitychange", visible);
-    window.addEventListener(SPENDING_UPDATED, load);
     return () => {
       clearInterval(interval);
       window.removeEventListener("focus", visible);
       document.removeEventListener("visibilitychange", visible);
-      window.removeEventListener(SPENDING_UPDATED, load);
     };
   }, [load]);
-  /** "I'm done" or Undo (leaders can send someone else's memberId). */
-  async function markDone(resource: SpendResource, done: boolean, memberId?: string) {
-    const next = await request<SpendingOrderResponse>("/api/spending-order/done", { method: "POST", body: JSON.stringify({ resource, done, ...(memberId ? { memberId } : {}) }) });
-    setOrder(next);
-    window.dispatchEvent(new Event(SPENDING_UPDATED));
-    return next;
-  }
-  return { order, setOrder, failed, load, markDone };
+  return { order, setOrder, failed, load };
 }
 
 /** Big numbers kept short in the narrow columns: 1.2M, 64.2K. */
@@ -78,7 +67,7 @@ function CheckBadge({ check }: { check: AscendCheck }) {
 }
 
 /** Your own ascend check in a sentence, with your numbers. */
-export function CheckSentence({ check }: { check: AscendCheck }) {
+function CheckSentence({ check }: { check: AscendCheck }) {
   const { t } = useLanguage();
   if (check.state === "none") return null;
   if (check.state === "level") return <p className="spend-check-text level"><Lock size={14} aria-hidden="true" />{t("Reach summon level 100 to ascend (you’re at {level}).", { level: check.level })}</p>;
@@ -92,7 +81,8 @@ function dayLine(line: SpendOrder, t: ReturnType<typeof useLanguage>["t"]): stri
   return line.today ? t("For Day {day} (today)", { day: line.day }) : t("For Day {day}", { day: line.day });
 }
 
-function YourPlace({ line, row, busy, onDone }: { line: SpendOrder; row: SpendRow | undefined; busy: boolean; onDone: (done: boolean) => void }) {
+/** Where you sit in this line, and whether you're ready to ascend. */
+function YourPlace({ line, row }: { line: SpendOrder; row: SpendRow | undefined }) {
   const { t } = useLanguage();
   const inLine = line.rows.filter((item) => item.place !== null).length;
   const Picture = PILLAR_ICONS[SPEND_INFO[line.resource].pillar];
@@ -105,26 +95,16 @@ function YourPlace({ line, row, busy, onDone }: { line: SpendOrder; row: SpendRo
       </div>
     </section>;
   }
-  const button = row.state === "done"
-    ? <button type="button" className="planning-button planning-button-subtle" disabled={busy} onClick={() => onDone(false)}><RotateCcw size={15} />{t("Undo")}</button>
-    : row.state !== "away" && <button type="button" className={`planning-button spend-done-button${row.state === "turn" && line.today ? "" : " planning-button-subtle"}`} disabled={busy} onClick={() => onDone(true)}>
-      {busy ? <LoaderCircle size={16} className="spin" /> : <Check size={16} />}{t("I’m done")}
-    </button>;
-  const state = row.state === "turn" && line.day === null ? "wait" : row.state;
-  return <section className={`spend-you state-${state}`} aria-label={t("Your place")}>
+  return <section className={`spend-you state-${row.state}`} aria-label={t("Your place")}>
     <Picture size={30} />
     <div>
-      {row.state === "turn" && line.day !== null && <span className="spend-you-badge"><Star size={13} aria-hidden="true" />{line.today ? t("Your turn") : t("Up first")}</span>}
-      <strong>{row.place !== null ? t("You’re #{place} of {count}", { place: row.place, count: inLine }) : row.state === "done" ? t("You’re done in this line for this war.") : t("You’re away, so you’re skipped.")}</strong>
-      {row.state === "turn" && line.day !== null && <small>{line.today ? t("Spend now, then tap I’m done.") : t("You’re up first on Day {day}.", { day: line.day })}</small>}
-      {row.state === "wait" && <small>{t("Wait: {count} must finish first.", { count: row.ahead })}</small>}
+      <strong>{row.place !== null ? t("You’re #{place} of {count}", { place: row.place, count: inLine }) : t("You’re away, so you’re skipped.")}</strong>
       <CheckSentence check={row.check} />
     </div>
-    {button}
   </section>;
 }
 
-function LineTable({ line, meId, admin, busy, onDone }: { line: SpendOrder; meId: string; admin: boolean; busy: string | null; onDone: (row: SpendRow, done: boolean) => void }) {
+function LineTable({ line, meId }: { line: SpendOrder; meId: string }) {
   const { t, language } = useLanguage();
   const fold = useStackFold(meId);
   const info = SPEND_INFO[line.resource];
@@ -137,7 +117,6 @@ function LineTable({ line, meId, admin, busy, onDone }: { line: SpendOrder; meId
         <th scope="col">{t("War points")}</th>
         <th scope="col">{t("Saved")}</th>
         <th scope="col">{t("Ascend?")}</th>
-        {admin && <th scope="col"><span className="planning-sr-only">{t("Done")}</span></th>}
       </tr></thead>
       <tbody>
         {line.rows.map((row) => {
@@ -152,8 +131,6 @@ function LineTable({ line, meId, admin, busy, onDone }: { line: SpendOrder; meId
                 {me && <span className="you-badge">{t("you")}</span>}
                 {row.sniper && <Target size={15} className="spend-sniper" aria-label={t("In that day’s snipe")} role="img" />}
                 {row.ascending && <ChevronsUp size={15} className="spend-ascending" aria-label={t("Planning to ascend")} role="img" />}
-                {row.state === "turn" && line.day !== null && <span className="spend-tag turn">{line.today ? t("Up now") : t("Up first")}</span>}
-                {row.state === "done" && <span className="spend-tag done">{t("Done")}{row.doneBy ? ` · ${row.doneBy}` : ""}</span>}
                 {row.state === "away" && <span className="spend-tag away">{t("Away")}</span>}
               </span>
             </th>
@@ -162,15 +139,10 @@ function LineTable({ line, meId, admin, busy, onDone }: { line: SpendOrder; meId
               {row.amounts.map(({ key, value }) => { const Icon = RESOURCE_ICONS[key]; return <span key={key} title={t(LABELS[key] ?? key)}><Icon size={16} />{numberFormat(value)}</span>; })}
             </td>
             <td className="spend-check-cell" data-label={t("Ascend?")}><CheckBadge check={row.check} /></td>
-            {admin && <td className="spend-admin">
-              {row.state === "done"
-                ? <button type="button" className="planning-button planning-button-subtle" disabled={busy !== null} onClick={() => onDone(row, false)}><RotateCcw size={13} />{t("Undo")}</button>
-                : row.state !== "away" && <button type="button" className="planning-button planning-button-subtle" disabled={busy !== null} onClick={() => onDone(row, true)}><Check size={13} />{t("Mark done")}</button>}
-            </td>}
             {fold.toggleCell(row.member.id)}
           </tr>;
         })}
-        {line.rows.length === 0 && <tr><td colSpan={admin ? 6 : 5} className="planning-table-empty">{t("Nobody has any saved for this line.")}</td></tr>}
+        {line.rows.length === 0 && <tr><td colSpan={5} className="planning-table-empty">{t("Nobody has any saved for this line.")}</td></tr>}
       </tbody>
     </table>
   </div>;
@@ -182,7 +154,7 @@ const LABELS: Partial<Record<string, string>> = {
 
 /** The post as Discord shows it: **bold** in bold, and escaped characters as themselves. */
 function DiscordText({ text }: { text: string }) {
-  const plain = (value: string) => value.replace(/\\(.)/g, "$1").replace(/\u200b/g, "");
+  const plain = (value: string) => value.replace(/\\(.)/g, "$1").replace(/​/g, "");
   return <>{text.split(/(\*\*[^*]+\*\*)/g).map((part, index) => part.length > 4 && part.startsWith("**") && part.endsWith("**")
     ? <strong key={index}>{plain(part.slice(2, -2))}</strong>
     : plain(part))}</>;
@@ -245,8 +217,7 @@ function PostPanel({ order, notify, onChange }: { order: SpendingOrderResponse; 
 /** War → Spending order: who spends first on each clan day, where you stand, and whether you're ready to ascend. */
 export function SpendingOrder({ data, notify }: { data: DashboardResponse; notify: (message: string, error?: boolean) => void }) {
   const { t } = useLanguage();
-  const { order, setOrder, failed, load, markDone } = useSpendingOrder();
-  const [busy, setBusy] = useState<string | null>(null);
+  const { order, setOrder, failed, load } = useSpendingOrder();
   const [picked, setPicked] = useState<SpendResource | null>(() => {
     try {
       const saved = window.localStorage.getItem(PICKED_KEY);
@@ -269,32 +240,8 @@ export function SpendingOrder({ data, notify }: { data: DashboardResponse; notif
     setPicked(next);
     try { window.localStorage.setItem(PICKED_KEY, next); } catch { /* private mode: this visit only */ }
   }
-  async function done(row: SpendRow | undefined, value: boolean) {
-    const key = `${line.resource}:${row?.member.id ?? me.id}`;
-    if (busy) return;
-    setBusy(key);
-    try {
-      await markDone(line.resource, value, row && row.member.id !== me.id ? row.member.id : undefined);
-      notify(t(value ? "Marked done. The next person moves up." : "Back in the line."));
-    } catch (error) {
-      notify(t(errorText(error)), true);
-    } finally {
-      setBusy(null);
-    }
-  }
-  async function changeTurns(by: number) {
-    if (busy) return;
-    setBusy("turns");
-    try {
-      setOrder(await request<SpendingOrderResponse>("/api/spending-order", { method: "PUT", body: JSON.stringify({ turns: { [line.resource]: Math.max(1, Math.min(30, line.turns + by)) } }) }));
-    } catch (error) {
-      notify(t(errorText(error)), true);
-    } finally {
-      setBusy(null);
-    }
-  }
 
-  // The banner: the same words as the War page, plus what to do here.
+  // The banner: the same words as the War page.
   const clanToday = !order.nextWar && order.clanDays.includes(order.warDay);
   const next = order.clanDays.find((day) => day > order.warDay);
   const tone = order.nextWar ? (order.warDay === 6 ? "battle" : "claim") : !order.clanDays.length ? null : clanToday ? "on" : "hold";
@@ -312,9 +259,8 @@ export function SpendingOrder({ data, notify }: { data: DashboardResponse; notif
     <section className={`panel war-week-now spend-banner${tone ? ` tone-${tone}` : ""}`}>
       <div>
         <span className="war-week-kicker">{BannerIcon && <BannerIcon size={13} aria-hidden="true" />}{t("Today")} · {t("Day {day} of 7", { day: order.warDay })}</span>
-        <p className="war-week-verdict">{main}</p>
+        <p className="war-week-verdict">{main}<TermHelp term="spendingOrder" /></p>
         {sub && <p>{sub}</p>}
-        <p className="spend-how">{t("When it’s your turn, spend, then tap I’m done so the next person moves up.")}<TermHelp term="spendingOrder" /></p>
       </div>
     </section>
 
@@ -334,14 +280,8 @@ export function SpendingOrder({ data, notify }: { data: DashboardResponse; notif
         <h2 id="spend-line-title">{t(SPEND_INFO[line.resource].label)}</h2>
         <span className={`planning-chip${line.today ? " spend-today" : ""}`}>{dayLine(line, t)}</span>
       </div>
-      <YourPlace line={line} row={myRow} busy={busy === `${line.resource}:${me.id}`} onDone={(value) => void done(undefined, value)} />
-      {admin && <div className="spend-turns">
-        <span>{t("Turns at once")}</span>
-        <button type="button" className="planning-button planning-button-subtle" aria-label={t("Fewer turns")} disabled={busy !== null || line.turns <= 1} onClick={() => void changeTurns(-1)}><Minus size={15} /></button>
-        <strong aria-live="polite">{line.turns}</strong>
-        <button type="button" className="planning-button planning-button-subtle" aria-label={t("More turns")} disabled={busy !== null || line.turns >= 30} onClick={() => void changeTurns(1)}><Plus size={15} /></button>
-      </div>}
-      <LineTable line={line} meId={me.id} admin={admin} busy={busy} onDone={(row, value) => void done(row, value)} />
+      <YourPlace line={line} row={myRow} />
+      <LineTable line={line} meId={me.id} />
       <p className="planning-footnote spend-footnote">
         {t("Order: members in that day’s snipe first, then the biggest stockpile, counted in war points (the same estimate as the snipe planner).")}{" "}
         {t("Ascend? uses the official Forge Master Discord ascension guide (first ascension), with your own discount and extra chance from My Resources. Pillars unlock at summon level {level}.", { level: ASCEND_LEVEL })}
