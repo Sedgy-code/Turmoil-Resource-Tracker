@@ -392,7 +392,7 @@ function HomeToday({ now, notify, memberId }: { now: Date; notify: (message: str
 const CURRENCY_LABELS: Record<SpendResource, string> = { skills: "Skill Tickets", pets: "Eggshells total", mounts: "Mount Keys" };
 
 /** Before ticking a pillar the member doesn't look ready for: the guide's number for them, and a choice. */
-function AscendWarning({ pillar, check, onCancel, onConfirm }: { pillar: AscensionPillar; check: AscendCheck; onCancel: () => void; onConfirm: () => void }) {
+export function AscendWarning({ pillar, check, onCancel, onConfirm }: { pillar: AscensionPillar; check: AscendCheck; onCancel: () => void; onConfirm: () => void }) {
   const t = useT();
   const resource = SPEND_RESOURCES.find((item) => item === pillar);
   return <div className="home-ascend-warning" role="alert">

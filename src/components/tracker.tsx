@@ -13,6 +13,7 @@ import { SnipeChampions } from "./snipe-champions";
 import { ContributionRanking } from "./contribution-ranking";
 import { WarWeek } from "./war-week";
 import { ResourcesVote } from "./resources-vote";
+import { AscendPrompt } from "./ascend-prompt";
 import { SpendingOrder } from "./spending-order";
 import { MemberHistoryPanel } from "./member-history";
 import { ClanTech } from "./clan-tech";
@@ -846,7 +847,11 @@ function TrackerApp({ view }: { view: View }) {
           ) : data && dataMatches && view === "resources" ? (
             <>
               {/* Days 6–7: vote for the next war's clan days right where you update (only on your own, current form). */}
-              {!snapshotId && week === currentWeek() && (!params.get("member") || params.get("member") === user.id) && <ResourcesVote memberId={user.id} notify={notify} />}
+              {!snapshotId && week === currentWeek() && (!params.get("member") || params.get("member") === user.id) && <>
+                <ResourcesVote memberId={user.id} notify={notify} />
+                {/* Enough saved to ascend: it says so and asks whether you will this week. */}
+                <AscendPrompt entry={data.entries.find((item) => item.memberId === user.id)} notify={notify} />
+              </>}
               <ResourceForm
                 data={data}
                 week={week}

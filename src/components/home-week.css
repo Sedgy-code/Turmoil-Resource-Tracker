@@ -349,3 +349,12 @@ button.home-link { padding: 0; border: 0; background: none; font: inherit; font-
 .home-ascend-warning strong svg { flex-shrink: 0; color: #ffc65c; }
 .home-ascend-warning p { margin: 0; font-size: 13.5px; line-height: 1.45; }
 .home-job-text small .home-link { display: inline-flex; align-items: center; gap: 4px; }
+
+/* My Resources: "You can ascend", then the same ascend question as Home. */
+.ascend-prompt { display: grid; gap: 10px; margin-bottom: 14px; padding: 16px; border-color: #3f7a4c88; }
+.ascend-prompt h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 18px; color: #9fe3ad; }
+.ascend-prompt-ready { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.ascend-prompt-ready li { display: flex; align-items: center; gap: 8px; font-size: 14px; line-height: 1.35; }
+.ascend-prompt-question { display: grid; gap: 4px; margin-top: 4px; }
+.ascend-prompt-question small { color: var(--muted); line-height: 1.45; }
+
