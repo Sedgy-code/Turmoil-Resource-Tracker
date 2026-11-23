@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { initializeSchema, openDatabase, type Database } from "../src/lib/server/db";
 import { memberFromRow } from "../src/lib/server/mappers";
-import { channelWords, postAnnouncement } from "../src/lib/server/announcements";
+import { announcementChannels, announcementSchema, channelWords, postAnnouncement } from "../src/lib/server/announcements";
 import { ApiError } from "../src/lib/server/errors";
 
 let db: Database;
@@ -25,7 +25,7 @@ async function member(role: "ADMIN" | "MEMBER") {
 }
 
 function fakeDiscord() {
-  const calls: { url: string; method: string; body?: { content: string; allowed_mentions: { parse: string[] }; flags: number } }[] = [];
+  const calls: { url: string; method: string; body?: Record<string, unknown> }[] = [];
   const fetcher = (async (url: string, init?: RequestInit) => {
     calls.push({ url, method: init?.method ?? "GET", body: init?.body ? JSON.parse(String(init.body)) : undefined });
     if (url.endsWith("/guilds/999/channels"))
@@ -63,9 +63,9 @@ test("members who aren't admins can't post, and nothing reaches Discord", async 
 });
 
 function botBlocked(webhookChannel: string) {
-  const calls: { url: string; method: string }[] = [];
+  const calls: { url: string; method: string; body?: Record<string, unknown> }[] = [];
   const fetcher = (async (url: string, init?: RequestInit) => {
-    calls.push({ url, method: init?.method ?? "GET" });
+    calls.push({ url, method: init?.method ?? "GET", body: init?.body ? JSON.parse(String(init.body)) : undefined });
     if (url.endsWith("/guilds/999/channels")) return Response.json([{ id: "2", name: "turmoil-resource-tracker", type: 0 }]);
     if (url.endsWith("/channels/2/messages")) return Response.json({ message: "Missing Permissions", code: 50013 }, { status: 403 });
     if (url === "https://discord.com/api/webhooks/7/secret") return Response.json({ channel_id: webhookChannel });
@@ -104,4 +104,45 @@ test("an unknown channel is refused and lists the channels the bot can see", asy
     (error: unknown) => error instanceof ApiError && error.status === 404 && /general, 📊-turmoil-resource-tracker/.test(error.message),
   );
   assert.ok(calls.every((call) => call.method === "GET"));
+});
+
+test("a guide post has gold cards with screenshots and an Open button, still with no pings", async () => {
+  const { calls, fetcher } = fakeDiscord();
+  const input = announcementSchema.parse({
+    channel: "general",
+    content: "New on the Clan Hub",
+    embeds: [{ title: "1. Tap War", description: "Then Spending Order.", image: "https://tracker.example/guides/step-1.png" }, { title: "2. Pick a line" }],
+    button: { label: "Open the Spending Order", url: "https://tracker.example/spending-order" },
+  });
+  await postAnnouncement(await member("ADMIN"), input, { db, fetcher });
+  const post = calls.find((call) => call.method === "POST");
+  assert.deepEqual(post?.body, {
+    content: "New on the Clan Hub",
+    allowed_mentions: { parse: [] },
+    // No flags: "no link previews" would hide the cards too.
+    embeds: [
+      { color: 0xe6bd59, title: "1. Tap War", description: "Then Spending Order.", image: { url: "https://tracker.example/guides/step-1.png" } },
+      { color: 0xe6bd59, title: "2. Pick a line" },
+    ],
+    components: [{ type: 1, components: [{ type: 2, style: 5, label: "Open the Spending Order", url: "https://tracker.example/spending-order" }] }],
+  });
+  assert.throws(() => announcementSchema.parse({ channel: "general", content: "Hi", embeds: [{ title: "x", image: "http://insecure.example/a.png" }] }));
+});
+
+test("through the webhook, a guide post goes without its button", async () => {
+  process.env.DISCORD_REMINDER_WEBHOOK_URL = "https://discord.com/api/webhooks/7/secret";
+  try {
+    const { calls, fetcher } = botBlocked("2");
+    await postAnnouncement(await member("ADMIN"), { channel: "turmoil resource tracker", content: "Hi", embeds: [{ title: "Step" }], button: { label: "Open", url: "https://tracker.example" } }, { db, fetcher });
+    const hooked = calls.find((call) => call.url.endsWith("?wait=true"));
+    assert.equal(hooked?.body?.components, undefined);
+    assert.deepEqual(hooked?.body?.embeds, [{ color: 0xe6bd59, title: "Step" }]);
+  } finally { delete process.env.DISCORD_REMINDER_WEBHOOK_URL; }
+});
+
+test("admins can list the channels a post can go in, without posting", async () => {
+  const { calls, fetcher } = fakeDiscord();
+  assert.deepEqual(await announcementChannels(await member("ADMIN"), { db, fetcher }), { channels: [{ id: "1", name: "general" }, { id: "2", name: "📊-turmoil-resource-tracker" }] });
+  assert.ok(calls.every((call) => call.method === "GET"));
+  await assert.rejects(announcementChannels(await member("MEMBER"), { db, fetcher }), (error: unknown) => error instanceof ApiError && error.status === 403);
 });
