@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { CHECKIN_CLOSES_AFTER_MS } from "../snipe-calendar";
-import type { Member } from "../types";
-import { guildId, isDemo } from "./config";
+import type { Member, WarActivity } from "../types";
+import { WAR_ACTIVITIES } from "../war";
+import { appUrl, guildId, isDemo } from "./config";
 import { database, lockAdministration, type Database, type SqlConnection } from "./db";
 import { fetchGuildMembers } from "./discord-sync";
 import { ApiError } from "./errors";
@@ -138,6 +139,111 @@ export function assembleMessages(snipe: { id: string; title: string; startsAt: s
 /** "Wed 21 Oct, 23:30 UTC": Discord posts are English and clan times are UTC. */
 function utcLabel(iso: string): string {
   return `${new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" }).format(new Date(iso))}, ${new Date(iso).toISOString().slice(11, 16)} UTC`;
+}
+
+/** The Hub's gold, so posts look like the app; grey once a snipe is called off. */
+const SNIPE_GOLD = 0xe6bd59;
+const SNIPE_GREY = 0x80848e;
+
+export interface SnipePostPlan { title: string; startsAt: string; activities: readonly WarActivity[]; cancelled: boolean }
+
+/**
+ * The post in #snipe-chat when a leader plans a snipe: when (UTC, plus Discord's own countdown), what,
+ * and who planned it, with a button to answer on the Hub. English only, and it never pings anyone.
+ * Once the snipe is called off, the same post says so (grey, no button).
+ */
+export function snipePlanMessage(plan: SnipePostPlan, leader: string, hub: string) {
+  const unix = Math.floor(new Date(plan.startsAt).getTime() / 1000);
+  const what = plan.activities.map((key) => WAR_ACTIVITIES.find((activity) => activity.key === key)?.label ?? key).join(", ");
+  const link = `${hub}/snipes`;
+  return {
+    content: plan.cancelled
+      ? "❌ This snipe was called off. No need to join."
+      : "🎯 A new snipe is planned. Say **Yes** or **No** on the Clan Hub so leaders know who's in.",
+    embeds: [{
+      color: plan.cancelled ? SNIPE_GREY : SNIPE_GOLD,
+      author: { name: "Turmoil Clan Hub", icon_url: `${hub}/app-icons/icon-192.png`, url: link },
+      title: `${plan.cancelled ? "❌ Cancelled: " : "🎯 New snipe: "}${plan.title}`.slice(0, 256),
+      url: link,
+      description: [
+        `**When:** ${utcLabel(plan.startsAt)} (<t:${unix}:R>)`,
+        ...(what ? [`**What:** ${what}`] : []),
+        `**Planned by:** ${plain(leader)}`,
+      ].join("\n"),
+      footer: { text: plan.cancelled ? "Called off by a leader." : "Snipers are pinged here when it's time." },
+    }],
+    // A link button (style 5) needs nothing from the bot when tapped.
+    components: plan.cancelled ? [] : [{ type: 1, components: [{ type: 2, style: 5, label: "Answer on the Clan Hub", url: link }] }],
+    allowed_mentions: { parse: [] as never[] },
+  };
+}
+
+/** A snipe as its post shows it, with who planned it and the post's id (if it was posted). */
+async function snipeForPost(connection: SqlConnection, snipeId: string): Promise<{ plan: SnipePostPlan; leader: string; messageId: string | null } | null> {
+  const rows = await connection.query(`SELECT p.title, p.starts_at, p.activities, p.cancelled_at, p.discord_message_id, m.username
+    FROM snipe_plans p JOIN app_members m ON m.id = p.created_by WHERE p.id = $1`, [snipeId]);
+  if (!rows.length) return null;
+  const activities = typeof rows[0].activities === "string" ? JSON.parse(String(rows[0].activities)) : rows[0].activities;
+  return {
+    plan: { title: String(rows[0].title), startsAt: iso(rows[0].starts_at)!, activities: Array.isArray(activities) ? activities : [], cancelled: !!rows[0].cancelled_at },
+    leader: String(rows[0].username),
+    messageId: rows[0].discord_message_id ? String(rows[0].discord_message_id) : null,
+  };
+}
+
+/**
+ * A leader planned a snipe: it goes up in #snipe-chat (no pings), and the post's id is kept so the post
+ * follows later changes. True when it went up. Never throws: the snipe stands either way.
+ */
+export async function postSnipePlan(snipeId: string, dependencies: { db?: Database; fetcher?: typeof fetch } = {}): Promise<boolean> {
+  const token = process.env.DISCORD_BOT_TOKEN;
+  if (isDemo() || !token) return false;
+  try {
+    const connection = dependencies.db ?? await database();
+    const found = await snipeForPost(connection, snipeId);
+    if (!found || found.messageId) return false;
+    const channel = process.env.DISCORD_SNIPE_CHANNEL_ID || SNIPE_CHANNEL_ID;
+    const sent = await (dependencies.fetcher ?? fetch)(`${DISCORD_API}/channels/${channel}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(snipePlanMessage(found.plan, found.leader, appUrl())),
+    });
+    if (!sent.ok) {
+      console.warn("New snipe not posted", sent.status, (await sent.text().catch(() => "")).slice(0, 200));
+      return false;
+    }
+    const posted = (await sent.json().catch(() => ({}))) as { id?: unknown };
+    if (posted.id) await connection.query("UPDATE snipe_plans SET discord_message_id = $2 WHERE id = $1", [snipeId, String(posted.id)]);
+    return true;
+  } catch (error) {
+    console.warn("New snipe not posted", error);
+    return false;
+  }
+}
+
+/**
+ * The snipe's post shows the snipe as it is now: after a leader changes the time, title or what's
+ * included, calls it off, or reopens it. Edits never ping. Never throws.
+ */
+export async function refreshSnipePost(snipeId: string, dependencies: { db?: Database; fetcher?: typeof fetch } = {}): Promise<boolean> {
+  const token = process.env.DISCORD_BOT_TOKEN;
+  if (isDemo() || !token) return false;
+  try {
+    const connection = dependencies.db ?? await database();
+    const found = await snipeForPost(connection, snipeId);
+    if (!found?.messageId) return false;
+    const channel = process.env.DISCORD_SNIPE_CHANNEL_ID || SNIPE_CHANNEL_ID;
+    const sent = await (dependencies.fetcher ?? fetch)(`${DISCORD_API}/channels/${channel}/messages/${found.messageId}`, {
+      method: "PATCH",
+      headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(snipePlanMessage(found.plan, found.leader, appUrl())),
+    });
+    if (!sent.ok) console.warn("Snipe post not updated", sent.status, (await sent.text().catch(() => "")).slice(0, 200));
+    return sent.ok;
+  } catch (error) {
+    console.warn("Snipe post not updated", error);
+    return false;
+  }
 }
 
 /** Tells everyone who said Yes that the snipe is off (English only, like every Discord post). */

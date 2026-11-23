@@ -5,7 +5,7 @@ import { initializeSchema, openDatabase, type Database } from "../src/lib/server
 import { memberFromRow } from "../src/lib/server/mappers";
 import { checkIn } from "../src/lib/server/discord-interactions";
 import { cancelSnipe, checkInToSnipe, listSnipes, openSnipeCount, respondToSnipe, snipesToAnswer, updateSnipe } from "../src/lib/server/planning";
-import { assembleMessages, assembleSnipers, cancelMessages, catchUpSnipeRoles, giveSnipeRole, SNIPE_CHANNEL_ID, snipeRoleId, tellSnipersCancelled } from "../src/lib/server/snipe-discord";
+import { assembleMessages, assembleSnipers, cancelMessages, catchUpSnipeRoles, giveSnipeRole, postSnipePlan, refreshSnipePost, SNIPE_CHANNEL_ID, snipePlanMessage, snipeRoleId, tellSnipersCancelled } from "../src/lib/server/snipe-discord";
 
 let db: Database;
 const previous = { ...process.env };
@@ -228,6 +228,79 @@ test("the snipers are told in #snipe-chat when a snipe is cancelled", async () =
   // Discord said no: the cancel still stands, and the leader is told it wasn't posted.
   assert.equal(await tellSnipersCancelled(snipe, "Boss", ["200"], discord({ post: 403 }).fetcher), false);
   assert.equal(cancelMessages(snipe, "Boss", Array.from({ length: 41 }, (_, index) => String(index + 1))).length, 2);
+});
+
+test("a new snipe's post says when, what and who planned it, with a button, and never pings", () => {
+  const message = snipePlanMessage({ title: "Day 3 – Skills @everyone", startsAt, activities: ["skillSummons", "eggMerges"], cancelled: false }, "Boss_*x*", "https://tracker.example");
+  assert.deepEqual(message.allowed_mentions, { parse: [] });
+  assert.equal(message.content, "🎯 A new snipe is planned. Say **Yes** or **No** on the Clan Hub so leaders know who's in.");
+  const [embed] = message.embeds;
+  assert.equal(embed.title, "🎯 New snipe: Day 3 – Skills @everyone");
+  assert.equal(embed.color, 0xe6bd59);
+  assert.equal(embed.url, "https://tracker.example/snipes");
+  assert.equal(embed.description, [
+    `**When:** Thu 22 Oct, 23:45 UTC (<t:${Math.floor(Date.parse(startsAt) / 1000)}:R>)`,
+    "**What:** Skill summons, Merge existing eggs/pets",
+    "**Planned by:** Boss\\_\\*x\\*",
+  ].join("\n"));
+  assert.deepEqual(message.components, [{ type: 1, components: [{ type: 2, style: 5, label: "Answer on the Clan Hub", url: "https://tracker.example/snipes" }] }]);
+  // Called off: the same post turns grey, says so, and loses its button.
+  const off = snipePlanMessage({ title: "Day 3 – Skills", startsAt, activities: ["skillSummons"], cancelled: true }, "Boss", "https://tracker.example");
+  assert.equal(off.embeds[0].title, "❌ Cancelled: Day 3 – Skills");
+  assert.equal(off.embeds[0].color, 0x80848e);
+  assert.deepEqual(off.components, []);
+  assert.match(off.content, /called off/);
+});
+
+test("planning a snipe posts it once in #snipe-chat; changes and a cancel edit that post", async () => {
+  const planId = randomUUID();
+  await db.query(`INSERT INTO snipe_plans (id, title, starts_at, activities, created_by)
+    VALUES ($1, 'Day 4 – Mounts', '2030-10-24T23:30:00.000Z', '["mountSummons"]'::jsonb, $2)`, [planId, bossId]);
+  const calls: Call[] = [];
+  const fetcher = (async (url: string, init: RequestInit = {}) => {
+    calls.push({ method: init.method ?? "GET", url, ...(init.body ? { body: JSON.parse(String(init.body)) } : {}) });
+    return Response.json({ id: "777" });
+  }) as typeof fetch;
+  assert.equal(await postSnipePlan(planId, { db, fetcher }), true);
+  assert.deepEqual(calls.map((call) => [call.method, call.url]), [["POST", `${API}/channels/${SNIPE_CHANNEL_ID}/messages`]]);
+  assert.deepEqual(calls[0].body?.allowed_mentions, { parse: [] });
+  assert.equal((calls[0].body?.embeds as { title: string }[])[0].title, "🎯 New snipe: Day 4 – Mounts");
+  assert.equal((await db.query("SELECT discord_message_id FROM snipe_plans WHERE id = $1", [planId]))[0].discord_message_id, "777");
+  // Never posted twice.
+  assert.equal(await postSnipePlan(planId, { db, fetcher }), false);
+  assert.equal(calls.length, 1);
+
+  // A leader moves it: the post shows the new time.
+  calls.length = 0;
+  await updateSnipe(await member(bossId), planId, { startsAt: "2030-10-24T23:40:00.000Z" }, db);
+  assert.equal(await refreshSnipePost(planId, { db, fetcher }), true);
+  assert.deepEqual(calls.map((call) => [call.method, call.url]), [["PATCH", `${API}/channels/${SNIPE_CHANNEL_ID}/messages/777`]]);
+  assert.match((calls[0].body?.embeds as { description: string }[])[0].description, /Thu 24 Oct, 23:40 UTC/);
+  assert.deepEqual(calls[0].body?.allowed_mentions, { parse: [] });
+
+  // Called off: the post says so, without a button.
+  calls.length = 0;
+  await cancelSnipe(await member(bossId), planId, db);
+  assert.equal(await refreshSnipePost(planId, { db, fetcher }), true);
+  assert.equal((calls[0].body?.embeds as { title: string }[])[0].title, "❌ Cancelled: Day 4 – Mounts");
+  assert.deepEqual(calls[0].body?.components, []);
+
+  // In the demo, or for a snipe never posted, nothing reaches Discord.
+  calls.length = 0;
+  process.env.DEMO_MODE = "true";
+  assert.equal(await postSnipePlan(snipeId, { db, fetcher }), false);
+  delete process.env.DEMO_MODE;
+  assert.equal(await refreshSnipePost(snipeId, { db, fetcher }), false);
+  assert.equal(calls.length, 0);
+});
+
+test("if Discord won't take the new snipe's post, the snipe still stands and nothing is kept", async () => {
+  const planId = randomUUID();
+  await db.query(`INSERT INTO snipe_plans (id, title, starts_at, activities, created_by)
+    VALUES ($1, 'Day 5 – Pets', '2026-10-24T23:30:00.000Z', '["eggMerges"]'::jsonb, $2)`, [planId, bossId]);
+  const refuse = (async () => Response.json({ message: "Missing Permissions", code: 50013 }, { status: 403 })) as typeof fetch;
+  assert.equal(await postSnipePlan(planId, { db, fetcher: refuse }), false);
+  assert.equal((await db.query("SELECT discord_message_id FROM snipe_plans WHERE id = $1", [planId]))[0].discord_message_id, null);
 });
 
 test("the Snipes tab glows while a snipe is to come or on now, never for one called off or long over", async () => {

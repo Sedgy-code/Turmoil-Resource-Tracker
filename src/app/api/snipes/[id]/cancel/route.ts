@@ -1,9 +1,10 @@
+import { after } from "next/server";
 import { z } from "zod";
 import { requireMember } from "@/lib/server/auth";
 import { assertSameOrigin } from "@/lib/server/config";
 import { errorResponse, privateResponse } from "@/lib/server/errors";
 import { cancelSnipe } from "@/lib/server/planning";
-import { tellSnipersCancelled } from "@/lib/server/snipe-discord";
+import { refreshSnipePost, tellSnipersCancelled } from "@/lib/server/snipe-discord";
 
 export const runtime = "nodejs";
 
@@ -21,6 +22,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const input = cancelSchema.parse(await request.json());
     const { plan, leader, snipers } = await cancelSnipe(actor, id);
     const told = input.tellSnipers && snipers.length ? await tellSnipersCancelled(plan, leader.username, snipers) : null;
+    // The snipe's own post in #snipe-chat says it's off too (an edit, so no ping).
+    after(() => refreshSnipePost(id).then(() => undefined));
     return privateResponse({ plan, told });
   } catch (error) { return errorResponse(error); }
 }
