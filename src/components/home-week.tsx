@@ -137,7 +137,7 @@ export function HomeWeek({ data, notify, leader }: { data: DashboardResponse; no
   // ascension guide's number worked out for you.
   const answered = ascension !== undefined && ascension !== null;
   const ascensionTitle = !answered
-    ? t("Planning to ascend this week?")
+    ? t("Planning to ascend (or push the new tiers) this week?")
     : ascension.length
       ? t("Planning to ascend: {what}", { what: ascension.map((pillar) => t(PILLAR_LABELS[pillar])).join(", ") })
       : t("Not ascending this week");
@@ -258,7 +258,7 @@ export function HomeWeek({ data, notify, leader }: { data: DashboardResponse; no
             {!answered && <small>{t("Tap what you plan to ascend, or No.")}</small>}
             {answered && ascension.length > 0 && <small>{t("Check your place on the Spending Order before you push.")} <Link className="home-link" href="/spending-order">{t("Spending Order")}<ArrowRight size={14} aria-hidden="true" /></Link></small>}
           </div>
-          <div className="home-chips" role="group" aria-label={t("Planning to ascend this week?")}>
+          <div className="home-chips" role="group" aria-label={t("Planning to ascend (or push the new tiers) this week?")}>
             <button aria-pressed={answered && ascension.length === 0} onClick={() => { setWarning(null); void ascend([]); }}><span>{t("No")}</span></button>
             {ASCENSION_PILLARS.map((pillar) => {
               const Icon = PILLAR_ICONS[pillar];

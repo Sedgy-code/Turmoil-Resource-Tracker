@@ -66,7 +66,7 @@ async function loadContext(connection: SqlConnection, now: Date): Promise<Contex
   const entries = bankRows.map((row) => entryFromRow({ ...row, id: `bank:${row.member_id}`, week_start: currentWeek(now) }));
   const rates = (await getSettings(undefined, connection)).warRates;
   const days = await clanDays(connection, week);
-  // This week's answers on Home ("Planning to ascend this week?").
+  // This week's answers on Home ("Planning to ascend (or push the new tiers) this week?").
   const ascensionRows = await connection.query("SELECT member_id, pillars FROM member_ascensions WHERE week_start = $1", [currentWeek(now)]);
   // The war's Days 1–5: snipes start just before a day's reset, so they fall inside that day.
   const from = dayStart(week, 1).toISOString();
@@ -258,6 +258,7 @@ function packFields(name: string, lines: string[]): { name: string; value: strin
 export function spendingPost(day: number, orders: SpendOrder[], hub: string, starts?: Date): { content: string; embed: SpendingPostEmbed } {
   const shown = orders.filter((order) => resourcesOnDay(day).includes(order.resource));
   const snipers = shown.some((order) => order.rows.some((row) => row.sniper && row.state === "line"));
+  const ascenders = shown.some((order) => order.rows.some((row) => row.ascending && row.state === "line"));
   const link = `${hub}/spending-order`;
   const write = (limit: number): SpendingPostEmbed => ({
     color: EMBED_COLOR,
@@ -266,15 +267,18 @@ export function spendingPost(day: number, orders: SpendOrder[], hub: string, sta
     url: link,
     description: [
       starts ? `Day ${day} starts ${utcStart(starts)}. The order updates when it starts.` : `Day ${day} is on now. Spend in this order.`,
-      "Biggest stockpiles first, counted in war points.",
+      "🎯 Snipers first, then ⏫ ascending, then the biggest stockpiles (war points).",
     ].join("\n"),
     fields: shown.flatMap((order) => {
       const line = order.rows.filter((row) => row.state === "line");
-      const lines = line.slice(0, limit).map((row) => `${row.place}. ${row.sniper ? "🎯 " : ""}${plainName(row.member.username)} · ${shortNumber(row.points)} pts${checkMark(row.check)}`);
+      const lines = line.slice(0, limit).map((row) => `${row.place}. ${row.sniper ? "🎯 " : ""}${row.ascending ? "⏫ " : ""}${plainName(row.member.username)} · ${shortNumber(row.points)} pts${checkMark(row.check)}`);
       if (line.length > limit) lines.push(`+${line.length - limit} more on the Clan Hub`);
       return packFields(`${RESOURCE_EMOJI[order.resource]} ${SPEND_INFO[order.resource].label} · ${line.length} in line`, lines);
     }),
-    footer: ["✅ ready to ascend", "⏳ not enough yet", "🔒 summon level under 100", ...(snipers ? [`🎯 in the Day ${day} snipe`] : [])].join(" · "),
+    footer: [
+      "✅ ready to ascend", "⏳ not enough yet", "🔒 summon level under 100",
+      ...(ascenders ? ["⏫ ascending this week"] : []), ...(snipers ? [`🎯 in the Day ${day} snipe`] : []),
+    ].join(" · "),
     button: { label: "Open the Spending Order", url: link },
   });
   let embed = write(60);
