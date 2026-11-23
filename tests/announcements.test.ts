@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { initializeSchema, openDatabase, type Database } from "../src/lib/server/db";
 import { memberFromRow } from "../src/lib/server/mappers";
-import { announcementChannels, announcementSchema, channelWords, postAnnouncement } from "../src/lib/server/announcements";
+import { announcementChannels, announcementSchema, channelWords, deleteAnnouncement, postAnnouncement } from "../src/lib/server/announcements";
 import { ApiError } from "../src/lib/server/errors";
 
 let db: Database;
@@ -145,4 +145,36 @@ test("admins can list the channels a post can go in, without posting", async () 
   assert.deepEqual(await announcementChannels(await member("ADMIN"), { db, fetcher }), { channels: [{ id: "1", name: "general" }, { id: "2", name: "📊-turmoil-resource-tracker" }] });
   assert.ok(calls.every((call) => call.method === "GET"));
   await assert.rejects(announcementChannels(await member("MEMBER"), { db, fetcher }), (error: unknown) => error instanceof ApiError && error.status === 403);
+});
+
+test("a leader can ask to ping @everyone, and only @everyone", async () => {
+  const { calls, fetcher } = fakeDiscord();
+  await postAnnouncement(await member("ADMIN"), { channel: "general", content: "📢 New on the Clan Hub", pingEveryone: true }, { db, fetcher });
+  const post = calls.find((call) => call.method === "POST");
+  assert.equal(post?.body?.content, "@everyone\n📢 New on the Clan Hub");
+  assert.deepEqual(post?.body?.allowed_mentions, { parse: ["everyone"] });
+  // Already starting with @everyone: not added twice.
+  calls.length = 0;
+  await postAnnouncement(await member("ADMIN"), { channel: "general", content: "@everyone hello", pingEveryone: true }, { db, fetcher });
+  assert.equal(calls.find((call) => call.method === "POST")?.body?.content, "@everyone hello");
+});
+
+test("an admin can delete the bot's post, or the webhook's in that channel; members can't", async () => {
+  const { calls, fetcher } = fakeDiscord();
+  assert.deepEqual(await deleteAnnouncement(await member("ADMIN"), { channel: "general", messageId: "123456789" }, { db, fetcher }), { channel: "general", messageId: "123456789", via: "bot" });
+  assert.ok(calls.some((call) => call.method === "DELETE" && call.url === "https://discord.com/api/v10/channels/1/messages/123456789"));
+  await assert.rejects(deleteAnnouncement(await member("MEMBER"), { channel: "general", messageId: "123456789" }, { db, fetcher }), (error: unknown) => error instanceof ApiError && error.status === 403);
+  process.env.DISCORD_REMINDER_WEBHOOK_URL = "https://discord.com/api/webhooks/7/secret";
+  try {
+    const removed: string[] = [];
+    const webhookOnly = (async (url: string, init?: RequestInit) => {
+      if (url.endsWith("/guilds/999/channels")) return Response.json([{ id: "2", name: "turmoil-resource-tracker", type: 0 }]);
+      if (url.endsWith("/channels/2/messages/987654321")) return Response.json({ message: "Missing Permissions", code: 50013 }, { status: 403 });
+      if (url === "https://discord.com/api/webhooks/7/secret") return Response.json({ channel_id: "2" });
+      if (url === "https://discord.com/api/webhooks/7/secret/messages/987654321" && init?.method === "DELETE") { removed.push(url); return new Response(null, { status: 204 }); }
+      return new Response(null, { status: 404 });
+    }) as typeof fetch;
+    assert.equal((await deleteAnnouncement(await member("ADMIN"), { channel: "turmoil resource tracker", messageId: "987654321" }, { db, fetcher: webhookOnly })).via, "webhook");
+    assert.equal(removed.length, 1);
+  } finally { delete process.env.DISCORD_REMINDER_WEBHOOK_URL; }
 });
