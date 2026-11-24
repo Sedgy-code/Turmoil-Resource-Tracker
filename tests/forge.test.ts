@@ -48,7 +48,7 @@ test("hammer estimates use each member's forge level, and the general range only
   assert.deepEqual([ignored.minimum, ignored.maximum], [100, 300]);
 });
 
-test("the forge level is optional, but must be a whole number from 1 to 50 when given", () => {
+test("the forge level is needed to save, and must be a whole number from 1 to 50", () => {
   assert.equal(planningDetailsSchema.safeParse({}).success, true);
   assert.equal(planningDetailsSchema.safeParse({ forgeLevel: 1 }).success, true);
   assert.equal(planningDetailsSchema.safeParse({ forgeLevel: 50 }).success, true);
@@ -58,7 +58,7 @@ test("the forge level is optional, but must be a whole number from 1 to 50 when 
     summoningCosts: { fiveSkills: 150, mount: 40 },
     planningDetails: { skillLevel: 1, mountLevel: 1, eggLevel: 1, newMountMerges: 0, eggMerges: 0, eggSummonMerges: 0, extraMountChancePercent: 0, extraPetSummonPercent: 0, forgeLevel },
   });
-  assert.deepEqual(assessBankCompleteness(bank()), { complete: true, missing: [] });
+  assert.deepEqual(assessBankCompleteness(bank()), { complete: false, missing: ["Forge level"] });
   assert.deepEqual(assessBankCompleteness(bank(35)), { complete: true, missing: [] });
   assert.deepEqual(assessBankCompleteness(bank(60)), { complete: false, missing: ["Forge level"] });
   assert.deepEqual(assessBankCompleteness(bank(Number.NaN)), { complete: false, missing: ["Forge level"] });

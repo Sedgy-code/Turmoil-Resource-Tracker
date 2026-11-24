@@ -37,7 +37,10 @@ export interface PlanningDetails {
   eggSummonMerges: number;
   extraMountChancePercent?: number;
   extraPetSummonPercent?: number;
-  /** Optional: the member's Forge level (1–50). With it, hammer points use the official forging odds. */
+  /**
+   * The member's Forge level (1–50): hammer points use the official forging odds for it. Needed to
+   * save; older saves without one use the clan's general hammer range.
+   */
   forgeLevel?: number;
   calculationVersion?: 2;
 }

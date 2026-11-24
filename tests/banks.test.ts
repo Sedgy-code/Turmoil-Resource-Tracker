@@ -10,6 +10,9 @@ import { memberFromRow } from "../src/lib/server/mappers";
 import { saveEntry, updateMember } from "../src/lib/server/tracker";
 import type { Member } from "../src/lib/types";
 
+// Saving needs a forge level (1–50) on top of the version 2 chance details.
+const CHANCE_DETAILS = { ...CHANCE_PLANNING_DETAILS, forgeLevel: 30 };
+
 let db: Database;
 let admin: Member;
 let member: Member;
@@ -17,7 +20,7 @@ const failure = (code: string) => (error: unknown) => error instanceof ApiError 
 const resources = (hammers: number) => ({ ...EMPTY_RESOURCES, hammers });
 const completeInformation = {
   summoningCosts: { fiveSkills: 150, mount: 40 },
-  planningDetails: { ...CHANCE_PLANNING_DETAILS },
+  planningDetails: { ...CHANCE_DETAILS },
 };
 
 async function createMember(username: string, role: Member["role"]): Promise<Member> {
@@ -59,7 +62,7 @@ after(async () => { await db.close(); });
 
 test("live banks carry resources, costs, and planning details into later weeks", async () => {
   const costs = { fiveSkills: 180, mount: 42 };
-  const details = { ...CHANCE_PLANNING_DETAILS, skillLevel: 45, mountLevel: 72, eggMerges: 8 };
+  const details = { ...CHANCE_DETAILS, skillLevel: 45, mountLevel: 72, eggMerges: 8 };
   await saveBank(member, { resources: resources(40), summoningCosts: costs, planningDetails: details, notes: "Ready" }, db);
   const edited = await saveBank(member, { resources: resources(45), notes: "Still ready" }, db);
   assert.deepEqual(edited.summoningCosts, costs);
@@ -122,7 +125,7 @@ test("complete zero banks and unchanged self saves qualify for 20 Dew once a wee
 test("incomplete bank submissions do not write inventory, history, freshness or rewards", async () => {
   const missingResource = { ...resources(0) } as Partial<ResourceValues>;
   delete missingResource.eggshellsTotal;
-  const missingChance = { ...CHANCE_PLANNING_DETAILS };
+  const missingChance = { ...CHANCE_DETAILS };
   delete missingChance.extraPetSummonPercent;
   const invalidInputs = [
     { resources: resources(0), notes: "Missing all costs and details" },
@@ -130,7 +133,7 @@ test("incomplete bank submissions do not write inventory, history, freshness or 
     { ...completeInformation, resources: resources(0), summoningCosts: { fiveSkills: 0, mount: 40 }, notes: "Invalid cost" },
     { ...completeInformation, resources: resources(0), planningDetails: missingChance, notes: "Missing chance" },
     { ...completeInformation, resources: resources(0), planningDetails: { ...EMPTY_PLANNING_DETAILS }, notes: "Old action counts are incomplete" },
-    { ...completeInformation, resources: resources(0), planningDetails: { ...CHANCE_PLANNING_DETAILS, extraMountChancePercent: 0.001 }, notes: "Invalid precision" },
+    { ...completeInformation, resources: resources(0), planningDetails: { ...CHANCE_DETAILS, extraMountChancePercent: 0.001 }, notes: "Invalid precision" },
   ];
   for (const input of invalidInputs) await assert.rejects(saveBank(member, input, db), failure("BANK_INCOMPLETE"));
   for (const table of ["member_banks", "bank_versions", "resource_entries", "bank_snapshots", "dew_balances", "dew_weekly_earnings", "dew_earnings"]) {
@@ -180,7 +183,7 @@ test("previous weekly awards and legacy daily balances remain while a new week's
 });
 
 test("complete chance inputs are saved as version 2 even when the client omits the model marker", async () => {
-  const details = { ...CHANCE_PLANNING_DETAILS };
+  const details = { ...CHANCE_DETAILS };
   delete details.calculationVersion;
   const saved = await saveBank(member, { ...completeInformation, planningDetails: details, resources: resources(0), notes: "New fields" }, db);
   assert.equal(saved.planningDetails?.calculationVersion, 2);
