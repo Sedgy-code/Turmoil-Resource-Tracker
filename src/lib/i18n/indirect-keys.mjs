@@ -59,6 +59,7 @@ export const INDIRECT_KEYS = [
   "Top left of the Tech Tree screen (the red potion).", "Tech Tree screen → the red potion number at the top left.",
   // Levels and chances
   "Skill level", "Mount level", "Egg/pet level", "Extra mount chance %", "Extra pet summon %",
+  "Forge level", "Optional. Your Forge level, from the Forge screen. It makes your hammer points exact.",
   "Tap ⓘ next to the Summon button on the Skills screen.", "Tap ⓘ next to the Summon button on the Mounts screen.", "Tap ⓘ next to the Summon button on the Pets screen.",
   "Skills screen → tap ⓘ next to Summon. Use the Level number at the top.",
   "Mounts screen → tap ⓘ next to Summon. Use the Level number at the top.",
