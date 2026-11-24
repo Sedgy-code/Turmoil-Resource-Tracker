@@ -37,6 +37,8 @@ export interface PlanningDetails {
   eggSummonMerges: number;
   extraMountChancePercent?: number;
   extraPetSummonPercent?: number;
+  /** Optional: the member's Forge level (1–50). With it, hammer points use the official forging odds. */
+  forgeLevel?: number;
   calculationVersion?: 2;
 }
 export const EMPTY_PLANNING_DETAILS: PlanningDetails = {

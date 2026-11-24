@@ -1,3 +1,4 @@
+import { FORGE_POINT_SCALE, scaledForgePoints, validForgeLevel } from "./forge";
 import type { ResourceEntry, WarActivity, WarEstimate, WarRates, WarTech } from "./types";
 
 export const WAR_ACTIVITIES: readonly {
@@ -93,6 +94,17 @@ function roundedPoints(scaledQuantity: bigint, rate: number, percent = 0): numbe
   return safeNumber((scaledQuantity * BigInt(rate) * bonus + scale / 2n) / scale);
 }
 
+/**
+ * Hammer points: members with a forge level score its expected points per hammer (official
+ * forging odds); everyone else uses the clan's general rate. Rounded once, after the clan tech bonus.
+ */
+function hammerPoints(forged: bigint, unknownHammers: bigint, rate: number, percent = 0): number {
+  if (!Number.isSafeInteger(rate) || rate < 0) throw new WarEstimateError();
+  const bonus = BigInt(100 + Math.max(0, Math.round(percent)));
+  const scale = FORGE_POINT_SCALE * 100n;
+  return safeNumber(((forged + unknownHammers * BigInt(rate) * FORGE_POINT_SCALE) * bonus + scale / 2n) / scale);
+}
+
 /** Clan tech that adds war points to each activity, 4% a level (up to 10): hammers are forging. */
 const SOURCE_TECH: Record<WarActivity, string> = {
   hammers: "war-points-from-forging",
@@ -162,6 +174,9 @@ export function estimateWar(
     mountMerges: 0n, eggMerges: 0n, eggSummonMerges: 0n,
   };
   let missingCosts = 0;
+  // Hammers of members with a forge level (as millionths of a point) and of those without one.
+  let forged = 0n;
+  let unknownHammers = 0n;
 
   for (const entry of entries) {
     const tickets = whole(entry.resources.skillTickets);
@@ -174,7 +189,11 @@ export function estimateWar(
     const usesChance = mode === "current" || details?.calculationVersion === 2 ||
       details?.extraMountChancePercent !== undefined || details?.extraPetSummonPercent !== undefined;
     const mountChance = chanceHundredths(details?.extraMountChancePercent);
-    quantities.hammers += whole(entry.resources.hammers) * ACTION_SCALE;
+    const hammers = whole(entry.resources.hammers);
+    quantities.hammers += hammers * ACTION_SCALE;
+    const forgeLevel = validForgeLevel(details?.forgeLevel);
+    if (forgeLevel) forged += hammers * scaledForgePoints(forgeLevel);
+    else unknownHammers += hammers;
     quantities.skillSummons += (skillsCost ? available(tickets * 5n, skillsCost) : 0n) * ACTION_SCALE;
     quantities.mountSummons += mounts * ACTION_SCALE;
     quantities.mountMerges += whole(entry.resources.mountsToMerge) * ACTION_SCALE;
@@ -201,6 +220,9 @@ export function estimateWar(
     const minimumRate = key === "hammers" ? rates.hammersMin : rates[key];
     const maximumRate = key === "hammers" ? rates.hammersMax : rates[key];
     const percent = boost[key] ?? 0;
+    if (key === "hammers") {
+      return { activity: key, label, quantity: actionQuantity(scaledQuantity), minimum: hammerPoints(forged, unknownHammers, minimumRate, percent), maximum: hammerPoints(forged, unknownHammers, maximumRate, percent) };
+    }
     return { activity: key, label, quantity: actionQuantity(scaledQuantity), minimum: roundedPoints(scaledQuantity, minimumRate, percent), maximum: roundedPoints(scaledQuantity, maximumRate, percent) };
   });
   return {

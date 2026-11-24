@@ -39,6 +39,7 @@ import { announceClanPointsUpdate } from "@/lib/clan-points";
 import { SNIPE_ANSWERED } from "@/lib/snipe-day";
 import { MemberAvatar as Avatar, MemberName, MemberTitle } from "./member-identity";
 import { DEFAULT_WAR_RATES, WAR_ACTIVITIES, estimateWar, warBoost, boostedRates } from "@/lib/war";
+import { FORGE_MAX_LEVEL } from "@/lib/forge";
 import { assessBankCompleteness } from "@/lib/completeness";
 import { filterPlanningIssues, memberPlanningIssues, type PlanningIssueKey } from "@/lib/planning-completeness";
 import { MissingDataIndicator } from "./missing-data-indicator";
@@ -1135,7 +1136,14 @@ function ClanArsenal({ data, estimate, rates, estimateError, snapshotId }: { dat
                 <div className="arsenal-metric"><span>{t(mixedHistory ? "Extra / planned pet merges" : chanceHistory ? "Expected extra pet merges" : "Planned summon/merge actions")}</span><strong>{estimateError ? "--" : expected(quantity("eggSummonMerges"))}</strong></div>
               </>}
               {key === "mountsToMerge" && <p className="arsenal-note">{t("Mounts you already have. Bonus mounts are counted under Mount Keys.")}</p>}
-              {key === "hammers" && <p className="arsenal-note">{t("{min}–{max} points per hammer.", { min: numberFormat(rates.hammersMin), max: numberFormat(rates.hammersMax) })}</p>}
+              {key === "hammers" && (() => {
+                // The clan's average per hammer: members' forge levels make it exact, the rest use the general range.
+                const row = estimate?.rows.find((item) => item.activity === "hammers");
+                const [min, max] = row && row.quantity > 0
+                  ? [Math.round(row.minimum / row.quantity * 10) / 10, Math.round(row.maximum / row.quantity * 10) / 10]
+                  : [rates.hammersMin, rates.hammersMax];
+                return <p className="arsenal-note">{min === max ? t("{points} points per hammer.", { points: numberFormat(min) }) : t("{min}–{max} points per hammer.", { min: numberFormat(min), max: numberFormat(max) })}</p>;
+              })()}
               {(key === "skillTickets" || key === "mountKeys") && <p className="arsenal-note">{t("Whole summons, worked out for each member.")}{key === "mountKeys" && chanceHistory ? ` ${t("Bonus merges use each member’s extra mount chance.")}` : ""}</p>}
               {key === "eggsPetsTotal" && <p className="arsenal-note">{t(mixedHistory ? "Older entries keep their original counts; newer ones use totals and extra chances." : chanceHistory ? "All eggs/pets can be merged. Extra pets = eggshells ÷ 100 × each member’s extra chance." : "This week keeps its original saved merge counts.")}</p>}
               <p className="war-points-note">{key === "skillTickets" ? t("{points} points per skill summon.", { points: numberFormat(rates.skillSummons) })
@@ -1602,8 +1610,8 @@ function ResourceForm({
   const legacyHistory = readOnly && savedPlanning.calculationVersion !== 2 && savedPlanning.extraMountChancePercent === undefined && savedPlanning.extraPetSummonPercent === undefined;
   type PlanningFieldKey = Exclude<keyof PlanningDetails, "calculationVersion">;
   const isChance = (key: PlanningFieldKey) => key === "extraMountChancePercent" || key === "extraPetSummonPercent";
-  const planningMaximum = (key: PlanningFieldKey) => isChance(key) ? 1000 : key.endsWith("Level") ? 1_000_000_000 : 1_000_000;
-  const planningFields: { key: PlanningFieldKey; label: string; help: string; picture?: GuidedField; where?: string }[] = [
+  const planningMaximum = (key: PlanningFieldKey) => isChance(key) ? 1000 : key === "forgeLevel" ? FORGE_MAX_LEVEL : key.endsWith("Level") ? 1_000_000_000 : 1_000_000;
+  const planningFields: { key: PlanningFieldKey; label: string; help: string; picture?: GuidedField; where?: string; optional?: boolean }[] = [
     { key: "skillLevel", label: "Skill level", help: "Tap ⓘ next to the Summon button on the Skills screen.", picture: "skillLevel", where: "Skills screen → tap ⓘ next to Summon. Use the Level number at the top." },
     { key: "mountLevel", label: "Mount level", help: "Tap ⓘ next to the Summon button on the Mounts screen.", picture: "mountLevel", where: "Mounts screen → tap ⓘ next to Summon. Use the Level number at the top." },
     { key: "eggLevel", label: "Egg/pet level", help: legacyHistory ? "Saved for reference alongside the original planned actions." : "Tap ⓘ next to the Summon button on the Pets screen.", picture: legacyHistory ? undefined : "eggLevel", where: "Pets screen → tap ⓘ next to Summon. Use the Level number at the top." },
@@ -1612,6 +1620,8 @@ function ResourceForm({
       { key: "eggMerges" as const, label: "Existing egg/pet merges", help: "Original existing merge count saved in this snapshot." },
       { key: "eggSummonMerges" as const, label: "Egg/pet summon then merge", help: "Original future summon/merge count saved in this snapshot." },
     ] : [
+      // Optional: leaving it empty keeps the clan's general hammer range for this member.
+      { key: "forgeLevel" as const, label: "Forge level", help: "Optional. Your Forge level, from the Forge screen. It makes your hammer points exact.", optional: true },
       { key: "extraMountChancePercent" as const, label: "Extra mount chance %", help: "Enter the number only, e.g. 42. Enter 0 if you have none.", picture: "extraMountChancePercent" as const, where: "Tech Tree → tap ⓘ to open Total Bonuses → “Chance to summon an extra mount”." },
       { key: "extraPetSummonPercent" as const, label: "Extra pet summon %", help: "Enter the number only, e.g. 50. Enter 0 if you have none.", picture: "extraPetSummonPercent" as const, where: "Tech Tree → tap ⓘ to open Total Bonuses → “Chance to summon an extra egg”." },
     ]),
@@ -1681,12 +1691,12 @@ function ResourceForm({
   const draftBank = {
     resources: Object.fromEntries(resourceKeys.map((key) => [key, enteredNumber(values[key])])) as ResourceValues,
     summoningCosts: { fiveSkills: enteredNumber(costValues.fiveSkills), mount: enteredNumber(costValues.mount) },
-    planningDetails: { ...CHANCE_PLANNING_DETAILS, ...savedPlanning, ...Object.fromEntries(planningFields.map(({ key }) => [key, enteredNumber(planningValues[key])])), calculationVersion: 2 as const },
+    planningDetails: { ...CHANCE_PLANNING_DETAILS, ...savedPlanning, ...Object.fromEntries(planningFields.map(({ key, optional }) => [key, optional && !planningValues[key]?.trim() ? undefined : enteredNumber(planningValues[key])])), calculationVersion: 2 as const },
   };
   const completeness = assessBankCompleteness(draftBank);
   // Levels and extra chances rarely change: once saved, show them in a short summary.
   const [showLevels, setShowLevels] = useState(false);
-  const levelsSaved = !legacyHistory && !!entry && planningFields.every(({ key }) => planningText(savedPlanning, key) !== "");
+  const levelsSaved = !legacyHistory && !!entry && planningFields.every(({ key, optional }) => optional || planningText(savedPlanning, key) !== "");
   const levelsFolded = !readOnly && levelsSaved && !showLevels && !planningFields.some(({ label }) => completeness.missing.includes(label));
   const [noteOpen] = useState(() => !!entry?.notes);
   async function save(event: FormEvent) {
@@ -1944,7 +1954,7 @@ function ResourceForm({
           {levelsFolded && <button type="button" className="button subtle small-button" onClick={() => setShowLevels(true)}>{t("Change")}</button>}
         </div>
         {levelsFolded ? <dl className="levels-summary">
-          {planningFields.map(({ key, label }) => <div key={key}><dt>{t(label)}</dt><dd>{planningValues[key]}{isChance(key) ? "%" : ""}</dd></div>)}
+          {planningFields.map(({ key, label, optional }) => <div key={key}><dt>{t(label)}</dt><dd>{planningValues[key] || (optional ? t("Not added") : "")}{isChance(key) && planningValues[key] ? "%" : ""}</dd></div>)}
         </dl> : <>
           <p className="form-section-subtitle">{legacyHistory ? t("This week keeps its original saved counts.") : t("Copy these from the game. The tracker does the maths for you.")}</p>
           <div className="entry-list">
@@ -1955,7 +1965,7 @@ function ResourceForm({
                 label={t(label)}
                 help={t(help)}
                 guide={!readOnly && picture && where && <FieldGuide field={picture} hint={t(where)} />}
-                boxes={[{ label: t(label), decimal: isChance(key), placeholder: isChance(key) ? t("Enter 0 if none") : t("e.g. 100"), value: planningValues[key], saved: planningText(savedPlanning, key), onChange: (value) => { touch(); setPlanningValues((old) => ({ ...old, [key]: value })); }, suffix: isChance(key) ? "%" : undefined }]}
+                boxes={[{ label: t(label), decimal: isChance(key), placeholder: isChance(key) ? t("Enter 0 if none") : key === "forgeLevel" ? t("e.g. 30") : t("e.g. 100"), value: planningValues[key], saved: planningText(savedPlanning, key), onChange: (value) => { touch(); setPlanningValues((old) => ({ ...old, [key]: value })); }, suffix: isChance(key) ? "%" : undefined }]}
               />
             ))}
           </div>

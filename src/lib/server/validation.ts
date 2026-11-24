@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FORGE_MAX_LEVEL } from "../forge";
 import {
   LEGACY_EGGS_PETS_KEYS,
   MOUNT_SUMMON_COST_MIN,
@@ -71,6 +72,7 @@ export const planningDetailsSchema = z.object({
   eggSummonMerges: z.number().int().min(0).max(1_000_000).default(0),
   extraMountChancePercent: extraChancePercent.optional(),
   extraPetSummonPercent: extraChancePercent.optional(),
+  forgeLevel: z.number().int().min(1).max(FORGE_MAX_LEVEL).optional(),
   calculationVersion: z.literal(2).optional(),
 }).strict();
 
