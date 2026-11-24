@@ -123,9 +123,9 @@ export function ascendCheck(resource: SpendResource, entry: ResourceEntry | unde
 }
 
 /** War points a member's saved resources for this pillar can score (0 when it can't be worked out). */
-export function pillarPoints(resource: SpendResource, entry: ResourceEntry, rates: WarRates): number {
+export function pillarPoints(resource: SpendResource, entry: ResourceEntry, rates: WarRates, boost: Partial<Record<WarActivity, number>> = {}): number {
   try {
-    const estimate = estimateWar([entry], rates, [...SPEND_INFO[resource].activities]);
+    const estimate = estimateWar([entry], rates, [...SPEND_INFO[resource].activities], "current", boost);
     return Math.round((estimate.minimum + estimate.maximum) / 2);
   } catch {
     return 0;
@@ -139,6 +139,8 @@ export interface OrderInput {
   /** Live banks. */
   entries: ResourceEntry[];
   rates: WarRates;
+  /** Clan tech bonus per activity (percent) for the line's day. */
+  boost?: Partial<Record<WarActivity, number>>;
   /** Who is planning to ascend what this week. */
   ascending: ReadonlyMap<string, readonly AscensionPillar[]>;
   /** In that day's snipe: they go first. */
@@ -159,7 +161,7 @@ export function buildOrder(input: OrderInput): SpendOrder {
     const entry = entries.get(member.id);
     if (!entry) continue;
     const amounts = info.amounts.map((key) => ({ key, value: positive(entry.resources[key]) }));
-    const points = pillarPoints(resource, entry, input.rates);
+    const points = pillarPoints(resource, entry, input.rates, input.boost);
     // Nothing saved for this pillar: nothing to line up for.
     if (points <= 0 && amounts.every((amount) => amount.value <= 0)) continue;
     rows.push({

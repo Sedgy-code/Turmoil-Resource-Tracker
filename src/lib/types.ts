@@ -86,7 +86,12 @@ export interface WarRates {
   eggMerges: number;
   eggSummonMerges: number;
 }
-export interface ClanSettings { capacity: number; warRates: WarRates }
+/**
+ * The clan's war point bonuses in percent, from its Clan Tech levels: by activity ("War Points From …")
+ * and by war day ("War Points On Day …"). The rates above are with personal tech; this comes on top.
+ */
+export interface WarTech { activity: Partial<Record<WarActivity, number>>; day: Partial<Record<number, number>> }
+export interface ClanSettings { capacity: number; warRates: WarRates; warTech?: WarTech }
 export interface BankHistorySnapshot {
   id?: string;
   week: string;

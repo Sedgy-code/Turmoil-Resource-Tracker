@@ -1,6 +1,6 @@
 import { currentWeek } from "../resources";
 import { buildOrder, orderDay, orderWeek, resourcesOnDay, SPEND_INFO, SPEND_RESOURCES } from "../spending-order";
-import type { AscendCheck, AscensionPillar, Member, ResourceEntry, SpendingOrderResponse, SpendingPostEmbed, SpendingPostPreview, SpendOrder, SpendResource, WarActivity, WarRates } from "../types";
+import type { AscendCheck, AscensionPillar, Member, ResourceEntry, SpendOrder, SpendResource, SpendingOrderResponse, SpendingPostEmbed, SpendingPostPreview, WarActivity, WarRates, WarTech } from "../types";
 import { parsePillars } from "./ascensions";
 import { appUrl, isDemo } from "./config";
 import { database, type Database, type SqlConnection } from "./db";
@@ -8,6 +8,7 @@ import { ApiError } from "./errors";
 import { entryFromRow, iso, memberFromRow } from "./mappers";
 import { getSettings } from "./settings";
 import { clanDays } from "./war-days";
+import { warBoost } from "../war";
 
 const DAY = 86_400_000;
 const DISCORD_API = "https://discord.com/api/v10";
@@ -25,6 +26,8 @@ interface Context {
   members: Member[];
   entries: ResourceEntry[];
   rates: WarRates;
+  /** The Clan Tech page's war point bonuses, on top of the rates. */
+  warTech: WarTech | undefined;
   ascending: Map<string, AscensionPillar[]>;
   /** Snipes in that war (not cancelled): the war day each is on, what it scores with, and who's in it. */
   snipes: { day: number; activities: WarActivity[]; members: Set<string> }[];
@@ -64,7 +67,7 @@ async function loadContext(connection: SqlConnection, now: Date): Promise<Contex
     FROM member_banks b JOIN app_members owner ON owner.id = b.member_id
     JOIN app_members editor ON editor.id = b.updated_by WHERE owner.active = TRUE`);
   const entries = bankRows.map((row) => entryFromRow({ ...row, id: `bank:${row.member_id}`, week_start: currentWeek(now) }));
-  const rates = (await getSettings(undefined, connection)).warRates;
+  const { warRates: rates, warTech } = await getSettings(undefined, connection);
   const days = await clanDays(connection, week);
   // This week's answers on Home ("Planning to ascend (or push the new tiers) this week?").
   const ascensionRows = await connection.query("SELECT member_id, pillars FROM member_ascensions WHERE week_start = $1", [currentWeek(now)]);
@@ -86,7 +89,7 @@ async function loadContext(connection: SqlConnection, now: Date): Promise<Contex
     };
   });
   return {
-    now, week, warDay, nextWar, clanDays: days, members, entries, rates,
+    now, week, warDay, nextWar, clanDays: days, members, entries, rates, warTech,
     ascending: new Map(ascensionRows.map((row) => [String(row.member_id), parsePillars(String(row.pillars))])),
     snipes,
     settings: await spendingSettings(connection),
@@ -112,7 +115,7 @@ function buildOrders(context: Context, forDay?: number): SpendOrder[] {
     // Holidays are checked against the day the line is for.
     const date = (target.day !== null ? dayStart(context.week, target.day) : context.now).toISOString().slice(0, 10);
     return buildOrder({
-      resource, members: context.members, entries: context.entries, rates: context.rates, ascending: context.ascending,
+      resource, members: context.members, entries: context.entries, rates: context.rates, boost: warBoost(context.warTech, target.day), ascending: context.ascending,
       snipers, date, day: target.day, today: target.today,
     });
   });

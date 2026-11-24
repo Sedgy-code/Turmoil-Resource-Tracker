@@ -1,6 +1,6 @@
 import { currentWeek } from "../resources";
 import type { HoardingLevel, HoardingReason, HoardingResponse, HoardingRow, HoardingRules, Member, ResourceEntry, WarRates, WarSpendingResponse, WarSpendingRow } from "../types";
-import { estimateWar, WAR_ACTIVITIES } from "../war";
+import { estimateWar, WAR_ACTIVITIES, warBoost } from "../war";
 import { database, type Database, type SqlConnection } from "./db";
 import { ApiError } from "./errors";
 import { entryFromRow, iso, memberFromRow } from "./mappers";
@@ -41,9 +41,9 @@ async function requireAdmin(connection: SqlConnection, actorId: string): Promise
 }
 
 /** Estimated war points everything a member holds is worth: one number to compare members by. */
-function warValue(entry: ResourceEntry, rates: WarRates): number {
+function warValue(entry: ResourceEntry, rates: WarRates, boost: ReturnType<typeof warBoost> = {}): number {
   try {
-    return estimateWar([entry], rates, WAR_ACTIVITIES.map(({ key }) => key)).minimum;
+    return estimateWar([entry], rates, WAR_ACTIVITIES.map(({ key }) => key), "current", boost).minimum;
   } catch {
     return 0;
   }
@@ -105,7 +105,7 @@ export async function hoardingReport(actor: Member, db?: Database, now = new Dat
     versions.set(memberId, [...(versions.get(memberId) ?? []), versionEntry(row)]);
   }
   const notes = new Map(noteRows.map((row) => [String(row.member_id), row]));
-  const values = new Map(members.map((member) => [member.id, banks.has(member.id) ? warValue(banks.get(member.id)!, settings.warRates) : 0]));
+  const values = new Map(members.map((member) => [member.id, banks.has(member.id) ? warValue(banks.get(member.id)!, settings.warRates, warBoost(settings.warTech, null)) : 0]));
   const typical = median([...values.values()]);
   const rules = await hoardingRules(connection);
   // How much of their pile each member used in the last few wars: the war points they scored (from
@@ -130,7 +130,7 @@ export async function hoardingReport(actor: Member, db?: Database, now = new Dat
   const rows: HoardingRow[] = members.map((member) => {
     const value = values.get(member.id) ?? 0;
     const bank = banks.get(member.id);
-    const history = (versions.get(member.id) ?? []).map((entry) => ({ at: new Date(entry.updatedAt).getTime(), value: warValue(entry, settings.warRates) }));
+    const history = (versions.get(member.id) ?? []).map((entry) => ({ at: new Date(entry.updatedAt).getTime(), value: warValue(entry, settings.warRates, warBoost(settings.warTech, null)) }));
     const growthStart = now.getTime() - GROWTH_WINDOW;
     const baseline = [...history].reverse().find((point) => point.at <= growthStart) ?? history[0];
     const trackedDays = history.length ? (now.getTime() - history[0].at) / DAY : 0;
@@ -235,8 +235,8 @@ export async function warSpending(actor: Member, week: string, db?: Database, no
     const history = versions.get(member.id) ?? [];
     const before = [...history].reverse().find((entry) => new Date(entry.updatedAt) < start);
     const after = [...history].reverse().find((entry) => new Date(entry.updatedAt) >= start);
-    const beforeValue = before ? warValue(before, settings.warRates) : null;
-    const afterValue = after ? warValue(after, settings.warRates) : null;
+    const beforeValue = before ? warValue(before, settings.warRates, warBoost(settings.warTech, null)) : null;
+    const afterValue = after ? warValue(after, settings.warRates, warBoost(settings.warTech, null)) : null;
     return {
       member,
       before: beforeValue,

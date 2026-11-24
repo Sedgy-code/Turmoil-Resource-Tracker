@@ -6,7 +6,7 @@ import { memberFromRow } from "../src/lib/server/mappers";
 import { getSettings, updateSettings } from "../src/lib/server/settings";
 import { ApiError } from "../src/lib/server/errors";
 import { createSnipeSchema, saveBankSchema, settingsSchema } from "../src/lib/server/validation";
-import { DEFAULT_WAR_RATES } from "../src/lib/war";
+import { DEFAULT_WAR_RATES, warTechFromLevels } from "../src/lib/war";
 
 async function withAdmin(work: (db: Database, admin: ReturnType<typeof memberFromRow>) => Promise<void>) {
   const db = await openDatabase();
@@ -19,11 +19,17 @@ async function withAdmin(work: (db: Database, admin: ReturnType<typeof memberFro
 
 test("clan settings persist partial updates without resetting other saved settings", async () => {
   await withAdmin(async (db, admin) => {
-    assert.deepEqual(await getSettings(admin, db), { capacity: 50, warRates: DEFAULT_WAR_RATES });
+    const noTech = warTechFromLevels({});
+    assert.deepEqual(await getSettings(admin, db), { capacity: 50, warRates: DEFAULT_WAR_RATES, warTech: noTech });
     await updateSettings(admin, { capacity: 45 }, db);
     const rates = { ...DEFAULT_WAR_RATES, mountSummons: 1200 };
-    assert.deepEqual(await updateSettings(admin, { warRates: rates }, db), { capacity: 45, warRates: rates });
-    assert.deepEqual(await getSettings(admin, db), { capacity: 45, warRates: rates });
+    assert.deepEqual(await updateSettings(admin, { warRates: rates }, db), { capacity: 45, warRates: rates, warTech: noTech });
+    assert.deepEqual(await getSettings(admin, db), { capacity: 45, warRates: rates, warTech: noTech });
+    // Clan tech levels saved on the Clan Tech page come back as war point bonuses.
+    await db.query("INSERT INTO clan_tech_levels(node_key, level) VALUES('war-points-from-skill-summon', 10), ('war-points-on-day-1', 7)");
+    const { warTech } = await getSettings(admin, db);
+    assert.equal(warTech?.activity.skillSummons, 40);
+    assert.equal(warTech?.day[1], 28);
   });
 });
 

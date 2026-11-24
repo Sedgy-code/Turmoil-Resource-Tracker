@@ -1,4 +1,4 @@
-import { DEFAULT_WAR_RATES } from "../war";
+import { DEFAULT_WAR_RATES, warTechFromLevels } from "../war";
 import type { ClanSettings, Member } from "../types";
 import { database, lockAdministration, type Database, type SqlConnection } from "./db";
 import { ApiError } from "./errors";
@@ -8,9 +8,12 @@ export const DEFAULT_SETTINGS: ClanSettings = { capacity: 50, warRates: DEFAULT_
 export async function getSettings(_actor?: Member, db?: SqlConnection): Promise<ClanSettings> {
   const connection = db ?? await database();
   const rows = await connection.query("SELECT capacity,war_rates FROM clan_settings WHERE id='clan'");
-  if (!rows.length) return { capacity: 50, warRates: { ...DEFAULT_WAR_RATES } };
+  // The Clan Tech page's levels: their war point bonuses go on top of the rates.
+  const tech = await connection.query("SELECT node_key, level FROM clan_tech_levels");
+  const warTech = warTechFromLevels(Object.fromEntries(tech.map((row) => [String(row.node_key), Number(row.level)])));
+  if (!rows.length) return { capacity: 50, warRates: { ...DEFAULT_WAR_RATES }, warTech };
   const rates = typeof rows[0].war_rates === "string" ? JSON.parse(rows[0].war_rates) : rows[0].war_rates;
-  return { capacity: Number(rows[0].capacity), warRates: { ...DEFAULT_WAR_RATES, ...(rates as ClanSettings["warRates"]) } };
+  return { capacity: Number(rows[0].capacity), warRates: { ...DEFAULT_WAR_RATES, ...(rates as ClanSettings["warRates"]) }, warTech };
 }
 
 export async function updateSettings(actor: Member, input: Partial<ClanSettings>, db?: Database): Promise<ClanSettings> {
@@ -23,6 +26,6 @@ export async function updateSettings(actor: Member, input: Partial<ClanSettings>
     const previous = await getSettings(undefined, tx);
     const settings = { capacity: input.capacity ?? previous.capacity, warRates: input.warRates ?? previous.warRates };
     await tx.query("INSERT INTO clan_settings(id,capacity,war_rates) VALUES('clan',$1,$2::jsonb) ON CONFLICT(id) DO UPDATE SET capacity=EXCLUDED.capacity,war_rates=EXCLUDED.war_rates", [settings.capacity, JSON.stringify(settings.warRates)]);
-    return settings;
+    return { ...settings, warTech: previous.warTech };
   });
 }
