@@ -6,13 +6,14 @@ import { initializeSchema, openDatabase, type Database } from "../src/lib/server
 import { ApiError } from "../src/lib/server/errors";
 import { hoardingLevel, hoardingReport, saveHoardingNote, saveHoardingRules, warSpending } from "../src/lib/server/hoarding";
 import { memberFromRow } from "../src/lib/server/mappers";
+import { useTestRates } from "./legacy-rates";
 
 const DAY = 86_400_000;
 const apiFailure = (code: string) => (error: unknown) => error instanceof ApiError && error.code === code;
 
 async function withDatabase(work: (db: Database) => Promise<void>) {
   const db = await openDatabase({ localPath: "memory://" });
-  try { await initializeSchema(db); await work(db); } finally { await db.close(); }
+  try { await initializeSchema(db); await useTestRates(db); await work(db); } finally { await db.close(); }
 }
 
 async function addMember(db: Database, username: string, role: Member["role"] = "MEMBER"): Promise<Member> {

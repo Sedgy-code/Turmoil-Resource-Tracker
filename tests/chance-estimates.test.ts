@@ -11,7 +11,8 @@ import {
   type SummoningCosts,
 } from "../src/lib/resources";
 import type { ResourceEntry, WarActivity } from "../src/lib/types";
-import { DEFAULT_WAR_RATES, estimateWar, WarEstimateError } from "../src/lib/war";
+import { estimateWar, WarEstimateError } from "../src/lib/war";
+import { TEST_RATES } from "./legacy-rates";
 import { planningDetailsSchema, resourceSchema, saveBankSchema, saveResourcesSchema } from "../src/lib/server/validation";
 
 function bank(
@@ -39,7 +40,7 @@ test("current chance estimates apply each member's percentage to their whole mou
     { mountKeys: 99, eggsPetsTotal: 5, eggshellsTotal: 250 },
     { extraMountChancePercent: 12.5, extraPetSummonPercent: 50 },
   );
-  const result = estimateWar([first, second], DEFAULT_WAR_RATES, chanceActivities);
+  const result = estimateWar([first, second], TEST_RATES, chanceActivities);
   assert.deepEqual(result.rows.map(({ activity, quantity, minimum }) => ({ activity, quantity, minimum })), [
     { activity: "newMountMerges", quantity: 5.25, minimum: 5670 },
     { activity: "eggMerges", quantity: 15, minimum: 33750 },
@@ -52,14 +53,14 @@ test("current chance estimates apply each member's percentage to their whole mou
 
 test("chance estimates retain fractional actions until clan points are rounded once per activity", () => {
   const smallBonus = bank({ mountKeys: 40 }, { extraMountChancePercent: 0.01 });
-  assert.equal(estimateWar([smallBonus], DEFAULT_WAR_RATES, ["newMountMerges"]).minimum, 0);
-  const combined = estimateWar(Array.from({ length: 5 }, () => smallBonus), DEFAULT_WAR_RATES, ["newMountMerges"]);
+  assert.equal(estimateWar([smallBonus], TEST_RATES, ["newMountMerges"]).minimum, 0);
+  const combined = estimateWar(Array.from({ length: 5 }, () => smallBonus), TEST_RATES, ["newMountMerges"]);
   assert.equal(combined.rows[0].quantity, 0.0005);
   assert.equal(combined.minimum, 1);
   const smallPet = bank({ eggshellsTotal: 1 }, { extraPetSummonPercent: 50 });
-  assert.equal(estimateWar([smallPet, smallPet], DEFAULT_WAR_RATES, ["eggSummonMerges"]).minimum, 23);
+  assert.equal(estimateWar([smallPet, smallPet], TEST_RATES, ["eggSummonMerges"]).minimum, 23);
   const decimalChance = bank({ eggshellsTotal: 501 }, { extraPetSummonPercent: 33.33 });
-  const decimal = estimateWar([decimalChance], DEFAULT_WAR_RATES, ["eggSummonMerges"]);
+  const decimal = estimateWar([decimalChance], TEST_RATES, ["eggSummonMerges"]);
   assert.equal(decimal.rows[0].quantity, 1.669833);
   assert.equal(decimal.minimum, 3757);
 });
@@ -69,22 +70,22 @@ test("bonus percentages above 100% are supported and mount keys are never treate
     { mountKeys: 1000, eggshellsTotal: 1000 },
     { extraMountChancePercent: 1000, extraPetSummonPercent: 1000 },
   );
-  const result = estimateWar([highBonus], DEFAULT_WAR_RATES, ["newMountMerges", "eggSummonMerges"]);
+  const result = estimateWar([highBonus], TEST_RATES, ["newMountMerges", "eggSummonMerges"]);
   assert.deepEqual(result.rows.map(({ quantity }) => quantity), [250, 100]);
   const leftover = bank({ mountKeys: 79 }, { extraMountChancePercent: 100 });
-  assert.equal(estimateWar([leftover, leftover], DEFAULT_WAR_RATES, ["newMountMerges"]).rows[0].quantity, 2);
+  assert.equal(estimateWar([leftover, leftover], TEST_RATES, ["newMountMerges"]).rows[0].quantity, 2);
 });
 
 test("current estimates use existing eggs/pets and ignore prior manual counts", () => {
   const legacy = bank({ eggsPetsTotal: 500, mountKeys: 120, eggshellsTotal: 1000 });
   legacy.planningDetails = { ...EMPTY_PLANNING_DETAILS, newMountMerges: 2, eggMerges: 7, eggSummonMerges: 9 };
-  const current = estimateWar([legacy], DEFAULT_WAR_RATES, chanceActivities);
+  const current = estimateWar([legacy], TEST_RATES, chanceActivities);
   assert.deepEqual(current.rows.map(({ quantity }) => quantity), [0, 500, 0]);
-  const historical = estimateWar([legacy], DEFAULT_WAR_RATES, chanceActivities, "historical");
+  const historical = estimateWar([legacy], TEST_RATES, chanceActivities, "historical");
   assert.deepEqual(historical.rows.map(({ quantity }) => quantity), [2, 7, 9]);
   delete legacy.planningDetails;
-  assert.equal(estimateWar([legacy], DEFAULT_WAR_RATES, ["eggMerges"]).rows[0].quantity, 500);
-  assert.equal(estimateWar([legacy], DEFAULT_WAR_RATES, ["eggMerges"], "historical").rows[0].quantity, 0);
+  assert.equal(estimateWar([legacy], TEST_RATES, ["eggMerges"]).rows[0].quantity, 500);
+  assert.equal(estimateWar([legacy], TEST_RATES, ["eggMerges"], "historical").rows[0].quantity, 0);
 });
 
 test("historical chance snapshots retain the new model and can coexist with legacy snapshots", () => {
@@ -94,11 +95,11 @@ test("historical chance snapshots retain the new model and can coexist with lega
   );
   const legacy = bank({ mountKeys: 120, eggsPetsTotal: 50 });
   legacy.planningDetails = { ...EMPTY_PLANNING_DETAILS, newMountMerges: 10, eggMerges: 2, eggSummonMerges: 1 };
-  const combined = estimateWar([modern, legacy], DEFAULT_WAR_RATES, chanceActivities, "historical");
+  const combined = estimateWar([modern, legacy], TEST_RATES, chanceActivities, "historical");
   assert.deepEqual(combined.rows.map(({ quantity }) => quantity), [4.5, 12, 3.5]);
   delete modern.planningDetails!.calculationVersion;
   assert.deepEqual(
-    estimateWar([modern], DEFAULT_WAR_RATES, chanceActivities, "historical").rows.map(({ quantity }) => quantity),
+    estimateWar([modern], TEST_RATES, chanceActivities, "historical").rows.map(({ quantity }) => quantity),
     [1.5, 10, 2.5],
   );
 });
@@ -106,21 +107,21 @@ test("historical chance snapshots retain the new model and can coexist with lega
 test("missing summon costs affect selected positive mount bonuses once per member", () => {
   const missing = bank({ mountKeys: 100, skillTickets: 100 }, { extraMountChancePercent: 20 }, { fiveSkills: 0, mount: 0 });
   const noBonus = bank({ mountKeys: 100 }, { extraMountChancePercent: 0 }, { fiveSkills: 0, mount: 0 });
-  assert.equal(estimateWar([missing, noBonus], DEFAULT_WAR_RATES, ["newMountMerges"]).missingCosts, 1);
-  assert.equal(estimateWar([missing, noBonus], DEFAULT_WAR_RATES, ["mountSummons", "newMountMerges"]).missingCosts, 2);
-  assert.equal(estimateWar([missing], DEFAULT_WAR_RATES, ["skillSummons", "newMountMerges"]).missingCosts, 2);
-  assert.equal(estimateWar([missing], DEFAULT_WAR_RATES, ["eggMerges", "eggSummonMerges"]).missingCosts, 0);
+  assert.equal(estimateWar([missing, noBonus], TEST_RATES, ["newMountMerges"]).missingCosts, 1);
+  assert.equal(estimateWar([missing, noBonus], TEST_RATES, ["mountSummons", "newMountMerges"]).missingCosts, 2);
+  assert.equal(estimateWar([missing], TEST_RATES, ["skillSummons", "newMountMerges"]).missingCosts, 2);
+  assert.equal(estimateWar([missing], TEST_RATES, ["eggMerges", "eggSummonMerges"]).missingCosts, 0);
 });
 
 test("chance estimates reject unsafe scores and preserve exact integer boundaries", () => {
   const tooLarge = (error: unknown) => error instanceof WarEstimateError && error.code === "ESTIMATE_TOO_LARGE";
   const largest = bank({ eggsPetsTotal: Number.MAX_SAFE_INTEGER });
-  assert.equal(estimateWar([largest], { ...DEFAULT_WAR_RATES, eggMerges: 1 }, ["eggMerges"]).maximum, Number.MAX_SAFE_INTEGER);
-  assert.throws(() => estimateWar([largest], DEFAULT_WAR_RATES, ["eggMerges"]), tooLarge);
+  assert.equal(estimateWar([largest], { ...TEST_RATES, eggMerges: 1 }, ["eggMerges"]).maximum, Number.MAX_SAFE_INTEGER);
+  assert.throws(() => estimateWar([largest], TEST_RATES, ["eggMerges"]), tooLarge);
   const mountBonus = bank({ mountKeys: Number.MAX_SAFE_INTEGER }, { extraMountChancePercent: 1000 });
-  assert.throws(() => estimateWar([mountBonus], DEFAULT_WAR_RATES, ["newMountMerges"]), tooLarge);
+  assert.throws(() => estimateWar([mountBonus], TEST_RATES, ["newMountMerges"]), tooLarge);
   const combined = bank({ hammers: Number.MAX_SAFE_INTEGER - 1, eggshellsTotal: 1 }, { extraPetSummonPercent: 100 });
-  assert.throws(() => estimateWar([combined], { ...DEFAULT_WAR_RATES, hammersMin: 1, hammersMax: 1 }, ["hammers", "eggSummonMerges"]), tooLarge);
+  assert.throws(() => estimateWar([combined], { ...TEST_RATES, hammersMin: 1, hammersMax: 1 }, ["hammers", "eggSummonMerges"]), tooLarge);
 });
 
 test("eggshell totals normalize legacy absence to zero and validate integer bounds", () => {

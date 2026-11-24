@@ -60,9 +60,9 @@ export function ClanTech({ notify }: { notify: (message: string, error?: boolean
         {next.length ? <ol>{next.map((entry) => <li key={entry.key}><b>{t(entry.name)}</b><span>{levels[entry.key] ?? 0}/{entry.max} · {t(TIER_LABEL[entry.priority])}</span></li>)}</ol> : <p>{t("Everything is maxed!")}</p>}
       </div>
     </section>
-    <p className="war-week-note">{t("Order: war points first, then Clan War damage and health, then tech race boosts, then war rewards. The tree resets each season.")} {t("The war point levels here are added to the Hub’s war point estimates.")} <a href="https://1vcian.me/fm/#/clan" target="_blank" rel="noreferrer">{t("Plan your own tree")} <ExternalLink size={12} /></a></p>
+    <p className="war-week-note">{t("Order: war points first, then Clan War damage and health, then tech race boosts, then war rewards. The tree resets each season.")} <a href="https://1vcian.me/fm/#/clan" target="_blank" rel="noreferrer">{t("Plan your own tree")} <ExternalLink size={12} /></a></p>
     {data.canEdit && <div className="tech-admin">
-      <span>{t("Copy the levels from the in-game Tech Tree screen, then press Save.")}</span>
+      <span>{t("Copy the levels from the in-game Tech Tree screen, then press Save.")} {t("The war point levels here are added to the Hub’s war point estimates.")}</span>
     </div>}
     {/* Members see what to fund next; the whole tree (61 nodes) is one tap away. Leaders edit it open. */}
     {(() => { const tree = <div className="tech-sections">{TECH_SECTIONS.map((section) => {

@@ -105,6 +105,9 @@ CREATE TABLE IF NOT EXISTS clan_settings (
   capacity INTEGER NOT NULL DEFAULT 50 CHECK (capacity BETWEEN 1 AND 1000),
   war_rates JSONB NOT NULL DEFAULT '{}'::jsonb
 );
+-- Point rates are now the base points from the game, before tech. Clan tech is added in code.
+-- The older war_rates column held points with clan tech already in, so it is no longer read.
+ALTER TABLE clan_settings ADD COLUMN IF NOT EXISTS war_base_rates JSONB;
 CREATE TABLE IF NOT EXISTS bank_manual_snapshots (
   id TEXT PRIMARY KEY,
   week_start DATE NOT NULL,
