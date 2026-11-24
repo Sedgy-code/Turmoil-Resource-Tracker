@@ -51,7 +51,7 @@
  "Add vial donations": "Thêm quyên góp lọ",
  "Add war results": "Thêm kết quả chiến",
  "Added {count} players from the new screenshots.": "Đã thêm {count} người chơi từ ảnh chụp mới.",
- "Adds an Ask to spend early button to each day’s post, and a message there for each request with Approve and Decline buttons for leaders. Nobody is pinged.": "Thêm nút Xin tiêu sớm vào bài đăng mỗi ngày, và một tin nhắn cho mỗi yêu cầu kèm nút Duyệt và Từ chối cho lãnh đạo. Không ai bị tag.",
+ "Adds a green Ask to spend early button to each day’s post. Each request opens a ticket in #⏰-early-spend-requests (leaders only) with Approve and Decline buttons. Nobody is pinged.": "Thêm nút Xin tiêu sớm màu xanh vào bài đăng mỗi ngày. Mỗi yêu cầu mở một ticket trong #⏰-early-spend-requests (chỉ lãnh đạo) kèm nút Duyệt và Từ chối. Không ai bị tag.",
  "Admin": "Quản trị viên",
  "Admin access required": "Cần quyền quản trị viên",
  "Admins confirm attendance after the snipe starts.": "Quản trị viên xác nhận người tham gia sau khi snipe bắt đầu.",

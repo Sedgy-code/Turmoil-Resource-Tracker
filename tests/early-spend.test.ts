@@ -4,7 +4,8 @@ import { after, before, test } from "node:test";
 import { EMPTY_RESOURCES, type ResourceValues } from "../src/lib/resources";
 import { initializeSchema, openDatabase, type Database } from "../src/lib/server/db";
 import {
-  askEarlySpend, decideEarlySpend, earlyNotice, earlySpendCheck, EARLY_TOP, handleEarlyInteraction, parseResetZone, snipeForZone, zoneFromRoles,
+  afterEarlyChange, askEarlySpend, closeEarlyTickets, decideEarlySpend, earlyNotice, earlySpendCheck, earlyTicketTitle, EARLY_TOP, handleEarlyInteraction,
+  parseResetZone, snipeForZone, zoneFromRoles,
 } from "../src/lib/server/early-spend";
 import { ApiError } from "../src/lib/server/errors";
 import { handleInteraction } from "../src/lib/server/discord-interactions";
@@ -39,12 +40,18 @@ const fetcher = (async (url: string, init: RequestInit = {}) => {
   if (url.endsWith(`/guilds/${GUILD}/roles`)) return new Response(JSON.stringify(ROLES), { status: 200 });
   const member = /\/guilds\/guild-1\/members\/(.+)$/.exec(url);
   if (member) return new Response(JSON.stringify({ roles: discordRoles.get(decodeURIComponent(member[1])) ?? [] }), { status: 200 });
-  if (url.endsWith("/messages") && init.method === "POST") return new Response(JSON.stringify({ id: "msg-1" }), { status: 200 });
+  // #⏰-early-spend-requests (777): its tags, and a new ticket.
+  if (url.endsWith("/channels/777") && (init.method ?? "GET") === "GET") {
+    return new Response(JSON.stringify({ available_tags: [
+      { id: "tag-wait", name: "Waiting" }, { id: "tag-ok", name: "Approved" }, { id: "tag-no", name: "Declined" }, { id: "tag-off", name: "Cancelled" },
+    ] }), { status: 200 });
+  }
+  if (url.endsWith("/channels/777/threads") && init.method === "POST") return new Response(JSON.stringify({ id: "ticket-1" }), { status: 200 });
   return new Response("{}", { status: 200 });
 }) as unknown as typeof fetch;
 
 before(async () => {
-  Object.assign(process.env, { NODE_ENV: "test", APP_URL: "https://tracker.example", DISCORD_BOT_TOKEN: "bot-token", DISCORD_GUILD_ID: GUILD, DISCORD_SPENDING_CHANNEL_ID: "555" });
+  Object.assign(process.env, { NODE_ENV: "test", APP_URL: "https://tracker.example", DISCORD_BOT_TOKEN: "bot-token", DISCORD_GUILD_ID: GUILD, DISCORD_SPENDING_CHANNEL_ID: "555", DISCORD_EARLY_CHANNEL_ID: "777" });
   delete process.env.DEMO_MODE;
   db = await openDatabase({ localPath: "memory://" });
   await initializeSchema(db);
@@ -189,7 +196,7 @@ test("any leader approves or declines (and can change their mind); members can o
   assert.deepEqual(spendSettingsSchema.parse({ earlyDiscord: true }), { earlyDiscord: true });
 });
 
-test("Discord: the post's button opens a short form; leaders answer with buttons on the request's message", async () => {
+test("Discord: the post's green button opens a short form; each request is a ticket leaders answer in #⏰-early-spend-requests", async () => {
   const [leader, short] = await Promise.all(["Lead", "Short"].map(async (name) => memberFromRow((await db.query("SELECT * FROM app_members WHERE username = $1", [name]))[0])));
   const filler = memberFromRow((await db.query("SELECT * FROM app_members WHERE username = 'Filler0'"))[0]);
   await updateSpendingSettings(leader, { earlyDiscord: true }, { db, now: DAY_2 });
@@ -219,19 +226,23 @@ test("Discord: the post's button opens a short form; leaders answer with buttons
   assert.deepEqual([timeBox.required, reasonBox.required, reasonBox.label], [false, false, "Anything to add? (optional)"]);
   assert.match(String(reasonBox.placeholder), /01:30–03:30 for you, in your night/);
 
-  // The form comes back: the request is saved, and its message goes into Day 3's post afterwards.
+  // The form comes back: the request is saved, and its ticket opens in the leaders' forum afterwards (not in the public post).
   const sent = await press(filler.discordId, `early:form:${WEEK}:3:skills`, ["r-gulf"], 5, [
     { components: [{ custom_id: "spend_time", value: "7:00" }] }, { components: [{ custom_id: "reason", value: "" }] },
   ]);
-  assert.match(String(sent.data.content), /✅ Sent!/);
+  assert.match(String(sent.data.content), /✅ Sent! Leadership will approve or decline it soon/);
   calls.length = 0;
   await Promise.all(tasks.splice(0).map((task) => task()));
-  assert.equal(calls.length, 1);
-  assert.deepEqual([calls[0].method, calls[0].url], ["POST", "https://discord.com/api/v10/channels/900/messages"]);
-  assert.match(String(calls[0].body.content), /\*\*Filler0\*\* · #4 in line/);
-  assert.deepEqual(calls[0].body.allowed_mentions, { parse: [] });
-  const id = (await db.query("SELECT id, notice_message_id FROM early_spends WHERE member_id = $1", [filler.id]))[0];
-  assert.equal(id.notice_message_id, "msg-1");
+  const ticket = calls.find((call) => call.method === "POST")!;
+  assert.equal(ticket.url, "https://discord.com/api/v10/channels/777/threads");
+  assert.deepEqual([ticket.body.name, ticket.body.applied_tags], ["⏳ Day 3 · Skills · Filler0", ["tag-wait"]]);
+  const opening = ticket.body.message as { content: string; allowed_mentions: unknown; components: { components: { custom_id: string }[] }[] };
+  assert.match(opening.content, /\*\*Filler0\*\* · #4 in line/);
+  assert.deepEqual(opening.allowed_mentions, { parse: [] });
+  assert.deepEqual(opening.components[0].components.map((button) => button.custom_id.split(":")[1]), ["approve", "decline"]);
+  assert.equal(calls.some((call) => call.url.includes("/channels/900/messages") && call.method === "POST"), false);
+  const id = (await db.query("SELECT id, notice_channel_id, notice_message_id FROM early_spends WHERE member_id = $1", [filler.id]))[0];
+  assert.deepEqual([id.notice_channel_id, id.notice_message_id], ["ticket-1", "ticket-1"]);
 
   // Only leaders can answer. A leader's answer rewrites the message, then Day 3's post marks them ⏰.
   const notLeader = await press(filler.discordId, `early:approve:${id.id}`, ["r-gulf"]);
@@ -241,15 +252,34 @@ test("Discord: the post's button opens a short form; leaders answer with buttons
   assert.match(String(decided.data.content), /✅ \*\*Approved\*\* by Lead/);
   calls.length = 0;
   await Promise.all(tasks.splice(0).map((task) => task()));
-  const edit = calls.find((call) => call.method === "PATCH")!;
-  assert.equal(edit.url, "https://discord.com/api/v10/channels/900/messages/900");
+  // The ticket's title and tag follow; Discord already rewrote its message.
+  const retagged = calls.find((call) => call.method === "PATCH" && call.url.endsWith("/channels/ticket-1"))!;
+  assert.deepEqual([retagged.body.name, retagged.body.applied_tags], ["✅ Day 3 · Skills · Filler0", ["tag-ok"]]);
+  assert.equal(calls.some((call) => call.url.endsWith("/channels/ticket-1/messages/ticket-1")), false);
+  const edit = calls.find((call) => call.method === "PATCH" && call.url.endsWith("/channels/900/messages/900"))!;
   const fields = (edit.body.embeds as { fields: { value: string }[] }[])[0].fields.map((field) => field.value).join("\n");
   assert.match(fields, /⏰ Filler0/);
-  // The post now carries the Ask button next to the Hub link.
-  const buttons = (edit.body.components as { components: { custom_id?: string; url?: string }[] }[])[0].components;
-  assert.deepEqual(buttons.map((button) => button.custom_id ?? button.url), ["https://tracker.example/spending-order", `early:ask:${WEEK}:3`]);
+  // The post now carries the green Ask button next to the Hub link.
+  const buttons = (edit.body.components as { components: { custom_id?: string; url?: string; style: number }[] }[])[0].components;
+  assert.deepEqual(buttons.map((button) => [button.custom_id ?? button.url, button.style]), [["https://tracker.example/spending-order", 5], [`early:ask:${WEEK}:3`, 3]]);
 
-  // The interactions endpoint sends early: buttons here.
-  const routed = await handleInteraction({ type: 3, member: { user: { id: filler.discordId }, roles: ["r-gulf"] } as never, data: { custom_id: ask } }, db, DAY_2, fetcher, later) as { data: { content: string } };
-  assert.match(routed.data.content, /already asked|approved to spend early/);
+  // A decision in the Hub rewrites the ticket's message too.
+  const declined = await decideEarlySpend(leader, { id: String(id.id), status: "declined" }, { db, now: DAY_2 });
+  assert.equal(earlyTicketTitle(declined), "✖️ Day 3 · Skills · Filler0");
+  calls.length = 0;
+  await afterEarlyChange(declined.id, { db, fetcher, now: DAY_2 });
+  const rewritten = calls.find((call) => call.url.endsWith("/channels/ticket-1/messages/ticket-1"))!;
+  assert.match(String(rewritten.body.content), /✖️ \*\*Declined\*\* by Lead/);
+  assert.deepEqual(calls.find((call) => call.url.endsWith("/channels/ticket-1"))!.body.applied_tags, ["tag-no"]);
+
+  // When Day 3 ends, the daily job closes its tickets (once).
+  calls.length = 0;
+  assert.equal(await closeEarlyTickets({ db, fetcher, now: new Date("2026-11-26T23:59:00Z") }), 0);
+  assert.equal(await closeEarlyTickets({ db, fetcher, now: new Date("2026-11-27T00:06:00Z") }), 1);
+  assert.deepEqual(calls.map((call) => [call.method, call.url, call.body.archived]), [["PATCH", "https://discord.com/api/v10/channels/ticket-1", true]]);
+  assert.equal(await closeEarlyTickets({ db, fetcher, now: new Date("2026-11-27T00:30:00Z") }), 0);
+
+  // The interactions endpoint sends early: buttons here. Declined, they can ask again: the form opens.
+  const routed = await handleInteraction({ type: 3, member: { user: { id: filler.discordId }, roles: ["r-gulf"] } as never, data: { custom_id: ask } }, db, DAY_2, fetcher, later) as { type: number; data: { custom_id: string } };
+  assert.deepEqual([routed.type, routed.data.custom_id], [9, `early:form:${WEEK}:3:skills`]);
 });

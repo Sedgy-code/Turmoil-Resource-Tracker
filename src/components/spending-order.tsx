@@ -391,7 +391,7 @@ function PostPanel({ order, notify, onChange }: { order: SpendingOrderResponse; 
     <div className="spend-post-head spend-early-switch">
       <div>
         <h3><AlarmClock size={15} aria-hidden="true" />{t("Early spend requests in Discord")}</h3>
-        <p>{t("Adds an Ask to spend early button to each day’s post, and a message there for each request with Approve and Decline buttons for leaders. Nobody is pinged.")}</p>
+        <p>{t("Adds a green Ask to spend early button to each day’s post. Each request opens a ticket in #⏰-early-spend-requests (leaders only) with Approve and Decline buttons. Nobody is pinged.")}</p>
       </div>
       <div className="planning-tabs spend-switch" role="group" aria-label={t("Early spend requests in Discord")}>
         <button type="button" aria-pressed={post.earlyDiscord} disabled={busy || post.earlyDiscord} onClick={() => void toggleEarly()}>{t("On")}</button>

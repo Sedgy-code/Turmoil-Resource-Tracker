@@ -51,7 +51,7 @@
  "Add vial donations": "Adicionar doações de frascos",
  "Add war results": "Adicionar resultados de guerra",
  "Added {count} players from the new screenshots.": "{count} jogadores adicionados das novas capturas.",
- "Adds an Ask to spend early button to each day’s post, and a message there for each request with Approve and Decline buttons for leaders. Nobody is pinged.": "Adiciona um botão para pedir para gastar antes no post de cada dia, e ali uma mensagem para cada pedido com botões Aprovar e Recusar para os líderes. Ninguém é marcado.",
+ "Adds a green Ask to spend early button to each day’s post. Each request opens a ticket in #⏰-early-spend-requests (leaders only) with Approve and Decline buttons. Nobody is pinged.": "Adiciona um botão verde para pedir para gastar antes no post de cada dia. Cada pedido abre um ticket em #⏰-early-spend-requests (só liderança) com botões Aprovar e Recusar. Ninguém é marcado.",
  "Admin": "Admin",
  "Admin access required": "Acesso de admin necessário",
  "Admins confirm attendance after the snipe starts.": "Os admins confirmam a presença depois que o snipe começa.",

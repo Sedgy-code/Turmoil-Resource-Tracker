@@ -51,7 +51,7 @@
  "Add vial donations": "เพิ่มการบริจาคขวด",
  "Add war results": "เพิ่มผลวอร์",
  "Added {count} players from the new screenshots.": "เพิ่มผู้เล่น {count} คนจากภาพหน้าจอใหม่แล้ว",
- "Adds an Ask to spend early button to each day’s post, and a message there for each request with Approve and Decline buttons for leaders. Nobody is pinged.": "เพิ่มปุ่มขอใช้ล่วงหน้าในโพสต์ของแต่ละวัน และข้อความสำหรับแต่ละคำขอพร้อมปุ่มอนุมัติและปฏิเสธสำหรับหัวหน้า ไม่มีการแท็กใคร",
+ "Adds a green Ask to spend early button to each day’s post. Each request opens a ticket in #⏰-early-spend-requests (leaders only) with Approve and Decline buttons. Nobody is pinged.": "เพิ่มปุ่มสีเขียว ขอใช้ล่วงหน้า ในโพสต์ของแต่ละวัน ทุกคำขอจะเปิดตั๋วใน #⏰-early-spend-requests (เฉพาะหัวหน้า) พร้อมปุ่มอนุมัติและปฏิเสธ ไม่มีการแท็กใคร",
  "Admin": "แอดมิน",
  "Admin access required": "ต้องเป็นแอดมิน",
  "Admins confirm attendance after the snipe starts.": "แอดมินจะยืนยันการเข้าร่วมหลังสไนป์เริ่ม",

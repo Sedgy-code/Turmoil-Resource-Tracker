@@ -51,7 +51,7 @@
  "Add vial donations": "Tambah donasi vial",
  "Add war results": "Tambah hasil perang",
  "Added {count} players from the new screenshots.": "{count} pemain ditambahkan dari screenshot baru.",
- "Adds an Ask to spend early button to each day’s post, and a message there for each request with Approve and Decline buttons for leaders. Nobody is pinged.": "Menambahkan tombol minta pakai lebih awal di postingan tiap hari, dan pesan di sana untuk tiap permintaan dengan tombol Setujui dan Tolak untuk pimpinan. Tidak ada yang di-ping.",
+ "Adds a green Ask to spend early button to each day’s post. Each request opens a ticket in #⏰-early-spend-requests (leaders only) with Approve and Decline buttons. Nobody is pinged.": "Menambahkan tombol hijau minta pakai lebih awal di postingan tiap hari. Tiap permintaan membuka tiket di #⏰-early-spend-requests (khusus pimpinan) dengan tombol Setujui dan Tolak. Tidak ada yang di-ping.",
  "Admin": "Admin",
  "Admin access required": "Harus admin",
  "Admins confirm attendance after the snipe starts.": "Admin mengonfirmasi kehadiran setelah snipe dimulai.",
