@@ -51,7 +51,7 @@
  "Add vial donations": "Şişe bağışı ekle",
  "Add war results": "Savaş sonucu ekle",
  "Added {count} players from the new screenshots.": "Yeni ekran görüntülerinden {count} oyuncu eklendi.",
- "Adds an Ask to spend early button to each day’s post, and a message there for each request with Approve and Decline buttons for leaders. Nobody is pinged.": "Her günün gönderisine bir Erken harcama iste düğmesi ekler ve orada her istek için liderlere Onayla ve Reddet düğmeli bir mesaj bırakır. Kimse etiketlenmez.",
+ "Adds a green Ask to spend early button to each day’s post. Each request opens a ticket in #⏰-early-spend-requests (leaders only) with Approve and Decline buttons. Nobody is pinged.": "Her günün gönderisine yeşil bir Erken harcama iste düğmesi ekler. Her istek #⏰-early-spend-requests kanalında (yalnızca liderler) Onayla ve Reddet düğmeli bir bilet açar. Kimse etiketlenmez.",
  "Admin": "Yönetici",
  "Admin access required": "Yönetici yetkisi gerekli",
  "Admins confirm attendance after the snipe starts.": "Yöneticiler katılımı baskın başladıktan sonra onaylar.",

@@ -51,7 +51,7 @@
  "Add vial donations": "バイアル寄付を追加",
  "Add war results": "戦争結果を追加",
  "Added {count} players from the new screenshots.": "新しいスクリーンショットから{count}人のプレイヤーを追加しました。",
- "Adds an Ask to spend early button to each day’s post, and a message there for each request with Approve and Decline buttons for leaders. Nobody is pinged.": "毎日の投稿に「早めの使用をリクエスト」ボタンを付け、リクエストごとにリーダー用の承認・却下ボタン付きメッセージを投稿します。誰にもメンションしません。",
+ "Adds a green Ask to spend early button to each day’s post. Each request opens a ticket in #⏰-early-spend-requests (leaders only) with Approve and Decline buttons. Nobody is pinged.": "毎日の投稿に緑の「早めの使用をリクエスト」ボタンを付けます。リクエストごとに #⏰-early-spend-requests（リーダー専用）にチケットが開き、承認・却下ボタンが付きます。誰にもメンションしません。",
  "Admin": "管理者",
  "Admin access required": "管理者のみ利用できます",
  "Admins confirm attendance after the snipe starts.": "スナイプ開始後に管理者が参加を確認します。",

@@ -51,7 +51,7 @@
  "Add vial donations": "Magdagdag ng vial donations",
  "Add war results": "Magdagdag ng war results",
  "Added {count} players from the new screenshots.": "Naidagdag ang {count} players mula sa mga bagong screenshot.",
- "Adds an Ask to spend early button to each day’s post, and a message there for each request with Approve and Decline buttons for leaders. Nobody is pinged.": "Nagdadagdag ng button na humiling na gumastos nang maaga sa post ng bawat araw, at mensahe roon sa bawat request na may Aprubahan at Tanggihan na button para sa leaders. Walang mapi-ping.",
+ "Adds a green Ask to spend early button to each day’s post. Each request opens a ticket in #⏰-early-spend-requests (leaders only) with Approve and Decline buttons. Nobody is pinged.": "Nagdadagdag ng berdeng button na humiling na gumastos nang maaga sa post ng bawat araw. Bawat request ay nagbubukas ng ticket sa #⏰-early-spend-requests (leaders lang) na may Aprubahan at Tanggihan na button. Walang mapi-ping.",
  "Admin": "Admin",
  "Admin access required": "Kailangan ng admin access",
  "Admins confirm attendance after the snipe starts.": "Kinukumpirma ng admins ang attendance pagkatapos magsimula ang snipe.",

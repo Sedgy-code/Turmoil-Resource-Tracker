@@ -9,8 +9,8 @@ import { earlySpend } from "./early-spend-store";
 import { ApiError } from "./errors";
 import { memberFromRow } from "./mappers";
 import {
-  activeMember, botToken, buildOrders, type Context, dayStart, DISCORD_API, discordReason, lineSnipe, loadContext,
-  openPostThread, plainName, refreshDayPost, RESOURCE_EMOJI, shortNumber, spendingSettings,
+  activeMember, botToken, buildOrders, closeThread, type Context, dayStart, DISCORD_API, discordReason, lineSnipe, loadContext,
+  plainName, refreshDayPost, RESOURCE_EMOJI, shortNumber, spendingSettings,
 } from "./spending-order";
 
 /*
@@ -23,6 +23,8 @@ import {
 
 /** #⏲️-pick-your-timezone: members pick a "Reset …" role there. */
 export const PICK_TIMEZONE_CHANNEL_ID = "1559772353473417246";
+/** #⏰-early-spend-requests: a leaders-only forum in the Leadership section; each request is a ticket (a post) there. */
+export const EARLY_CHANNEL_ID = "1574741242481217607";
 /** The local demo has no Discord: everyone gets this time zone there. */
 const DEMO_ZONE: ResetZone = { name: "Reset 8–9am · UTC+8 to +9", from: 8, to: 9 };
 
@@ -216,12 +218,25 @@ export async function decideEarlySpend(
 }
 
 /* ------------------------------------------------------------------------------------------------
- * Discord: a message in that day's post for each request (names only, nobody is pinged), with
- * Approve and Decline buttons for leaders. English only: the server's translation bot does the rest.
+ * Discord: each request is a ticket, a post in #⏰-early-spend-requests (leaders only), with Approve
+ * and Decline buttons and a Waiting / Approved / Declined / Cancelled tag. Names only, nobody is
+ * pinged, English only. Tickets close when their clan day ends.
  * ---------------------------------------------------------------------------------------------- */
 
 function utcClock(at: string): string {
   return new Date(at).toISOString().slice(11, 16);
+}
+
+function earlyChannelId(): string {
+  return process.env.DISCORD_EARLY_CHANNEL_ID || EARLY_CHANNEL_ID;
+}
+
+const STATUS_MARK: Record<EarlySpendRequest["status"], string> = { pending: "⏳", approved: "✅", declined: "✖️", cancelled: "↩️" };
+const STATUS_TAG: Record<EarlySpendRequest["status"], string> = { pending: "waiting", approved: "approved", declined: "declined", cancelled: "cancelled" };
+
+/** The ticket's title: its state, the day and line, and who asked (forum post titles are at most 100 characters). */
+export function earlyTicketTitle(request: EarlySpendRequest): string {
+  return `${STATUS_MARK[request.status]} Day ${request.day} · ${SPEND_INFO[request.resource].label} · ${request.member.username}`.slice(0, 100);
 }
 
 /** The request's message: who, their place, the snipe's time for them, when they'll spend, why, and where it stands. */
@@ -249,7 +264,22 @@ export function earlyNotice(request: EarlySpendRequest) {
   return { content, components: buttons.length ? [{ type: 1, components: buttons }] : [], allowed_mentions: { parse: [] as string[] } };
 }
 
-/** Puts a new request's message in that day's post (when early requests are switched on for Discord and the post is up). */
+/** The forum's tags by name (Waiting, Approved, Declined, Cancelled), kept for a few minutes. */
+let tagsCache: { at: number; channel: string; tags: Map<string, string> } | null = null;
+async function ticketTags(token: string, fetcher: typeof fetch): Promise<Map<string, string>> {
+  const channel = earlyChannelId();
+  if (tagsCache && tagsCache.channel === channel && Date.now() - tagsCache.at < ROLES_CACHE_MS) return tagsCache.tags;
+  const forum = await discordJson<{ available_tags?: { id: string; name: string }[] }>(`/channels/${channel}`, token, fetcher);
+  const tags = new Map((forum?.available_tags ?? []).map((tag) => [String(tag.name).trim().toLowerCase(), String(tag.id)]));
+  tagsCache = { at: Date.now(), channel, tags };
+  return tags;
+}
+async function ticketTag(request: EarlySpendRequest, token: string, fetcher: typeof fetch): Promise<string[]> {
+  const tag = (await ticketTags(token, fetcher)).get(STATUS_TAG[request.status]);
+  return tag ? [tag] : [];
+}
+
+/** Opens a new request's ticket (when early requests are switched on for Discord). */
 export async function postEarlyNotice(id: string, dependencies: Dependencies = {}): Promise<boolean> {
   const token = botToken();
   if (!token) return false;
@@ -257,23 +287,27 @@ export async function postEarlyNotice(id: string, dependencies: Dependencies = {
   if (!(await spendingSettings(connection)).earlyDiscord) return false;
   const request = await earlySpend(connection, id);
   if (!request || request.status !== "pending" || request.noticeMessageId) return false;
-  const thread = await openPostThread(connection, request.week, request.day);
-  if (!thread) return false;
-  const response = await (dependencies.fetcher ?? fetch)(`${DISCORD_API}/channels/${thread}/messages`, {
+  const fetcher = dependencies.fetcher ?? fetch;
+  const response = await fetcher(`${DISCORD_API}/channels/${earlyChannelId()}/threads`, {
     method: "POST",
     headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(earlyNotice(request)),
+    body: JSON.stringify({ name: earlyTicketTitle(request), auto_archive_duration: 4320, applied_tags: await ticketTag(request, token, fetcher), message: earlyNotice(request) }),
   });
   if (!response.ok) {
-    console.warn("Early spend message not posted:", await discordReason(response));
+    console.warn("Early spend ticket not opened:", await discordReason(response));
     return false;
   }
-  const message = (await response.json().catch(() => ({}))) as { id?: unknown };
-  if (message.id) await connection.query("UPDATE early_spends SET notice_channel_id = $2, notice_message_id = $3 WHERE id = $1", [id, thread, String(message.id)]);
+  const thread = (await response.json().catch(() => ({}))) as { id?: unknown };
+  // A forum post's first message has the post's id.
+  if (thread.id) await connection.query("UPDATE early_spends SET notice_channel_id = $2, notice_message_id = $2 WHERE id = $1", [id, String(thread.id)]);
   return true;
 }
 
-/** After a decision or a cancel in the Hub: the request's message shows it, and that day's post marks approved members ⏰. */
+/**
+ * After a decision or a cancel: the ticket shows it (its message, title and tag), and that day's
+ * spending order post marks approved members ⏰. With `skipNotice`, Discord already rewrote the
+ * message (a leader pressed its button).
+ */
 export async function afterEarlyChange(id: string, dependencies: Dependencies & { skipNotice?: boolean } = {}): Promise<void> {
   const token = botToken();
   if (!token) return;
@@ -281,15 +315,40 @@ export async function afterEarlyChange(id: string, dependencies: Dependencies & 
   const fetcher = dependencies.fetcher ?? fetch;
   const request = await earlySpend(connection, id);
   if (!request) return;
-  if (!dependencies.skipNotice && request.noticeChannelId && request.noticeMessageId) {
-    const response = await fetcher(`${DISCORD_API}/channels/${request.noticeChannelId}/messages/${request.noticeMessageId}`, {
-      method: "PATCH",
-      headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify(earlyNotice(request)),
+  const headers = { Authorization: `Bot ${token}`, "Content-Type": "application/json" };
+  if (request.noticeChannelId && request.noticeMessageId) {
+    if (!dependencies.skipNotice) {
+      const edited = await fetcher(`${DISCORD_API}/channels/${request.noticeChannelId}/messages/${request.noticeMessageId}`, {
+        method: "PATCH", headers, body: JSON.stringify(earlyNotice(request)),
+      }).catch(() => null);
+      if (edited && !edited.ok) console.warn("Early spend ticket not updated:", await discordReason(edited));
+    }
+    const renamed = await fetcher(`${DISCORD_API}/channels/${request.noticeChannelId}`, {
+      method: "PATCH", headers, body: JSON.stringify({ name: earlyTicketTitle(request), applied_tags: await ticketTag(request, token, fetcher) }),
     }).catch(() => null);
-    if (response && !response.ok) console.warn("Early spend message not updated:", await discordReason(response));
+    if (renamed && !renamed.ok) console.warn("Early spend ticket tag not updated:", await discordReason(renamed));
   }
   await refreshDayPost(connection, request.week, request.day, { fetcher, now: dependencies.now }).catch((error) => console.warn("Spending post not refreshed:", error));
+}
+
+/** The daily job: tickets whose clan day has ended are closed (archived and locked), so the forum shows what's current. */
+export async function closeEarlyTickets(dependencies: Dependencies = {}): Promise<number> {
+  const token = botToken();
+  if (!token) return 0;
+  const connection = dependencies.db ?? await database();
+  const fetcher = dependencies.fetcher ?? fetch;
+  const now = dependencies.now ?? new Date();
+  const rows = await connection.query(`SELECT id, war_week::text AS week, war_day, notice_channel_id FROM early_spends
+    WHERE notice_channel_id <> '' AND notice_closed_at IS NULL`);
+  let closed = 0;
+  for (const row of rows) {
+    if (dayStart(String(row.week).slice(0, 10), Number(row.war_day) + 1).getTime() > now.getTime()) continue;
+    if (await closeThread(String(row.notice_channel_id), token, fetcher)) {
+      await connection.query("UPDATE early_spends SET notice_closed_at = $2 WHERE id = $1", [row.id, now.toISOString()]);
+      closed++;
+    }
+  }
+  return closed;
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -372,7 +431,7 @@ export async function handleEarlyInteraction(
         day, resource: third as SpendResource, spendAt: formValue(interaction, "spend_time"), reason: formValue(interaction, "reason"),
       }, { db: connection, fetcher, now, roles: interaction.member?.roles ?? [] });
       later(() => postEarlyNotice(request.id, { db: connection, fetcher }));
-      return ephemeral(`✅ Sent! A leader will approve or decline it in this post. You can also check it on the Clan Hub: ${appUrl()}/spending-order`);
+      return ephemeral(`✅ Sent! Leadership will approve or decline it soon. Check where it stands on the Clan Hub (${appUrl()}/spending-order) or press the button again.`);
     } catch (error) {
       return ephemeral(error instanceof ApiError ? `${error.message} Press the button to try again.` : "Something went wrong. Please try again.");
     }
@@ -386,7 +445,7 @@ export async function handleEarlyInteraction(
   const open = checked.filter((item) => item.check.ok && !item.asked);
   if (!open.length) {
     const why = checked.map((item) => `${RESOURCE_EMOJI[item.resource]} **${SPEND_INFO[item.resource].label}:** ${item.asked
-      ? item.asked.status === "approved" ? "you’re approved to spend early." : "you’ve already asked; a leader will reply here."
+      ? item.asked.status === "approved" ? "you’re approved to spend early." : "you’ve already asked; leadership will reply soon."
       : item.check.ok ? "" : fill(item.check.why, item.check.values)}`);
     return ephemeral([`You can’t ask to spend early on Day ${day}:`, ...why, "", `Only the top ${EARLY_TOP} in a line who have enough to ascend can ask, when a snipe is planned.`].join("\n"));
   }

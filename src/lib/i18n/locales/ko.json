@@ -51,7 +51,7 @@
  "Add vial donations": "바이알 기부 추가",
  "Add war results": "전쟁 결과 추가",
  "Added {count} players from the new screenshots.": "새 스크린샷에서 플레이어 {count}명을 추가했어요.",
- "Adds an Ask to spend early button to each day’s post, and a message there for each request with Approve and Decline buttons for leaders. Nobody is pinged.": "매일 게시글에 미리 사용 요청 버튼을 달고, 요청마다 리더진용 승인·거절 버튼이 있는 메시지를 남겨요. 아무도 멘션하지 않아요.",
+ "Adds a green Ask to spend early button to each day’s post. Each request opens a ticket in #⏰-early-spend-requests (leaders only) with Approve and Decline buttons. Nobody is pinged.": "매일 게시글에 초록색 미리 사용 요청 버튼을 달아요. 요청마다 #⏰-early-spend-requests(리더진 전용)에 승인·거절 버튼이 있는 티켓이 열려요. 아무도 멘션하지 않아요.",
  "Admin": "관리자",
  "Admin access required": "관리자 권한이 필요해요",
  "Admins confirm attendance after the snipe starts.": "스나이프가 시작되면 관리자가 참여를 확인해요.",

@@ -51,7 +51,7 @@
  "Add vial donations": "Добавить пожертвования колб",
  "Add war results": "Добавить итоги войны",
  "Added {count} players from the new screenshots.": "Добавлено игроков из новых скриншотов: {count}.",
- "Adds an Ask to spend early button to each day’s post, and a message there for each request with Approve and Decline buttons for leaders. Nobody is pinged.": "Добавляет к ежедневному посту кнопку «Попросить потратить заранее», а для каждого запроса — сообщение с кнопками «Одобрить» и «Отклонить» для руководства. Никого не упоминают.",
+ "Adds a green Ask to spend early button to each day’s post. Each request opens a ticket in #⏰-early-spend-requests (leaders only) with Approve and Decline buttons. Nobody is pinged.": "Добавляет к ежедневному посту зелёную кнопку «Попросить потратить заранее». Каждый запрос открывает тикет в #⏰-early-spend-requests (только руководство) с кнопками «Одобрить» и «Отклонить». Никого не упоминают.",
  "Admin": "Админ",
  "Admin access required": "Нужны права админа",
  "Admins confirm attendance after the snipe starts.": "Админы подтверждают участие после начала снайпа.",

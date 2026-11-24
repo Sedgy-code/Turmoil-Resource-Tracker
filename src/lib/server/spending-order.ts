@@ -327,7 +327,8 @@ function discordMessage(post: { content: string; embed: SpendingPostEmbed }) {
     // requests switched on, a second button asks the bot (see early-spend.ts).
     components: [{ type: 1, components: [
       { type: 2, style: 5, label: embed.button.label, url: embed.button.url },
-      ...(embed.ask ? [{ type: 2, style: 2, label: embed.ask.label, emoji: { name: "⏰" }, custom_id: embed.ask.customId }] : []),
+      // Green (style 3), so members can see it's a button they can press.
+      ...(embed.ask ? [{ type: 2, style: 3, label: embed.ask.label, emoji: { name: "⏰" }, custom_id: embed.ask.customId }] : []),
     ] }],
     allowed_mentions: { parse: [] },
   };
@@ -421,7 +422,7 @@ async function refreshTodaysPost(connection: SqlConnection, token: string, fetch
 }
 
 /** Archives and locks a post so the day's talk stays readable but closed. */
-async function closeThread(threadId: string, token: string, fetcher: typeof fetch): Promise<boolean> {
+export async function closeThread(threadId: string, token: string, fetcher: typeof fetch): Promise<boolean> {
   const headers = { Authorization: `Bot ${token}`, "Content-Type": "application/json", "X-Audit-Log-Reason": "Clan day over" };
   const locked = await fetcher(`${DISCORD_API}/channels/${threadId}`, { method: "PATCH", headers, body: JSON.stringify({ archived: true, locked: true }) }).catch(() => null);
   if (locked?.ok) return true;

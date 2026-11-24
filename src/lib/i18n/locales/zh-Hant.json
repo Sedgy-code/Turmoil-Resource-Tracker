@@ -51,7 +51,7 @@
  "Add vial donations": "新增藥瓶捐獻",
  "Add war results": "新增公會戰結果",
  "Added {count} players from the new screenshots.": "已從新截圖中新增 {count} 位玩家。",
- "Adds an Ask to spend early button to each day’s post, and a message there for each request with Approve and Decline buttons for leaders. Nobody is pinged.": "在每天的貼文加上「申請提前使用」按鈕，並為每個申請發一則帶批准和拒絕按鈕的訊息給幹部處理。不會提及任何人。",
+ "Adds a green Ask to spend early button to each day’s post. Each request opens a ticket in #⏰-early-spend-requests (leaders only) with Approve and Decline buttons. Nobody is pinged.": "在每天的貼文加上綠色的「申請提前使用」按鈕。每個申請會在 #⏰-early-spend-requests（僅幹部）開一張工單，帶批准和拒絕按鈕。不會提及任何人。",
  "Admin": "管理員",
  "Admin access required": "需要管理員權限",
  "Admins confirm attendance after the snipe starts.": "狙擊開始後，由管理員確認出席。",

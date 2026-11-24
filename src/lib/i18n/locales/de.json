@@ -51,7 +51,7 @@
  "Add vial donations": "Phiolen-Spenden hinzufügen",
  "Add war results": "Kriegsergebnisse hinzufügen",
  "Added {count} players from the new screenshots.": "{count} Spieler aus den neuen Screenshots hinzugefügt.",
- "Adds an Ask to spend early button to each day’s post, and a message there for each request with Approve and Decline buttons for leaders. Nobody is pinged.": "Fügt jedem Tages-Post einen Button zum früheren Ausgeben hinzu und dort für jede Anfrage eine Nachricht mit Annehmen- und Ablehnen-Buttons für die Clanleitung. Niemand wird gepingt.",
+ "Adds a green Ask to spend early button to each day’s post. Each request opens a ticket in #⏰-early-spend-requests (leaders only) with Approve and Decline buttons. Nobody is pinged.": "Fügt jedem Tages-Post einen grünen Button zum früheren Ausgeben hinzu. Jede Anfrage öffnet ein Ticket in #⏰-early-spend-requests (nur Clanleitung) mit Annehmen- und Ablehnen-Buttons. Niemand wird gepingt.",
  "Admin": "Admin",
  "Admin access required": "Admin-Zugang nötig",
  "Admins confirm attendance after the snipe starts.": "Admins bestätigen die Teilnahme, nachdem der Snipe begonnen hat.",

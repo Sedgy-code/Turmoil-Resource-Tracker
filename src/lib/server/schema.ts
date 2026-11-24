@@ -370,6 +370,8 @@ CREATE TABLE IF NOT EXISTS early_spends (
   notice_message_id TEXT NOT NULL DEFAULT '',
   UNIQUE (war_week, war_day, resource, member_id)
 );
--- Whether early spend requests show in Discord: an Ask button on each day's post, and a message in it for each request.
+-- When a request's ticket in #⏰-early-spend-requests was closed (its clan day ended).
+ALTER TABLE early_spends ADD COLUMN IF NOT EXISTS notice_closed_at TIMESTAMPTZ;
+-- Whether early spend requests show in Discord: an Ask button on each day's post, and a ticket for each request.
 ALTER TABLE spending_settings ADD COLUMN IF NOT EXISTS early_discord BOOLEAN NOT NULL DEFAULT FALSE;
 `;
