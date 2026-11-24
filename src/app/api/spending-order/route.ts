@@ -1,7 +1,8 @@
+import { after } from "next/server";
 import { requireMember } from "@/lib/server/auth";
 import { assertSameOrigin } from "@/lib/server/config";
 import { errorResponse, privateResponse } from "@/lib/server/errors";
-import { getSpendingOrder, updateSpendingSettings } from "@/lib/server/spending-order";
+import { getSpendingOrder, updateSpendingPostsNow, updateSpendingSettings } from "@/lib/server/spending-order";
 import { spendSettingsSchema } from "@/lib/server/validation";
 
 export const runtime = "nodejs";
@@ -19,6 +20,10 @@ export async function PUT(request: Request) {
   try {
     assertSameOrigin(request);
     const actor = await requireMember();
-    return privateResponse(await updateSpendingSettings(actor, spendSettingsSchema.parse(await request.json())));
+    const input = spendSettingsSchema.parse(await request.json());
+    const result = await updateSpendingSettings(actor, input);
+    // Early spend requests switched on or off: the posts that are up get (or lose) the Ask button now.
+    if (input.earlyDiscord !== undefined) after(() => updateSpendingPostsNow(actor).then(() => undefined, () => undefined));
+    return privateResponse(result);
   } catch (error) { return errorResponse(error); }
 }

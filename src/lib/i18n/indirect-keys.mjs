@@ -170,6 +170,8 @@ export const INDIRECT_KEYS = [
   "Unable to calculate this estimate. Reduce the selected activities or saved resource counts.",
   // Spending order (src/lib/spending-order.ts, src/lib/server/spending-order.ts): the tab, rarities from the ascension guide, server messages
   "Spending Order", "Epic", "Legendary", "Ultimate", "Mythic",
+  // Early spend requests (src/lib/server/early-spend.ts, src/components/spending-order.tsx)
+  "Waiting", "Approved", "Declined", "That isn’t a clan day for this line.", "That clan day is over.", "No snipe is planned for this line that day, so there’s nothing to spend early for.", "That snipe has already started.", "You’re not in this line.", "Only the top {top} in the line can ask. You’re #{place}.", "You need enough saved to ascend before you can ask.", "You’ve already asked to spend early for this line.", "Pick your time zone in #⏲️-pick-your-timezone on Discord first, then ask again.", "The snipe is at a reasonable time for you, so please say why you can’t make it.", "Write the time like 06:30 (UTC).", "Pick a time before the snipe.", "That time has already passed. Pick a later one, or leave it empty.", "That request can’t be found any more.", "Only the member who asked can cancel it.", "There’s nothing to cancel.", "Only leaders can approve or decline early spends.", "They cancelled this request.", "Pick a line and a clan day.",
   "Only leaders can change the spending order.", "The Discord post isn’t set up yet.",
   "Switch the Discord post on first.", "There’s no clan day today or tomorrow, so there’s nothing to post yet.", "That day’s post is already up.", "There’s no post up to update.", "Choose a setting to update.",
 ];

@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Check, ChevronsUp, ExternalLink, Eye, EyeOff, Hand, Lock, LoaderCircle, RefreshCw, Send, Star, Target } from "lucide-react";
+import { AlarmClock, Check, ChevronsUp, ExternalLink, Eye, EyeOff, Hand, Lock, LoaderCircle, Moon, RefreshCw, Send, Star, Target, X } from "lucide-react";
 import { errorText } from "@/lib/error-text";
 import { useLanguage } from "@/lib/i18n";
 import { numberFormat } from "@/lib/resources";
-import { ASCEND_LEVEL, SPEND_INFO, SPEND_RESOURCES } from "@/lib/spending-order";
-import type { AscendCheck, DashboardResponse, SpendingOrderResponse, SpendingPostEmbed, SpendingPostPreview, SpendOrder, SpendResource, SpendRow } from "@/lib/types";
+import { ASCEND_LEVEL, EARLY_TOP, earlyEligible, snipeForZone, SPEND_INFO, SPEND_RESOURCES } from "@/lib/spending-order";
+import type { AscendCheck, DashboardResponse, EarlySpendCheck, EarlySpendRequest, EarlySpendStatus, SpendingOrderResponse, SpendingPostEmbed, SpendingPostPreview, SpendOrder, SpendResource, SpendRow } from "@/lib/types";
 import { RankBadge } from "./contribution-cards";
 import { TermHelp } from "./first-visit";
 import { MemberAvatar, MemberName } from "./member-identity";
@@ -131,6 +131,7 @@ function LineTable({ line, meId }: { line: SpendOrder; meId: string }) {
                 {me && <span className="you-badge">{t("you")}</span>}
                 {row.sniper && <Target size={15} className="spend-sniper" aria-label={t("In that day’s snipe")} role="img" />}
                 {row.ascending && <ChevronsUp size={15} className="spend-ascending" aria-label={t("Planning to ascend")} role="img" />}
+                {row.early && <AlarmClock size={15} className="spend-early-mark" aria-label={t("Approved to spend early")} role="img" />}
                 {row.state === "away" && <span className="spend-tag away">{t("Away")}</span>}
               </span>
             </th>
@@ -177,8 +178,151 @@ function EmbedPreview({ content, embed }: { content: string; embed: SpendingPost
       </div>)}
       <small className="spend-embed-footer">{embed.footer}</small>
     </div>
-    <span className="spend-embed-button">{embed.button.label}<ExternalLink size={13} aria-hidden="true" /></span>
+    <span className="spend-embed-buttons">
+      <span className="spend-embed-button">{embed.button.label}<ExternalLink size={13} aria-hidden="true" /></span>
+      {embed.ask && <span className="spend-embed-button secondary">⏰ {embed.ask.label}</span>}
+    </span>
   </div>;
+}
+
+/** Clan times are in UTC. */
+function utcTime(at: string): string {
+  return new Date(at).toISOString().slice(11, 16);
+}
+
+const EARLY_STATUS: Record<EarlySpendStatus, string> = { pending: "Waiting", approved: "Approved", declined: "Declined", cancelled: "Cancelled" };
+
+/**
+ * Can't make the snipe? Members near the top of a line who can ascend ask to spend early here (or
+ * with the button on the Discord post). Shows their own request once they've asked.
+ */
+function EarlySpendBox({ order, line, row, meId, notify, reload }: {
+  order: SpendingOrderResponse; line: SpendOrder; row: SpendRow | undefined; meId: string;
+  notify: (message: string, error?: boolean) => void; reload: () => Promise<void>;
+}) {
+  const { t } = useLanguage();
+  const [open, setOpen] = useState(false);
+  const [check, setCheck] = useState<EarlySpendCheck | null>(null);
+  const [time, setTime] = useState("");
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  if (line.day === null || !line.snipeAt) return null;
+  const day = line.day;
+  const mine = order.early.find((item) => item.member.id === meId && item.day === day && item.resource === line.resource);
+  const before = Date.parse(line.snipeAt) > Date.now();
+  const canAsk = before && earlyEligible(row);
+
+  async function start() {
+    setOpen(true);
+    setCheck(null);
+    try {
+      setCheck(await request<EarlySpendCheck>(`/api/spending-order/early?day=${day}&resource=${line.resource}`));
+    } catch (error) { notify(t(errorText(error)), true); setOpen(false); }
+  }
+  async function send(event: React.FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    try {
+      await request("/api/spending-order/early", { method: "POST", body: JSON.stringify({ day, resource: line.resource, spendAt: time || null, reason: reason.trim() || null }) });
+      notify(t("Request sent. A leader will approve or decline it."));
+      setOpen(false);
+      setTime("");
+      setReason("");
+      await reload();
+    } catch (error) { notify(t(errorText(error)), true); } finally { setBusy(false); }
+  }
+  async function cancel(id: string) {
+    setBusy(true);
+    try {
+      await request("/api/spending-order/early", { method: "PATCH", body: JSON.stringify({ id, status: "cancelled" }) });
+      notify(t("Request cancelled."));
+      await reload();
+    } catch (error) { notify(t(errorText(error)), true); } finally { setBusy(false); }
+  }
+
+  if (mine && mine.status !== "declined") {
+    return <section className={`spend-early mine ${mine.status}`} aria-label={t("Ask to spend early")}>
+      {mine.status === "approved" ? <Check size={18} aria-hidden="true" /> : <AlarmClock size={18} aria-hidden="true" />}
+      <div>
+        <strong>{mine.status === "approved"
+          ? mine.spendAt ? t("Approved by {name}: you can spend early from {time} UTC.", { name: mine.decidedBy ?? "", time: utcTime(mine.spendAt) })
+            : t("Approved by {name}: you can spend early, any time before the snipe.", { name: mine.decidedBy ?? "" })
+          : t("You asked to spend early. Waiting for a leader.")}</strong>
+        <button type="button" className="planning-button planning-button-subtle" disabled={busy} onClick={() => void cancel(mine.id)}><X size={14} />{t("Cancel request")}</button>
+      </div>
+    </section>;
+  }
+  if (!canAsk) {
+    if (mine) return <p className="spend-early-hint declined">{t("Declined by {name}. Join the snipe if you can.", { name: mine.decidedBy ?? "" })}</p>;
+    return before && row?.state === "line" ? <p className="spend-early-hint">{t("Only the top {top} who have enough to ascend can ask to spend early.", { top: EARLY_TOP })}</p> : null;
+  }
+  return <section className="spend-early" aria-label={t("Ask to spend early")}>
+    {mine && <p className="spend-early-hint declined">{t("Declined by {name}. Join the snipe if you can.", { name: mine.decidedBy ?? "" })}</p>}
+    {!open && <button type="button" className="planning-button planning-button-subtle spend-early-ask" onClick={() => void start()}><AlarmClock size={15} />{t("Can’t make the snipe? Ask to spend early")}</button>}
+    {open && <form className="spend-early-form" onSubmit={(event) => void send(event)}>
+      {!check ? <p className="spend-post-empty"><LoaderCircle size={15} className="spin" /></p>
+        : !check.canAsk ? <>
+          <p className="planning-notice">{t(check.blocked ?? "Please try again.", check.values)}</p>
+          {check.needsZone && check.zoneUrl && <a className="home-link" href={check.zoneUrl} target="_blank" rel="noreferrer">{t("Open #⏲️-pick-your-timezone")}<ExternalLink size={13} aria-hidden="true" /></a>}
+          <button type="button" className="planning-button planning-button-subtle" onClick={() => setOpen(false)}>{t("Close")}</button>
+        </> : <>
+          <p className="spend-early-when">
+            {check.night ? <Moon size={14} aria-hidden="true" /> : <AlarmClock size={14} aria-hidden="true" />}
+            <span>{t("The snipe is at {time} for you ({zone}).", { time: check.localTime ?? "", zone: check.zone?.name ?? "" })}{" "}
+              {check.night ? t("That’s your night, so a reason is optional.") : t("That’s a reasonable time for you, so please say why you can’t make it.")}</span>
+          </p>
+          <label>{t("When will you spend? (UTC, optional)")}<input type="time" value={time} onChange={(event) => setTime(event.target.value)} /></label>
+          <label>{check.reasonRequired ? t("Why can’t you make the snipe?") : t("Anything to add? (optional)")}
+            <textarea value={reason} required={check.reasonRequired} minLength={check.reasonRequired ? 3 : undefined} maxLength={300} rows={2} onChange={(event) => setReason(event.target.value)} />
+          </label>
+          <div className="planning-inline-actions">
+            <button type="submit" className="planning-button" disabled={busy}>{busy ? <LoaderCircle size={15} className="spin" /> : <Send size={15} />}{t("Send request")}</button>
+            <button type="button" className="planning-button planning-button-subtle" onClick={() => setOpen(false)}>{t("Close")}</button>
+          </div>
+        </>}
+    </form>}
+  </section>;
+}
+
+/** The line's early spend requests: everyone sees them; leaders approve or decline (and can change their mind). */
+function EarlyList({ items, admin, notify, reload }: { items: EarlySpendRequest[]; admin: boolean; notify: (message: string, error?: boolean) => void; reload: () => Promise<void> }) {
+  const { t } = useLanguage();
+  const [busy, setBusy] = useState(false);
+  if (!items.length) return null;
+  async function decide(id: string, status: "approved" | "declined") {
+    setBusy(true);
+    try {
+      await request("/api/spending-order/early", { method: "PATCH", body: JSON.stringify({ id, status }) });
+      notify(t(status === "approved" ? "Approved." : "Declined."));
+      await reload();
+    } catch (error) { notify(t(errorText(error)), true); } finally { setBusy(false); }
+  }
+  return <section className="spend-early-list" aria-labelledby="spend-early-title">
+    <h3 id="spend-early-title"><AlarmClock size={15} aria-hidden="true" />{t("Early spend requests")}</h3>
+    <ul>
+      {items.map((item) => {
+        const local = item.zone ? snipeForZone(new Date(item.snipeAt), item.zone) : null;
+        return <li key={item.id} className={`spend-early-item ${item.status}`}>
+          <div className="spend-early-who">
+            <MemberAvatar member={item.member} small />
+            <MemberName member={item.member} />
+            {item.place !== null && <span className="planning-chip">#{item.place}</span>}
+            <span className={`spend-early-status ${item.status}`}>{t(EARLY_STATUS[item.status])}</span>
+          </div>
+          <p className="spend-early-meta">
+            <span>{item.spendAt ? t("Spends at {time} UTC", { time: utcTime(item.spendAt) }) : t("Any time before the snipe")}</span>
+            {local && <span>{t("Snipe for them: {time}", { time: local.localTime })}{local.night && <Moon size={12} aria-label={t("Their night")} role="img" />}</span>}
+          </p>
+          <p className="spend-early-reason">{item.reason ? `“${item.reason}”` : t("No reason needed: the snipe is in their night.")}</p>
+          {item.status !== "pending" && item.decidedBy && <small className="spend-early-by">{t(item.status === "approved" ? "Approved by {name}" : "Declined by {name}", { name: item.decidedBy })}</small>}
+          {admin && <div className="planning-inline-actions">
+            {item.status !== "approved" && <button type="button" className="planning-button" disabled={busy} onClick={() => void decide(item.id, "approved")}><Check size={14} />{t("Approve")}</button>}
+            {item.status !== "declined" && <button type="button" className="planning-button planning-button-subtle" disabled={busy} onClick={() => void decide(item.id, "declined")}><X size={14} />{t("Decline")}</button>}
+          </div>}
+        </li>;
+      })}
+    </ul>
+  </section>;
 }
 
 /** Leaders: switch the #spending-order post on or off, see exactly what it will say, post the next one now, or update the posts that are up. */
@@ -199,6 +343,13 @@ function PostPanel({ order, notify, onChange }: { order: SpendingOrderResponse; 
     try {
       onChange(await request<SpendingOrderResponse>("/api/spending-order", { method: "PUT", body: JSON.stringify({ postEnabled: !post.enabled }) }));
       notify(t(post.enabled ? "Daily post switched off." : "Daily post switched on."));
+    } catch (error) { notify(t(errorText(error)), true); } finally { setBusy(false); }
+  }
+  async function toggleEarly() {
+    setBusy(true);
+    try {
+      onChange(await request<SpendingOrderResponse>("/api/spending-order", { method: "PUT", body: JSON.stringify({ earlyDiscord: !post.earlyDiscord }) }));
+      notify(t(post.earlyDiscord ? "Early spend requests are off in Discord." : "Early spend requests now show in Discord."));
     } catch (error) { notify(t(errorText(error)), true); } finally { setBusy(false); }
   }
   async function updateNow() {
@@ -236,6 +387,16 @@ function PostPanel({ order, notify, onChange }: { order: SpendingOrderResponse; 
       {/* Every post that's up, and one button to update them all: on a clan day, today's post can be updated while tomorrow's is still to post. */}
       {post.openDays.map((day) => <span key={day} className="planning-chip"><Check size={13} />{t("Day {day}’s post is up.", { day })}</span>)}
       {post.openDays.length > 0 && <button type="button" className="planning-button planning-button-subtle" disabled={busy || !post.configured} onClick={() => void updateNow()}>{busy ? <LoaderCircle size={15} className="spin" /> : <RefreshCw size={15} />}{t("Update the post")}</button>}
+    </div>
+    <div className="spend-post-head spend-early-switch">
+      <div>
+        <h3><AlarmClock size={15} aria-hidden="true" />{t("Early spend requests in Discord")}</h3>
+        <p>{t("Adds an Ask to spend early button to each day’s post, and a message there for each request with Approve and Decline buttons for leaders. Nobody is pinged.")}</p>
+      </div>
+      <div className="planning-tabs spend-switch" role="group" aria-label={t("Early spend requests in Discord")}>
+        <button type="button" aria-pressed={post.earlyDiscord} disabled={busy || post.earlyDiscord} onClick={() => void toggleEarly()}>{t("On")}</button>
+        <button type="button" aria-pressed={!post.earlyDiscord} disabled={busy || !post.earlyDiscord} onClick={() => void toggleEarly()}>{t("Off")}</button>
+      </div>
     </div>
     {open && (preview
       ? preview.day === null
@@ -302,7 +463,9 @@ export function SpendingOrder({ data, notify }: { data: DashboardResponse; notif
     <div className="spend-picker" role="group" aria-label={t("Pick a line")}>
       {order.orders.map((item) => {
         const Picture = PILLAR_ICONS[SPEND_INFO[item.resource].pillar];
+        const waiting = admin ? order.early.filter((request) => request.status === "pending" && request.resource === item.resource && request.day === item.day).length : 0;
         return <button key={item.resource} type="button" aria-pressed={item.resource === line.resource} onClick={() => pick(item.resource)}>
+          {waiting > 0 && <span className="spend-waiting" aria-label={t("{count} waiting for a leader", { count: waiting })}>{waiting}</span>}
           <Picture size={26} />
           <span>{t(SPEND_INFO[item.resource].label)}</span>
           <small>{item.day === null ? "—" : item.today ? t("Today") : t("Day {day}", { day: item.day })}</small>
@@ -314,8 +477,11 @@ export function SpendingOrder({ data, notify }: { data: DashboardResponse; notif
       <div className="spend-line-head">
         <h2 id="spend-line-title">{t(SPEND_INFO[line.resource].label)}</h2>
         <span className={`planning-chip${line.today ? " spend-today" : ""}`}>{dayLine(line, t)}</span>
+        {line.snipeAt && <span className="planning-chip spend-snipe"><Target size={13} aria-hidden="true" />{t("Snipe at {time} UTC", { time: utcTime(line.snipeAt) })}</span>}
       </div>
       <YourPlace line={line} row={myRow} />
+      <EarlySpendBox order={order} line={line} row={myRow} meId={me.id} notify={notify} reload={load} />
+      <EarlyList items={order.early.filter((item) => item.day === line.day && item.resource === line.resource)} admin={admin} notify={notify} reload={load} />
       <LineTable line={line} meId={me.id} />
       <p className="planning-footnote spend-footnote">
         {t("Order: members in that day’s snipe first, then members ascending that pillar this week, then the biggest stockpile, counted in war points (the same estimate as the snipe planner).")}{" "}
