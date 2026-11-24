@@ -39,8 +39,7 @@ export function assessBankCompleteness(input: BankInformation): { complete: bool
     const value = input.planningDetails?.[key];
     if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1000 || Math.abs(value * 100 - Math.round(value * 100)) > 1e-7) missing.push(label);
   }
-  // Optional: only a typed forge level that isn't 1–50 needs fixing.
-  const forgeLevel = input.planningDetails?.forgeLevel;
-  if (forgeLevel !== undefined && validForgeLevel(forgeLevel) === null) missing.push("Forge level");
+  // Required: a whole number from 1 to 50 (Ascension 3 goes to 50).
+  if (validForgeLevel(input.planningDetails?.forgeLevel) === null) missing.push("Forge level");
   return { complete: missing.length === 0, missing };
 }

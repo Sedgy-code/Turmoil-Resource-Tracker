@@ -207,11 +207,12 @@ const essentials: {
   },
   { key: "hammers", icon: HammerIcon, label: "Hammers", color: "ice" },
 ];
-const dashboardResources = [
-  ...essentials.slice(0, 2),
-  { key: "eggsPetsTotal", icon: EggIcon, label: "Total eggs/pets", color: "eggs" },
-  ...essentials.slice(2),
-] satisfies typeof essentials;
+/** The Clan page's cards, in the leaders' order: Hammers, Skill Tickets, Total eggs/pets, Mount Keys, Mounts to Merge. */
+const dashboardResources = (["hammers", "skillTickets", "eggsPetsTotal", "mountKeys", "mountsToMerge"] as const).map((key) =>
+  key === "eggsPetsTotal"
+    ? { key, icon: EggIcon, label: "Total eggs/pets", color: "eggs" }
+    : essentials.find((item) => item.key === key)!,
+) satisfies typeof essentials;
 /** The form asked for red potions by mistake until this time; saves before it never gave Clan Tech Vials. */
 const POTIONS_RETURNED = Date.parse("2026-10-18T04:45:00Z");
 /** Short help under each box, and the caption for its picture of the game screen. */
@@ -1611,7 +1612,7 @@ function ResourceForm({
   type PlanningFieldKey = Exclude<keyof PlanningDetails, "calculationVersion">;
   const isChance = (key: PlanningFieldKey) => key === "extraMountChancePercent" || key === "extraPetSummonPercent";
   const planningMaximum = (key: PlanningFieldKey) => isChance(key) ? 1000 : key === "forgeLevel" ? FORGE_MAX_LEVEL : key.endsWith("Level") ? 1_000_000_000 : 1_000_000;
-  const planningFields: { key: PlanningFieldKey; label: string; help: string; picture?: GuidedField; where?: string; optional?: boolean }[] = [
+  const planningFields: { key: PlanningFieldKey; label: string; help: string; picture?: GuidedField; where?: string }[] = [
     { key: "skillLevel", label: "Skill level", help: "Tap ⓘ next to the Summon button on the Skills screen.", picture: "skillLevel", where: "Skills screen → tap ⓘ next to Summon. Use the Level number at the top." },
     { key: "mountLevel", label: "Mount level", help: "Tap ⓘ next to the Summon button on the Mounts screen.", picture: "mountLevel", where: "Mounts screen → tap ⓘ next to Summon. Use the Level number at the top." },
     { key: "eggLevel", label: "Egg/pet level", help: legacyHistory ? "Saved for reference alongside the original planned actions." : "Tap ⓘ next to the Summon button on the Pets screen.", picture: legacyHistory ? undefined : "eggLevel", where: "Pets screen → tap ⓘ next to Summon. Use the Level number at the top." },
@@ -1620,8 +1621,7 @@ function ResourceForm({
       { key: "eggMerges" as const, label: "Existing egg/pet merges", help: "Original existing merge count saved in this snapshot." },
       { key: "eggSummonMerges" as const, label: "Egg/pet summon then merge", help: "Original future summon/merge count saved in this snapshot." },
     ] : [
-      // Optional: leaving it empty keeps the clan's general hammer range for this member.
-      { key: "forgeLevel" as const, label: "Forge level", help: "Optional. Your Forge level, from the Forge screen. It makes your hammer points exact.", optional: true },
+      { key: "forgeLevel" as const, label: "Forge level", help: "Your Forge level, from the Forge screen. It makes your hammer points exact." },
       { key: "extraMountChancePercent" as const, label: "Extra mount chance %", help: "Enter the number only, e.g. 42. Enter 0 if you have none.", picture: "extraMountChancePercent" as const, where: "Tech Tree → tap ⓘ to open Total Bonuses → “Chance to summon an extra mount”." },
       { key: "extraPetSummonPercent" as const, label: "Extra pet summon %", help: "Enter the number only, e.g. 50. Enter 0 if you have none.", picture: "extraPetSummonPercent" as const, where: "Tech Tree → tap ⓘ to open Total Bonuses → “Chance to summon an extra egg”." },
     ]),
@@ -1691,12 +1691,12 @@ function ResourceForm({
   const draftBank = {
     resources: Object.fromEntries(resourceKeys.map((key) => [key, enteredNumber(values[key])])) as ResourceValues,
     summoningCosts: { fiveSkills: enteredNumber(costValues.fiveSkills), mount: enteredNumber(costValues.mount) },
-    planningDetails: { ...CHANCE_PLANNING_DETAILS, ...savedPlanning, ...Object.fromEntries(planningFields.map(({ key, optional }) => [key, optional && !planningValues[key]?.trim() ? undefined : enteredNumber(planningValues[key])])), calculationVersion: 2 as const },
+    planningDetails: { ...CHANCE_PLANNING_DETAILS, ...savedPlanning, ...Object.fromEntries(planningFields.map(({ key }) => [key, enteredNumber(planningValues[key])])), calculationVersion: 2 as const },
   };
   const completeness = assessBankCompleteness(draftBank);
   // Levels and extra chances rarely change: once saved, show them in a short summary.
   const [showLevels, setShowLevels] = useState(false);
-  const levelsSaved = !legacyHistory && !!entry && planningFields.every(({ key, optional }) => optional || planningText(savedPlanning, key) !== "");
+  const levelsSaved = !legacyHistory && !!entry && planningFields.every(({ key }) => planningText(savedPlanning, key) !== "");
   const levelsFolded = !readOnly && levelsSaved && !showLevels && !planningFields.some(({ label }) => completeness.missing.includes(label));
   const [noteOpen] = useState(() => !!entry?.notes);
   async function save(event: FormEvent) {
@@ -1954,7 +1954,7 @@ function ResourceForm({
           {levelsFolded && <button type="button" className="button subtle small-button" onClick={() => setShowLevels(true)}>{t("Change")}</button>}
         </div>
         {levelsFolded ? <dl className="levels-summary">
-          {planningFields.map(({ key, label, optional }) => <div key={key}><dt>{t(label)}</dt><dd>{planningValues[key] || (optional ? t("Not added") : "")}{isChance(key) && planningValues[key] ? "%" : ""}</dd></div>)}
+          {planningFields.map(({ key, label }) => <div key={key}><dt>{t(label)}</dt><dd>{planningValues[key]}{isChance(key) ? "%" : ""}</dd></div>)}
         </dl> : <>
           <p className="form-section-subtitle">{legacyHistory ? t("This week keeps its original saved counts.") : t("Copy these from the game. The tracker does the maths for you.")}</p>
           <div className="entry-list">

@@ -53,7 +53,7 @@ async function saveBank(request: APIRequestContext, entry: ResourceEntry) {
       memberId: entry.memberId,
       resources: { ...EMPTY_RESOURCES, ...entry.resources },
       summoningCosts: entry.summoningCosts,
-      planningDetails: { ...CHANCE_PLANNING_DETAILS, ...entry.planningDetails, extraMountChancePercent: entry.planningDetails?.extraMountChancePercent ?? 0, extraPetSummonPercent: entry.planningDetails?.extraPetSummonPercent ?? 0, calculationVersion: 2 },
+      planningDetails: { ...CHANCE_PLANNING_DETAILS, ...entry.planningDetails, extraMountChancePercent: entry.planningDetails?.extraMountChancePercent ?? 0, extraPetSummonPercent: entry.planningDetails?.extraPetSummonPercent ?? 0, forgeLevel: entry.planningDetails?.forgeLevel ?? 30, calculationVersion: 2 },
       notes: entry.notes,
     },
   });
@@ -137,7 +137,7 @@ test("personal bank, eggshells, levels, costs, and percentage chances survive a 
     await page.getByLabel("Skill summon cost (×5)", { exact: true }).fill("150");
     await page.getByLabel("Mount summon cost (×1)", { exact: true }).fill("37.5");
     for (const [label, value] of [
-      ["Skill level", "42"], ["Mount level", "43"], ["Egg/pet level", "44"],
+      ["Skill level", "42"], ["Mount level", "43"], ["Egg/pet level", "44"], ["Forge level", "30"],
       ["Extra mount chance %", "20.5"], ["Extra pet summon %", "25"],
     ]) await page.getByLabel(label, { exact: true }).fill(value);
     const save = page.getByRole("button", { name: "Save resources", exact: true });
@@ -233,7 +233,7 @@ test("war estimates derive fractional bonus actions from per-member chances acro
       ...entry,
       resources: { ...EMPTY_RESOURCES, skillTickets: 600, mountKeys: 75, hammers: 10, mountsToMerge: 4, eggsPetsTotal: 20, eggshellsTotal: 1250 },
       summoningCosts: { fiveSkills: 150, mount: 37.5 },
-      planningDetails: { ...CHANCE_PLANNING_DETAILS, extraMountChancePercent: 25, extraPetSummonPercent: 20 },
+      planningDetails: { ...CHANCE_PLANNING_DETAILS, extraMountChancePercent: 25, extraPetSummonPercent: 20, forgeLevel: 30 },
     });
     await page.goto("/war-points");
     await page.getByRole("button", { name: "My totals", exact: true }).click();

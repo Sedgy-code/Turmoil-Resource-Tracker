@@ -104,7 +104,7 @@ test.beforeAll(async ({ request }) => {
           fiveSkills: validSkillCost ? skillCost : 150,
           mount: validMountCost ? mountCost : 37.5,
         },
-        planningDetails: { ...CHANCE_PLANNING_DETAILS, ...existing?.planningDetails, extraMountChancePercent: existing?.planningDetails?.extraMountChancePercent ?? 0, extraPetSummonPercent: existing?.planningDetails?.extraPetSummonPercent ?? 0, calculationVersion: 2 },
+        planningDetails: { ...CHANCE_PLANNING_DETAILS, ...existing?.planningDetails, extraMountChancePercent: existing?.planningDetails?.extraMountChancePercent ?? 0, extraPetSummonPercent: existing?.planningDetails?.extraPetSummonPercent ?? 0, forgeLevel: existing?.planningDetails?.forgeLevel ?? 30, calculationVersion: 2 },
         notes: existing?.notes ?? "Demo browser-test fixture.",
       },
     });
@@ -137,7 +137,7 @@ test("desktop resources persist, update live totals, preserve history, and expor
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("dialog", (dialog) => dialog.accept());
   try {
-    const planningDetails = { ...CHANCE_PLANNING_DETAILS, ...ownEntry.planningDetails, skillLevel: 42 };
+    const planningDetails = { ...CHANCE_PLANNING_DETAILS, ...ownEntry.planningDetails, forgeLevel: ownEntry.planningDetails?.forgeLevel ?? 30, skillLevel: 42 };
     const planningFixture = await request.put("/api/bank", {
       headers: { Origin: baseURL },
       data: { memberId: ownEntry.memberId, resources: { ...ownEntry.resources, eggshellsTotal: 1350 },

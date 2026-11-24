@@ -72,6 +72,7 @@ export const planningDetailsSchema = z.object({
   eggSummonMerges: z.number().int().min(0).max(1_000_000).default(0),
   extraMountChancePercent: extraChancePercent.optional(),
   extraPetSummonPercent: extraChancePercent.optional(),
+  // Needed to save (assessBankCompleteness explains a missing one); older saves don't have it.
   forgeLevel: z.number().int().min(1).max(FORGE_MAX_LEVEL).optional(),
   calculationVersion: z.literal(2).optional(),
 }).strict();
