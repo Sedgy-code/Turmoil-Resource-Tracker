@@ -374,4 +374,43 @@ CREATE TABLE IF NOT EXISTS early_spends (
 ALTER TABLE early_spends ADD COLUMN IF NOT EXISTS notice_closed_at TIMESTAMPTZ;
 -- Whether early spend requests show in Discord: an Ask button on each day's post, and a ticket for each request.
 ALTER TABLE spending_settings ADD COLUMN IF NOT EXISTS early_discord BOOLEAN NOT NULL DEFAULT FALSE;
+-- Builds: the top builds of each game update, pulled daily from 1vcian's Forge Master site and boiled down.
+-- One row per game update (its builds file), the older ones kept as the archive.
+CREATE TABLE IF NOT EXISTS build_snapshots (
+  id BIGSERIAL PRIMARY KEY,
+  source_version TEXT NOT NULL,
+  source_file TEXT NOT NULL,
+  game_date TIMESTAMPTZ,
+  content_hash TEXT NOT NULL,
+  data JSONB NOT NULL,
+  first_seen TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  replaced_at TIMESTAMPTZ,
+  discord_message_id TEXT,
+  discord_posted_hash TEXT,
+  UNIQUE (source_version, source_file)
+);
+-- Which set is current, the last daily check, and the Discord builds thread in #🛡️-build-guide.
+CREATE TABLE IF NOT EXISTS build_sync (
+  id TEXT PRIMARY KEY CHECK (id = 'clan'),
+  current_id BIGINT REFERENCES build_snapshots(id) ON DELETE SET NULL,
+  checked_at TIMESTAMPTZ,
+  error TEXT,
+  error_at TIMESTAMPTZ,
+  discord_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  discord_channel_id TEXT,
+  discord_intro_id TEXT,
+  discord_thread_id TEXT,
+  discord_error TEXT,
+  updated_by TEXT REFERENCES app_members(id) ON DELETE SET NULL
+);
+-- Leaders' links to other guides (Discord posts, videos, sites), shown on the Builds page.
+CREATE TABLE IF NOT EXISTS build_links (
+  id BIGSERIAL PRIMARY KEY,
+  title TEXT NOT NULL CHECK (char_length(title) BETWEEN 1 AND 80),
+  url TEXT NOT NULL CHECK (char_length(url) BETWEEN 8 AND 300),
+  note TEXT NOT NULL DEFAULT '' CHECK (char_length(note) <= 200),
+  added_by TEXT REFERENCES app_members(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 `;

@@ -16,6 +16,7 @@ import { ResourcesVote } from "./resources-vote";
 import { AscendPrompt } from "./ascend-prompt";
 import { SpendingOrder } from "./spending-order";
 import { MemberHistoryPanel } from "./member-history";
+import { Builds } from "./builds";
 import { ClanTech } from "./clan-tech";
 import { MonthlyAwardsPanel } from "./monthly-awards";
 import { LeadershipSettings } from "./leadership-settings";
@@ -124,7 +125,7 @@ import {
 } from "@/lib/resources";
 import type { AscensionPillar, AscensionsResponse, ClanSettings, DashboardResponse, DewResponse, EntryResponse, Member, MembersResponse, SessionResponse, WarEstimate, WarRates, WarTech } from "@/lib/types";
 
-type View = "dashboard" | "resources" | "members" | "weeks" | "war" | "warWeek" | "spending" | "snipes" | "store" | "hoarding" | "warResults" | "vials" | "ranking" | "settings" | "tech" | "clan" | "me" | "status";
+type View = "dashboard" | "resources" | "members" | "weeks" | "war" | "warWeek" | "spending" | "snipes" | "store" | "hoarding" | "warResults" | "vials" | "ranking" | "settings" | "tech" | "builds" | "clan" | "me" | "status";
 const ADMIN_VIEWS: View[] = ["members", "hoarding", "ranking", "settings", "status"];
 type Icon = ComponentType<{
   size?: number;
@@ -147,6 +148,7 @@ const viewNames = {
   ranking: "Contribution Ranking",
   settings: "Settings",
   tech: "Clan Tech",
+  builds: "Builds",
   clan: "Clan",
   me: "Me",
   status: "Status board",
@@ -167,6 +169,7 @@ const VIEW_HREF: Record<View, string> = {
   hoarding: "/hoarding-watch",
   settings: "/settings",
   tech: "/clan-tech",
+  builds: "/builds",
   clan: "/clan",
   me: "/me",
   status: "/status",
@@ -183,7 +186,7 @@ const SECTIONS: { section: Section; label: string; short: string; icon: Icon; ta
   { section: "resources", label: "My Resources", short: "Resources", icon: Backpack, tabs: [{ view: "resources", label: "My Resources" }] },
   { section: "war", label: "War", short: "War", icon: Swords, tabs: [{ view: "warWeek", label: "This Week" }, { view: "spending", label: "Spending Order" }, { view: "war", label: "Points Calculator" }] },
   { section: "snipes", label: "Snipes", short: "Snipes", icon: Crosshair, tabs: [{ view: "snipes", label: "Snipes" }] },
-  { section: "clan", label: "Clan", short: "Clan", icon: Trophy, tabs: [{ view: "clan", label: "Rankings" }, { view: "warResults", label: "War Results" }, { view: "vials", label: "Vials" }, { view: "tech", label: "Clan Tech" }, { view: "weeks", label: "Weekly History" }] },
+  { section: "clan", label: "Clan", short: "Clan", icon: Trophy, tabs: [{ view: "clan", label: "Rankings" }, { view: "warResults", label: "War Results" }, { view: "vials", label: "Vials" }, { view: "tech", label: "Clan Tech" }, { view: "builds", label: "Builds" }, { view: "weeks", label: "Weekly History" }] },
   { section: "me", label: "Me", short: "Me", icon: CircleUserRound, tabs: [{ view: "me", label: "Me" }, { view: "store", label: "Reward Shop" }] },
   { section: "leadership", label: "Leadership", short: "Leadership", icon: ShieldCheck, admin: true, tabs: [{ view: "status", label: "Status board" }, { view: "members", label: "Members" }, { view: "ranking", label: "Ranking" }, { view: "hoarding", label: "Player Resource Management" }, { view: "settings", label: "Settings" }] },
 ];
@@ -742,6 +745,7 @@ function TrackerApp({ view }: { view: View }) {
                     : view === "members"
                       ? "Manage who can use the tracker."
                       : view === "tech" ? "The clan’s tech tree and what we spend vials on next."
+                      : view === "builds" ? "The strongest builds right now, updated after each game update."
                       : view === "clan" ? "How the clan is doing, and where you stand."
                       : view === "me" ? "Your numbers, your Clan Points and your settings."
                       : view === "status" ? "Every member’s week at a glance. Remind the ones who haven’t saved."
@@ -861,6 +865,8 @@ function TrackerApp({ view }: { view: View }) {
             <WarResults members={data.members} meId={user.id} admin={user.role === "ADMIN"} notify={notify} />
           ) : data && view === "tech" ? (
             <ClanTech notify={notify} />
+          ) : data && view === "builds" ? (
+            <Builds notify={notify} />
           ) : data && view === "settings" ? (
             <LeadershipSettings />
           ) : data && view === "hoarding" ? (

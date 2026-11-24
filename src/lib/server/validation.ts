@@ -203,3 +203,11 @@ export const earlyAskSchema = z.object({
 }).strict();
 /** Leaders approve or decline; the member who asked can cancel. */
 export const earlyDecisionSchema = z.object({ id: z.string().min(1).max(100), status: z.enum(["approved", "declined", "cancelled"]) }).strict();
+/** Leaders: a link on the Builds page to another guide. */
+export const buildLinkSchema = z.object({
+  title: z.string().trim().min(1, "Give the link a name.").max(80, "Keep the name under 80 characters."),
+  url: z.string().trim().max(300, "That link is too long.").refine((value) => /^https:\/\/[^\s/]+\.[^\s]+$/i.test(value), "Paste the full link, starting with https://."),
+  note: z.string().trim().max(200, "Keep the note under 200 characters.").optional(),
+}).strict();
+export const buildLinkRemoveSchema = z.object({ id: z.number().int().positive() }).strict();
+export const buildSettingsSchema = z.object({ discordEnabled: z.boolean() }).strict();
