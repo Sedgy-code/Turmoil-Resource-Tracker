@@ -9,7 +9,8 @@ import {
   type ResourceValues,
   type SummoningCosts,
 } from "../src/lib/resources";
-import { DEFAULT_WAR_RATES, estimateWar, WAR_ACTIVITIES, WarEstimateError } from "../src/lib/war";
+import { estimateWar, WAR_ACTIVITIES, WarEstimateError } from "../src/lib/war";
+import { TEST_RATES, useTestRates } from "./legacy-rates";
 import { DEW_ITEMS } from "../src/lib/dew";
 import type { Member, ResourceEntry, WarActivity } from "../src/lib/types";
 import { initializeSchema, openDatabase, type Database } from "../src/lib/server/db";
@@ -61,6 +62,7 @@ async function withDatabase(work: (db: Database) => Promise<void>) {
   const db = await openDatabase({ localPath: "memory://" });
   try {
     await initializeSchema(db);
+    await useTestRates(db);
     await work(db);
   } finally {
     await db.close();
@@ -115,7 +117,7 @@ test("war estimates count affordable summons per member and keep all activities 
     { fiveSkills: 200, mount: 50 },
     { newMountMerges: 1, eggMerges: 1, eggSummonMerges: 3 },
   );
-  const result = estimateWar([first, second], DEFAULT_WAR_RATES, ALL_ACTIVITIES, "historical");
+  const result = estimateWar([first, second], TEST_RATES, ALL_ACTIVITIES, "historical");
   const quantities = Object.fromEntries(result.rows.map((row) => [row.activity, row.quantity]));
   assert.deepEqual(quantities, {
     hammers: 7,
@@ -137,20 +139,20 @@ test("war estimates include only selected activities and respect editable scorin
     { fiveSkills: 150, mount: 40 },
     { eggMerges: 2, eggSummonMerges: 3 },
   );
-  const hammerOnly = estimateWar([bank], DEFAULT_WAR_RATES, ["hammers"]);
+  const hammerOnly = estimateWar([bank], TEST_RATES, ["hammers"]);
   assert.equal(hammerOnly.minimum, 2_000);
   assert.equal(hammerOnly.maximum, 5_000);
   assert.deepEqual(hammerOnly.rows.map((row) => row.activity), ["hammers"]);
   const changed = estimateWar([bank], {
-    ...DEFAULT_WAR_RATES,
+    ...TEST_RATES,
     mountSummons: 100,
     eggMerges: 20,
     eggSummonMerges: 30,
   }, ["mountSummons", "eggMerges", "eggSummonMerges"], "historical");
   assert.equal(changed.minimum, 430);
   assert.equal(changed.maximum, 430);
-  assert.deepEqual(estimateWar([bank], DEFAULT_WAR_RATES, []).rows, []);
-  assert.equal(estimateWar([], DEFAULT_WAR_RATES, ALL_ACTIVITIES).maximum, 0);
+  assert.deepEqual(estimateWar([bank], TEST_RATES, []).rows, []);
+  assert.equal(estimateWar([], TEST_RATES, ALL_ACTIVITIES).maximum, 0);
 });
 
 test("missing-cost notices apply only to selected activities with relevant positive inventory", () => {
@@ -162,17 +164,17 @@ test("missing-cost notices apply only to selected activities with relevant posit
   const unusedMergeCount = entry({ mountKeys: 100 }, EMPTY_SUMMONING_COSTS);
   const empty = entry({}, EMPTY_SUMMONING_COSTS);
   const banks = [missingBoth, unusedMergeCount, empty];
-  assert.equal(estimateWar(banks, DEFAULT_WAR_RATES, ALL_ACTIVITIES, "historical").missingCosts, 3);
-  assert.equal(estimateWar(banks, DEFAULT_WAR_RATES, ["newMountMerges"], "historical").missingCosts, 1);
-  assert.equal(estimateWar(banks, DEFAULT_WAR_RATES, ["skillSummons"], "historical").missingCosts, 1);
-  assert.equal(estimateWar(banks, DEFAULT_WAR_RATES, ["hammers", "eggMerges"], "historical").missingCosts, 0);
-  assert.equal(estimateWar(banks, DEFAULT_WAR_RATES, ["mountSummons", "newMountMerges"], "historical").missingCosts, 2);
+  assert.equal(estimateWar(banks, TEST_RATES, ALL_ACTIVITIES, "historical").missingCosts, 3);
+  assert.equal(estimateWar(banks, TEST_RATES, ["newMountMerges"], "historical").missingCosts, 1);
+  assert.equal(estimateWar(banks, TEST_RATES, ["skillSummons"], "historical").missingCosts, 1);
+  assert.equal(estimateWar(banks, TEST_RATES, ["hammers", "eggMerges"], "historical").missingCosts, 0);
+  assert.equal(estimateWar(banks, TEST_RATES, ["mountSummons", "newMountMerges"], "historical").missingCosts, 2);
 });
 
 test("historical legacy banks without planning details retain their original action model", () => {
   const legacy = entry({ eggsPetsTotal: 500, mountKeys: 120, mountsToMerge: 2 });
   delete legacy.planningDetails;
-  const result = estimateWar([legacy], DEFAULT_WAR_RATES, ["newMountMerges", "eggMerges", "eggSummonMerges"], "historical");
+  const result = estimateWar([legacy], TEST_RATES, ["newMountMerges", "eggMerges", "eggSummonMerges"], "historical");
   assert.equal(result.minimum, 0);
   assert.equal(result.maximum, 0);
   assert.equal(result.missingCosts, 0);
@@ -184,7 +186,7 @@ test("whole summon estimates retain affordable actions at decimal cost boundarie
     { fiveSkills: 175.5, mount: 43.875 },
     { newMountMerges: 9 },
   );
-  const result = estimateWar([priced], DEFAULT_WAR_RATES, ["skillSummons", "mountSummons", "newMountMerges"], "historical");
+  const result = estimateWar([priced], TEST_RATES, ["skillSummons", "mountSummons", "newMountMerges"], "historical");
   assert.deepEqual(result.rows.map(({ activity, quantity }) => ({ activity, quantity })), [
     { activity: "skillSummons", quantity: 10 },
     { activity: "mountSummons", quantity: 8 },
@@ -194,13 +196,13 @@ test("whole summon estimates retain affordable actions at decimal cost boundarie
 
 test("skill estimates match the reference inventory and round each member before combining", () => {
   const reference = entry({ skillTickets: 122_000 }, { fiveSkills: 160, mount: 40 });
-  const result = estimateWar([reference], DEFAULT_WAR_RATES, ["skillSummons"]);
+  const result = estimateWar([reference], TEST_RATES, ["skillSummons"]);
   assert.equal(result.rows[0].quantity, 3_812);
   assert.equal(result.minimum, 857_700);
   assert.equal(result.maximum, 857_700);
   const first = entry({ skillTickets: 159 }, { fiveSkills: 200, mount: 40 });
   const second = entry({ skillTickets: 159 }, { fiveSkills: 200, mount: 40 });
-  assert.equal(estimateWar([first, second], DEFAULT_WAR_RATES, ["skillSummons"]).rows[0].quantity, 6);
+  assert.equal(estimateWar([first, second], TEST_RATES, ["skillSummons"]).rows[0].quantity, 6);
 });
 
 test("war estimates reject an unsafe activity score and an unsafe total of individually safe rows", () => {
@@ -208,13 +210,13 @@ test("war estimates reject an unsafe activity score and an unsafe total of indiv
     error instanceof WarEstimateError && error.code === "ESTIMATE_TOO_LARGE";
   const limit = Number.MAX_SAFE_INTEGER;
   const boundary = entry({ hammers: limit });
-  const boundaryRates = { ...DEFAULT_WAR_RATES, hammersMin: 1, hammersMax: 1, mountMerges: 1 };
+  const boundaryRates = { ...TEST_RATES, hammersMin: 1, hammersMax: 1, mountMerges: 1 };
   const exact = estimateWar([boundary], boundaryRates, ["hammers"]);
   assert.equal(exact.minimum, limit);
   assert.equal(exact.maximum, limit);
-  assert.throws(() => estimateWar([boundary], DEFAULT_WAR_RATES, ["hammers"]), tooLarge);
-  const maximumOnly = entry({ hammers: Math.floor(limit / DEFAULT_WAR_RATES.hammersMax) + 1 });
-  assert.throws(() => estimateWar([maximumOnly], DEFAULT_WAR_RATES, ["hammers"]), tooLarge);
+  assert.throws(() => estimateWar([boundary], TEST_RATES, ["hammers"]), tooLarge);
+  const maximumOnly = entry({ hammers: Math.floor(limit / TEST_RATES.hammersMax) + 1 });
+  assert.throws(() => estimateWar([maximumOnly], TEST_RATES, ["hammers"]), tooLarge);
 
   const combined = entry({ hammers: limit - 1, mountsToMerge: 2 });
   assert.equal(estimateWar([combined], boundaryRates, ["hammers"]).maximum, limit - 1);
@@ -263,7 +265,7 @@ test("snipe archives freeze member profiles, responses and estimates against lat
     assert.equal(archived.archived, true);
     assert.equal(archived.estimate.minimum, 2_210);
     await saveBank(db, member, { hammers: 900 });
-    await db.query("INSERT INTO clan_settings (id,war_rates) VALUES ('clan',$1::jsonb)", [JSON.stringify({ mountSummons: 1 })]);
+    await db.query("UPDATE clan_settings SET war_base_rates=$1::jsonb WHERE id='clan'", [JSON.stringify({ mountSummons: 1 })]);
     await db.query("UPDATE app_members SET username='Changed name',active=FALSE WHERE id=$1", [member.id]);
     const listed = (await listSnipes(admin, db)).plans[0];
     assert.deepEqual(listed, archived);

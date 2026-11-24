@@ -38,7 +38,7 @@ import { EggIcon, EggshellIcon, HammerIcon, HorseshoeIcon, KeyIcon, RESOURCE_ICO
 import { announceClanPointsUpdate } from "@/lib/clan-points";
 import { SNIPE_ANSWERED } from "@/lib/snipe-day";
 import { MemberAvatar as Avatar, MemberName, MemberTitle } from "./member-identity";
-import { DEFAULT_WAR_RATES, WAR_ACTIVITIES, estimateWar, warBoost } from "@/lib/war";
+import { DEFAULT_WAR_RATES, WAR_ACTIVITIES, estimateWar, warBoost, boostedRates } from "@/lib/war";
 import { assessBankCompleteness } from "@/lib/completeness";
 import { filterPlanningIssues, memberPlanningIssues, type PlanningIssueKey } from "@/lib/planning-completeness";
 import { MissingDataIndicator } from "./missing-data-indicator";
@@ -573,7 +573,7 @@ function TrackerApp({ view }: { view: View }) {
       </div>}
     </div>
     {warEstimateError && <div className="error-banner" role="alert">{t("War estimate unavailable:")} {t(warEstimateError)}</div>}
-    <ClanArsenal data={current} estimate={dashboardWar} rates={warRates} estimateError={warEstimateError} snapshotId={snapshotId} />
+    <ClanArsenal data={current} estimate={dashboardWar} rates={boostedRates(warRates, warBoost(warTech, null))} estimateError={warEstimateError} snapshotId={snapshotId} />
     {between}
     <MemberResources data={current} week={week} admin={user.role === "ADMIN"} snapshotId={snapshotId} />
   </>;

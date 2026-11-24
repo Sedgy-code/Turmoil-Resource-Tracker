@@ -14,15 +14,21 @@ export const WAR_ACTIVITIES: readonly {
   { key: "eggSummonMerges", label: "Egg/pet summon then merge", description: "Expected bonus pets: eggshells ÷ 100 × extra pet summon %." },
 ];
 
+/**
+ * The game's base war points per action, before any tech: the official "Clan War Day Actions"
+ * table in the Forge Master Discord (guides-and-tips, Nov 2026). Forging is 1–3 points a hammer,
+ * by equipment age. Clan tech ("War Points From …" and "Clan War Day …", 4% a level, both added
+ * together) goes on top in the background: see warBoost. With both maxed, 125 becomes 225.
+ */
 export const DEFAULT_WAR_RATES: WarRates = {
-  hammersMin: 2,
-  hammersMax: 5,
-  skillSummons: 225,
-  mountSummons: 1080,
-  newMountMerges: 1080,
-  mountMerges: 1080,
-  eggMerges: 2250,
-  eggSummonMerges: 2250,
+  hammersMin: 1,
+  hammersMax: 3,
+  skillSummons: 125,
+  mountSummons: 600,
+  newMountMerges: 600,
+  mountMerges: 600,
+  eggMerges: 1250,
+  eggSummonMerges: 1250,
 };
 
 function whole(value: unknown): bigint {
@@ -124,6 +130,21 @@ export function warBoost(tech: WarTech | null | undefined, day: number | null): 
 /** A rate with its clan tech bonus, for showing "points each". */
 export function boostedRate(rate: number, percent = 0): number {
   return Math.round(rate * (100 + percent)) / 100;
+}
+
+/** Every rate with its clan tech bonus: the points each action is worth, as members see them. */
+export function boostedRates(rates: WarRates, boost: Partial<Record<WarActivity, number>> = {}): WarRates {
+  const each = (key: WarActivity, rate: number) => boostedRate(rate, boost[key] ?? 0);
+  return {
+    hammersMin: each("hammers", rates.hammersMin),
+    hammersMax: each("hammers", rates.hammersMax),
+    skillSummons: each("skillSummons", rates.skillSummons),
+    mountSummons: each("mountSummons", rates.mountSummons),
+    newMountMerges: each("newMountMerges", rates.newMountMerges),
+    mountMerges: each("mountMerges", rates.mountMerges),
+    eggMerges: each("eggMerges", rates.eggMerges),
+    eggSummonMerges: each("eggSummonMerges", rates.eggSummonMerges),
+  };
 }
 
 /** Sum per-member actions; current chance estimates retain fractional expectations. */

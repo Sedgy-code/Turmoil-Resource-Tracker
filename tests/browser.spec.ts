@@ -12,6 +12,8 @@ import type {
   SessionResponse,
 } from "../src/lib/types";
 import { CHANCE_PLANNING_DETAILS, EMPTY_RESOURCES, RESOURCE_FIELDS } from "../src/lib/resources";
+// The Hub's default rates (no clan tech is saved in the test database, so these are the points shown).
+import { DEFAULT_WAR_RATES as R } from "../src/lib/war";
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
 const executablePath =
@@ -230,7 +232,7 @@ test("desktop resources persist, update live totals, preserve history, and expor
     await page.getByRole("link", { name: "Home", exact: true }).click();
     const hammerCard = page.locator(".stat-card").filter({ hasText: "Hammers" });
     const format = new Intl.NumberFormat("en-US");
-    await expect(hammerCard.locator(".war-point-range strong")).toHaveText([format.format(saved.totals.hammers * 2), format.format(saved.totals.hammers * 5)]);
+    await expect(hammerCard.locator(".war-point-range strong")).toHaveText([format.format(saved.totals.hammers * R.hammersMin), format.format(saved.totals.hammers * R.hammersMax)]);
     await expect(hammerCard.locator(".arsenal-note")).toContainText("2–5 points per hammer.");
     // The live bank remains saved while completed weekly snapshots stay fixed.
     expect((await dashboard(request, previous.week)).entries).toEqual(previous.entries);
@@ -240,22 +242,22 @@ test("desktop resources persist, update live totals, preserve history, and expor
     const wholeSkills = saved.entries.reduce((sum, entry) => sum + (entry.summoningCosts.fiveSkills > 0
       ? Math.floor(entry.resources.skillTickets * 5 / entry.summoningCosts.fiveSkills) : 0), 0);
     await expect(page.locator(".stat-card").filter({ hasText: "Skill Tickets" })
-      .locator(".war-points-total")).toHaveText(new Intl.NumberFormat("en-US").format(wholeSkills * 225));
+      .locator(".war-points-total")).toHaveText(new Intl.NumberFormat("en-US").format(wholeSkills * R.skillSummons));
     await expect(page.locator(".stat-card").filter({ hasText: "Mounts to Merge" })
-      .locator(".war-points-total")).toHaveText(new Intl.NumberFormat("en-US").format(saved.totals.mountsToMerge * 1_080));
+      .locator(".war-points-total")).toHaveText(new Intl.NumberFormat("en-US").format(saved.totals.mountsToMerge * R.mountMerges));
     const availableMounts = saved.entries.reduce((sum, entry) => sum + (entry.summoningCosts.mount > 0
       ? Math.floor(entry.resources.mountKeys / entry.summoningCosts.mount) : 0), 0);
     const bonusMounts = saved.entries.reduce((sum, entry) => sum + (entry.summoningCosts.mount > 0
       ? Math.floor(entry.resources.mountKeys / entry.summoningCosts.mount) * (entry.planningDetails?.extraMountChancePercent ?? 0) / 100 : 0), 0);
     const extraPets = saved.entries.reduce((sum, entry) => sum + entry.resources.eggshellsTotal / 100
       * (entry.planningDetails?.extraPetSummonPercent ?? 0) / 100, 0);
-    const mountPoints = availableMounts * 1080 + Math.round(bonusMounts * 1080);
-    const eggPoints = saved.totals.eggsPetsTotal * 2250 + Math.round(extraPets * 2250);
+    const mountPoints = availableMounts * R.mountSummons + Math.round(bonusMounts * R.newMountMerges);
+    const eggPoints = saved.totals.eggsPetsTotal * R.eggMerges + Math.round(extraPets * R.eggSummonMerges);
     await expect(page.locator(".arsenal-mountKeys .war-points-total")).toHaveText(format.format(mountPoints));
     await expect(page.locator(".arsenal-eggsPetsTotal .war-points-total")).toHaveText(format.format(eggPoints));
-    const fixedPoints = wholeSkills * 225 + mountPoints + eggPoints + saved.totals.mountsToMerge * 1080;
+    const fixedPoints = wholeSkills * R.skillSummons + mountPoints + eggPoints + saved.totals.mountsToMerge * R.mountMerges;
     await expect(page.locator(".arsenal-summary .war-point-range strong")).toHaveText([
-      format.format(fixedPoints + saved.totals.hammers * 2), format.format(fixedPoints + saved.totals.hammers * 5),
+      format.format(fixedPoints + saved.totals.hammers * R.hammersMin), format.format(fixedPoints + saved.totals.hammers * R.hammersMax),
     ]);
     const downloadPromise = page.waitForEvent("download");
     await page.getByRole("button", { name: "Export CSV", exact: true }).click();
@@ -502,7 +504,7 @@ test("personal summoning costs persist and enforce required decimal ranges", asy
     const skillCard = page.locator(".stat-card").filter({ hasText: "Skill Tickets" });
     const mountCard = page.locator(".arsenal-mountKeys");
     await expect(skillCard.locator(".arsenal-metric").filter({ hasText: "Total skill summons" }).locator("strong")).toHaveText(new Intl.NumberFormat("en-US").format(saved.summons.skills));
-    await expect(skillCard.locator(".war-points-total")).toHaveText(new Intl.NumberFormat("en-US").format(saved.summons.skills * 225));
+    await expect(skillCard.locator(".war-points-total")).toHaveText(new Intl.NumberFormat("en-US").format(saved.summons.skills * R.skillSummons));
     await expect(mountCard.locator(".arsenal-metric").filter({ hasText: "Total mount summons" }).locator("strong")).toHaveText(new Intl.NumberFormat("en-US").format(saved.summons.mounts));
     const headers = page.getByRole("table").locator("thead");
     await expect(headers).not.toContainText(/summon|cost/i);
@@ -544,7 +546,7 @@ test("personal summoning costs persist and enforce required decimal ranges", asy
     } else {
       await expect(skillCard.locator(".summon-warning").filter({ hasText: "summon cost" })).toHaveCount(0);
     }
-    await expect(skillCard.locator(".war-points-total")).toHaveText(new Intl.NumberFormat("en-US").format(cleared.summons.skills * 225));
+    await expect(skillCard.locator(".war-points-total")).toHaveText(new Intl.NumberFormat("en-US").format(cleared.summons.skills * R.skillSummons));
     if (cleared.summons.missingMountCosts > 0) {
       await expect(mountCard.locator(".summon-warning").filter({ hasText: "summon cost" })).toContainText(String(cleared.summons.missingMountCosts));
     } else {

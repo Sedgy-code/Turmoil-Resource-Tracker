@@ -16,7 +16,8 @@ import type {
   WarActivity,
 } from "../src/lib/types";
 import { CHANCE_PLANNING_DETAILS, EMPTY_RESOURCES, RESOURCE_FIELDS } from "../src/lib/resources";
-import { DEFAULT_WAR_RATES, WAR_ACTIVITIES } from "../src/lib/war";
+import { WAR_ACTIVITIES } from "../src/lib/war";
+import { TEST_RATES } from "./legacy-rates";
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
 test.use({
@@ -227,7 +228,7 @@ test("war estimates derive fractional bonus actions from per-member chances acro
   const { entry } = await ownBank(request);
   const { settings } = await read<{ settings: ClanSettings }>(request, "/api/settings");
   try {
-    await saveSettings(request, { ...settings, warRates: DEFAULT_WAR_RATES });
+    await saveSettings(request, { ...settings, warRates: TEST_RATES });
     await saveBank(request, {
       ...entry,
       resources: { ...EMPTY_RESOURCES, skillTickets: 600, mountKeys: 75, hammers: 10, mountsToMerge: 4, eggsPetsTotal: 20, eggshellsTotal: 1250 },

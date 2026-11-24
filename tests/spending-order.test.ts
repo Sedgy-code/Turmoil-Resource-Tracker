@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
-import { DEFAULT_WAR_RATES } from "../src/lib/war";
+import { TEST_RATES, useTestRates } from "./legacy-rates";
 import { ascendCheck, buildOrder, guideTargets, orderDay, orderWeek, resourcesOnDay, scoringDays } from "../src/lib/spending-order";
 import type { Member, ResourceEntry } from "../src/lib/types";
 import { EMPTY_RESOURCES, type ResourceValues } from "../src/lib/resources";
@@ -86,7 +86,7 @@ test("snipers go first, then members ascending that pillar, then the biggest sto
   // Cy is in the snipe (and ascending); Ana is ascending skills; Ed is ascending pets only; Di is away (and ascending).
   const ascending = new Map([["c", ["skills" as const]], ["a", ["skills" as const]], ["e", ["pets" as const]], ["d", ["skills" as const]]]);
   const line = buildOrder({
-    resource: "skills", members, entries, rates: DEFAULT_WAR_RATES, ascending,
+    resource: "skills", members, entries, rates: TEST_RATES, ascending,
     snipers: new Set(["c"]), date: "2026-11-26", day: 3, today: true,
   });
   assert.deepEqual(line.rows.map((row) => [row.member.username, row.state, row.place]), [
@@ -97,7 +97,7 @@ test("snipers go first, then members ascending that pillar, then the biggest sto
   // 90,000 tickets at 200 for 5 = 2,250 skill summons × 225 points.
   assert.equal(line.rows[2].points, 2_250 * 225);
   // Back from holiday by Day 5, and no snipe that day: Di is back in the order, biggest first.
-  const later = buildOrder({ resource: "skills", members, entries, rates: DEFAULT_WAR_RATES, ascending: new Map(), snipers: new Set(), date: "2026-11-28", day: 5, today: false });
+  const later = buildOrder({ resource: "skills", members, entries, rates: TEST_RATES, ascending: new Map(), snipers: new Set(), date: "2026-11-28", day: 5, today: false });
   assert.deepEqual(later.rows.map((row) => [row.member.username, row.place]), [["Di", 1], ["Bo", 2], ["Ed", 3], ["Ana", 4], ["Cy", 5]]);
 });
 
@@ -107,7 +107,7 @@ test("the post is an embed like the app's table, in English, never pinging anyon
   assert.equal(plainName("*Star*_x @everyone"), "\\*Star\\*\\_x @\u200beveryone");
   const members = [person("a", "Ana"), person("b", "Bo"), person("c", "Cy", "2026-11-30"), person("d", "Di"), person("e", "Ed")];
   const line = buildOrder({
-    resource: "skills", members, rates: DEFAULT_WAR_RATES, ascending: new Map([["d", ["skills" as const]]]), snipers: new Set(["a"]), date: "2026-11-26", day: 3, today: true,
+    resource: "skills", members, rates: TEST_RATES, ascending: new Map([["d", ["skills" as const]]]), snipers: new Set(["a"]), date: "2026-11-26", day: 3, today: true,
     entries: [
       entry("a", { skillTickets: 50_000 }), entry("b", { skillTickets: 90_000 }), entry("c", { skillTickets: 1_000 }),
       entry("d", { skillTickets: 30_000 }), entry("e", { skillTickets: 20_000 }, { skillLevel: 82 }),
@@ -141,7 +141,7 @@ test("the post is an embed like the app's table, in English, never pinging anyon
   const many = Array.from({ length: 120 }, (_, index) => person(`m${index}`, `Member number ${index} with a long name`));
   const long = buildOrder({
     resource: "skills", members: many, entries: many.map((member, index) => entry(member.id, { skillTickets: 10_000 + index })),
-    rates: DEFAULT_WAR_RATES, ascending: new Map(), snipers: new Set(), date: "2026-11-26", day: 3, today: true,
+    rates: TEST_RATES, ascending: new Map(), snipers: new Set(), date: "2026-11-26", day: 3, today: true,
   });
   const cut = spendingPost(3, [long], "https://tracker.example").embed;
   const size = cut.title.length + cut.description.length + cut.footer.length + cut.author.name.length + cut.fields.reduce((total, field) => total + field.name.length + field.value.length, 0);
@@ -165,6 +165,7 @@ const previous = { ...process.env };
 before(async () => {
   db = await openDatabase({ localPath: "memory://" });
   await initializeSchema(db);
+  await useTestRates(db);
 });
 after(async () => {
   await db.close();
