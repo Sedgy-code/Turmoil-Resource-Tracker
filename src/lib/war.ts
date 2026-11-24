@@ -1,4 +1,4 @@
-import type { ResourceEntry, WarActivity, WarEstimate, WarRates } from "./types";
+import type { ResourceEntry, WarActivity, WarEstimate, WarRates, WarTech } from "./types";
 
 export const WAR_ACTIVITIES: readonly {
   key: WarActivity;
@@ -77,11 +77,53 @@ function actionQuantity(scaled: bigint): number {
   return Number(scaled / ACTION_SCALE) + Number(scaled % ACTION_SCALE) / Number(ACTION_SCALE);
 }
 
-function roundedPoints(scaledQuantity: bigint, rate: number): number {
+function roundedPoints(scaledQuantity: bigint, rate: number, percent = 0): number {
   if (!Number.isSafeInteger(rate) || rate < 0) throw new WarEstimateError();
   // Keep fractional expected actions through the clan sum, then round points
-  // once per activity. Every operand stays exact until the display conversion.
-  return safeNumber((scaledQuantity * BigInt(rate) + ACTION_SCALE / 2n) / ACTION_SCALE);
+  // once per activity. Every operand stays exact until the display conversion,
+  // including the clan tech bonus (a whole percent).
+  const bonus = BigInt(100 + Math.max(0, Math.round(percent)));
+  const scale = ACTION_SCALE * 100n;
+  return safeNumber((scaledQuantity * BigInt(rate) * bonus + scale / 2n) / scale);
+}
+
+/** Clan tech that adds war points to each activity, 4% a level (up to 10): hammers are forging. */
+const SOURCE_TECH: Record<WarActivity, string> = {
+  hammers: "war-points-from-forging",
+  skillSummons: "war-points-from-skill-summon",
+  mountSummons: "war-points-from-mount-summon",
+  newMountMerges: "war-points-from-mount-merge",
+  mountMerges: "war-points-from-mount-merge",
+  eggMerges: "war-points-from-pet-merge",
+  eggSummonMerges: "war-points-from-pet-merge",
+};
+export const WAR_TECH_PER_LEVEL = 4;
+
+/** The clan's war point bonuses (percent) from its Clan Tech levels. */
+export function warTechFromLevels(levels: Record<string, number>): WarTech {
+  const percent = (key: string) => Math.max(0, Math.min(10, Math.floor(Number(levels[key]) || 0))) * WAR_TECH_PER_LEVEL;
+  return {
+    activity: Object.fromEntries(WAR_ACTIVITIES.map(({ key }) => [key, percent(SOURCE_TECH[key])])) as WarTech["activity"],
+    day: Object.fromEntries([1, 2, 3, 4, 5, 6].map((day) => [day, percent(`war-points-on-day-${day}`)])),
+  };
+}
+
+/**
+ * Each activity's clan tech bonus (percent) on a war day: its "War Points From …" plus that day's
+ * "War Points On Day …", added together. Without a day (a general estimate) the clan days' bonus
+ * is the lowest of Days 1–5.
+ */
+export function warBoost(tech: WarTech | null | undefined, day: number | null): Partial<Record<WarActivity, number>> {
+  if (!tech) return {};
+  const onDay = day !== null && day >= 1 && day <= 6
+    ? tech.day[day] ?? 0
+    : Math.min(...[1, 2, 3, 4, 5].map((value) => tech.day[value] ?? 0));
+  return Object.fromEntries(WAR_ACTIVITIES.map(({ key }) => [key, (tech.activity[key] ?? 0) + onDay]));
+}
+
+/** A rate with its clan tech bonus, for showing "points each". */
+export function boostedRate(rate: number, percent = 0): number {
+  return Math.round(rate * (100 + percent)) / 100;
 }
 
 /** Sum per-member actions; current chance estimates retain fractional expectations. */
@@ -90,6 +132,8 @@ export function estimateWar(
   rates: WarRates,
   activities: WarActivity[],
   mode: "current" | "historical" = "current",
+  /** Clan tech bonus per activity, in percent (see warBoost). */
+  boost: Partial<Record<WarActivity, number>> = {},
 ): WarEstimate {
   const selected = new Set(activities);
   const quantities: Record<WarActivity, bigint> = {
@@ -135,7 +179,8 @@ export function estimateWar(
     const scaledQuantity = quantities[key];
     const minimumRate = key === "hammers" ? rates.hammersMin : rates[key];
     const maximumRate = key === "hammers" ? rates.hammersMax : rates[key];
-    return { activity: key, label, quantity: actionQuantity(scaledQuantity), minimum: roundedPoints(scaledQuantity, minimumRate), maximum: roundedPoints(scaledQuantity, maximumRate) };
+    const percent = boost[key] ?? 0;
+    return { activity: key, label, quantity: actionQuantity(scaledQuantity), minimum: roundedPoints(scaledQuantity, minimumRate, percent), maximum: roundedPoints(scaledQuantity, maximumRate, percent) };
   });
   return {
     rows,

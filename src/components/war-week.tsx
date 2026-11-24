@@ -8,9 +8,9 @@ import { WAR_DAYS, countdown, nextWarWeek, utcDateTime, warDay, warStart, warWee
 import { activityPoints, dayPoints, pillarCounts, rankPairs, twinDays, type DayPair } from "@/lib/clan-day-planner";
 import { PILLAR_ICONS, RESOURCE_ICONS } from "./resource-icons";
 import { PILLAR_LABELS } from "@/lib/ascension";
-import { estimateWar, WAR_ACTIVITIES } from "@/lib/war";
+import { estimateWar, WAR_ACTIVITIES, warBoost } from "@/lib/war";
 import { useLanguage, useT, type Translate } from "@/lib/i18n";
-import type { AscensionPillar, AscensionsResponse, ClanDayVotes, ClanDaysResponse, DashboardResponse, WarRates } from "@/lib/types";
+import type { AscensionPillar, AscensionsResponse, ClanDayVotes, ClanDaysResponse, DashboardResponse, WarRates, WarTech } from "@/lib/types";
 import { TermHelp } from "./first-visit";
 import { NextWarVote } from "./next-war-vote";
 import "./war-week.css";
@@ -124,7 +124,7 @@ export function voteSummary(counts: number[], dayLabel: (day: number) => string)
     .sort((a, b) => b.count - a.count || a.day - b.day).map((item) => `${dayLabel(item.day)} (${item.count})`).join(", ");
 }
 
-export function WarWeek({ data, rates, admin = false, notify }: { data: DashboardResponse; rates: WarRates; admin?: boolean; notify?: (message: string, error?: boolean) => void }) {
+export function WarWeek({ data, rates, tech, admin = false, notify }: { data: DashboardResponse; rates: WarRates; tech?: WarTech; admin?: boolean; notify?: (message: string, error?: boolean) => void }) {
   const t = useT();
   const now = useNow();
   const current = warDay(now);
@@ -171,7 +171,7 @@ export function WarWeek({ data, rates, admin = false, notify }: { data: Dashboar
       {admin && <p className="war-week-note">{lockedToday ? t("This war’s clan days are locked on battle day. Pick the next war’s days below.") : t("Tap the days the clan will spend on. Members see them straight away.")}</p>}
       {admin && voted && !votes?.picked.length && <p className="war-week-note war-clan-votes">🗳️ {t("Members’ votes for the next war: {votes}", { votes: voted })}</p>}
     </section>
-    {admin && current.day >= 6 && <ClanDayPlanner data={data} rates={rates} votes={votes} target={planningNext ? clan : nextClan} week={nextWarWeek(now)} starts={current.weekEnd} now={now} notify={notify} />}
+    {admin && current.day >= 6 && <ClanDayPlanner data={data} rates={rates} tech={tech} votes={votes} target={planningNext ? clan : nextClan} week={nextWarWeek(now)} starts={current.weekEnd} now={now} notify={notify} />}
     <p className="war-week-note">{t("Each war day starts at 00:00 UTC. Leadership may ask you to hold resources for a snipe, so check announcements before you spend.")}</p>
     <div className="war-week-grid">
       {WAR_DAYS.map((entry) => {
@@ -205,9 +205,10 @@ const compact = (value: number) => new Intl.NumberFormat("en", { notation: "comp
  * Leadership's helper for picking the next war's two clan days (Day 6 is always fought): every pair
  * of days ranked by the clan's saved resources, with members' votes and who is ascending what.
  */
-function ClanDayPlanner({ data, rates, votes, target, week, starts, now, notify }: {
+function ClanDayPlanner({ data, rates, tech, votes, target, week, starts, now, notify }: {
   data: DashboardResponse;
   rates: WarRates;
+  tech?: WarTech;
   votes: ClanDayVotes | null;
   target: ReturnType<typeof useClanDays>;
   week: string;
@@ -227,9 +228,10 @@ function ClanDayPlanner({ data, rates, votes, target, week, starts, now, notify 
     return () => { cancelled = true; };
   }, [week]);
   const points = useMemo(() => {
-    try { return activityPoints(estimateWar(data.entries, rates, WAR_ACTIVITIES.map(({ key }) => key), "current")); }
+    // With the clan tech bonuses (the clan days' bonus is the same for every day pair the clan has maxed).
+    try { return activityPoints(estimateWar(data.entries, rates, WAR_ACTIVITIES.map(({ key }) => key), "current", warBoost(tech, null))); }
     catch { return activityPoints(null); }
-  }, [data.entries, rates]);
+  }, [data.entries, rates, tech]);
   const pairs = rankPairs(points, votes?.pairs ?? {}, ascending);
   const mostVoted = pairs.reduce<DayPair | null>((best, pair) => pair.votes > (best?.votes ?? 0) ? pair : best, null);
   const shown = pairs.slice(0, 4);

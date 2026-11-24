@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import { awayWeeksFrom, savingStreak } from "../streak";
 import { COSMETIC_CATEGORIES, DEW_ITEMS, equippedCosmetics } from "../dew";
 import { currentWeek } from "../resources";
-import type { CosmeticCategory, DewResponse, Member, ResourceEntry, SnipePlan, SnipesResponse, WarActivity, WarRates } from "../types";
-import { estimateWar, WAR_ACTIVITIES } from "../war";
-import { nextWarWeek } from "../war-calendar";
+import type { ClanSettings, CosmeticCategory, DewResponse, Member, ResourceEntry, SnipePlan, SnipesResponse, WarActivity, WarRates } from "../types";
+import { estimateWar, WAR_ACTIVITIES, warBoost } from "../war";
+import { nextWarWeek, warDay } from "../war-calendar";
 import { database, lockAdministration, type Database, type SqlConnection } from "./db";
 import { ApiError } from "./errors";
 import { entryFromRow, iso, memberFromRow } from "./mappers";
@@ -44,7 +44,7 @@ function jsonValue<T>(value: unknown): T {
   return (typeof value === "string" ? JSON.parse(value) : value) as T;
 }
 
-async function planningContext(tx: SqlConnection): Promise<{ members: Member[]; entries: ResourceEntry[]; rates: WarRates }> {
+async function planningContext(tx: SqlConnection): Promise<{ members: Member[]; entries: ResourceEntry[]; rates: WarRates; warTech: ClanSettings["warTech"] }> {
   const memberRows = await tx.query("SELECT * FROM app_members WHERE active = TRUE ORDER BY LOWER(COALESCE(NULLIF(display_name, ''), username)), id");
   const bankRows = await tx.query(`SELECT b.*, COALESCE(NULLIF(editor.display_name, ''), editor.username) AS updated_by_username
     FROM member_banks b JOIN app_members owner ON owner.id = b.member_id
@@ -54,6 +54,7 @@ async function planningContext(tx: SqlConnection): Promise<{ members: Member[]; 
     members: memberRows.map(memberFromRow),
     entries: bankRows.map((row) => entryFromRow({ ...row, id: `bank:${row.member_id}`, week_start: currentWeek() })),
     rates: settings.warRates,
+    warTech: settings.warTech,
   };
 }
 
@@ -70,8 +71,10 @@ async function planFromRow(tx: SqlConnection, row: Record<string, unknown>, cont
     memberId: String(response.member_id), answer: response.answer as "yes" | "no", updatedAt: iso(response.updated_at)!,
   }));
   const participantIds = new Set(responses.filter((response) => response.answer === "yes").map((response) => response.memberId));
+  // Clan tech war point bonuses for the war day the snipe is on.
+  const boost = warBoost(live.warTech, warDay(new Date(iso(row.starts_at)!)).day);
   const participants = live.members.filter((member) => participantIds.has(member.id)).map((member) => ({
-    member, estimate: estimateWar(live.entries.filter((entry) => entry.memberId === member.id), live.rates, activities),
+    member, estimate: estimateWar(live.entries.filter((entry) => entry.memberId === member.id), live.rates, activities, "current", boost),
   }));
   return {
     id: String(row.id), title: String(row.title), startsAt: iso(row.starts_at)!, activities,
@@ -80,7 +83,7 @@ async function planFromRow(tx: SqlConnection, row: Record<string, unknown>, cont
     responses, participants,
     attendees: attendeeRows.map((attendee) => ({ memberId: String(attendee.member_id), confirmedBy: String(attendee.confirmed_by), confirmedAt: iso(attendee.confirmed_at)!, member: memberFromRow(attendee) })),
     counts: { yes: participants.length, no: responses.filter((response) => response.answer === "no").length, unanswered: live.members.length - responses.length },
-    estimate: estimateWar(live.entries.filter((entry) => participantIds.has(entry.memberId)), live.rates, activities),
+    estimate: estimateWar(live.entries.filter((entry) => participantIds.has(entry.memberId)), live.rates, activities, "current", boost),
   };
 }
 

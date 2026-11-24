@@ -38,7 +38,7 @@ import { EggIcon, EggshellIcon, HammerIcon, HorseshoeIcon, KeyIcon, RESOURCE_ICO
 import { announceClanPointsUpdate } from "@/lib/clan-points";
 import { SNIPE_ANSWERED } from "@/lib/snipe-day";
 import { MemberAvatar as Avatar, MemberName, MemberTitle } from "./member-identity";
-import { DEFAULT_WAR_RATES, WAR_ACTIVITIES, estimateWar } from "@/lib/war";
+import { DEFAULT_WAR_RATES, WAR_ACTIVITIES, estimateWar, warBoost } from "@/lib/war";
 import { assessBankCompleteness } from "@/lib/completeness";
 import { filterPlanningIssues, memberPlanningIssues, type PlanningIssueKey } from "@/lib/planning-completeness";
 import { MissingDataIndicator } from "./missing-data-indicator";
@@ -121,19 +121,7 @@ import {
   type ResourceValues,
   type SummoningCosts,
 } from "@/lib/resources";
-import type {
-  AscensionPillar,
-  AscensionsResponse,
-  ClanSettings,
-  DashboardResponse,
-  DewResponse,
-  EntryResponse,
-  Member,
-  MembersResponse,
-  SessionResponse,
-  WarEstimate,
-  WarRates,
-} from "@/lib/types";
+import type { AscensionPillar, AscensionsResponse, ClanSettings, DashboardResponse, DewResponse, EntryResponse, Member, MembersResponse, SessionResponse, WarEstimate, WarRates, WarTech } from "@/lib/types";
 
 type View = "dashboard" | "resources" | "members" | "weeks" | "war" | "warWeek" | "spending" | "snipes" | "store" | "hoarding" | "warResults" | "vials" | "ranking" | "settings" | "tech" | "clan" | "me" | "status";
 const ADMIN_VIEWS: View[] = ["members", "hoarding", "ranking", "settings", "status"];
@@ -347,6 +335,8 @@ function TrackerApp({ view }: { view: View }) {
   const [week, setWeek] = useState(currentWeek());
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [warRates, setWarRates] = useState(DEFAULT_WAR_RATES);
+  // The Clan Tech page's war point bonuses, added on top of the rates.
+  const [warTech, setWarTech] = useState<WarTech | undefined>(undefined);
   const [loadedSnapshotId, setLoadedSnapshotId] = useState<string | null | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -427,7 +417,7 @@ function TrackerApp({ view }: { view: View }) {
       if (generation === requestGeneration.current) {
         setData(bankResult.value);
         setLoadedSnapshotId(snapshotId);
-        if (settingsResult.status === "fulfilled") setWarRates(settingsResult.value.settings.warRates);
+        if (settingsResult.status === "fulfilled") { setWarRates(settingsResult.value.settings.warRates); setWarTech(settingsResult.value.settings.warTech); }
       }
     } catch (e) {
       if (generation === requestGeneration.current) setError((e as Error).message);
@@ -555,7 +545,7 @@ function TrackerApp({ view }: { view: View }) {
   let dashboardWar: ReturnType<typeof estimateWar> | null = null;
   let warEstimateError = "";
   if (data) {
-    try { dashboardWar = estimateWar(data.entries, warRates, WAR_ACTIVITIES.map(({ key }) => key), data.live === false ? "historical" : "current"); }
+    try { dashboardWar = estimateWar(data.entries, warRates, WAR_ACTIVITIES.map(({ key }) => key), data.live === false ? "historical" : "current", warBoost(warTech, null)); }
     catch (e) { warEstimateError = (e as Error).message; }
   }
   /** The clan's totals and every member's numbers (on Clan, and on Home when looking at a past week). */
@@ -878,7 +868,7 @@ function TrackerApp({ view }: { view: View }) {
           ) : data && dataMatches && view === "weeks" ? (
             <Weeks data={data} week={week} selectWeek={selectWeek} notify={notify} refresh={refresh} />
           ) : data && view === "warWeek" ? (
-            <WarWeek data={data} rates={warRates} admin={user.role === "ADMIN"} notify={notify} />
+            <WarWeek data={data} rates={warRates} tech={warTech} admin={user.role === "ADMIN"} notify={notify} />
           ) : data && view === "spending" ? (
             <SpendingOrder data={data} notify={notify} />
           ) : data && view === "war" ? (
