@@ -422,6 +422,8 @@ export interface SpendRow {
   /** Planning to ascend this pillar this week (Home). */
   ascending: boolean;
   check: AscendCheck;
+  /** A leader approved them to spend early (they can't make that day's snipe). */
+  early?: boolean;
 }
 export interface SpendOrder {
   resource: SpendResource;
@@ -430,6 +432,8 @@ export interface SpendOrder {
   /** That clan day is today. */
   today: boolean;
   rows: SpendRow[];
+  /** That day's snipe for this line (ISO), if one is planned: members who can't make it may ask to spend early. */
+  snipeAt?: string | null;
 }
 export interface SpendingOrderResponse {
   /** The war it's for, by the Monday before its Day 1. */
@@ -440,8 +444,57 @@ export interface SpendingOrderResponse {
   nextWar: boolean;
   clanDays: number[];
   orders: SpendOrder[];
-  /** Leaders only: the Discord forum post. */
-  post?: { enabled: boolean; configured: boolean; openDays: number[] };
+  /** Requests to spend early (before a snipe the member can't make) for this war. */
+  early: EarlySpendRequest[];
+  /** Leaders only: the Discord forum post, and whether early spend requests show in Discord. */
+  post?: { enabled: boolean; configured: boolean; openDays: number[]; earlyDiscord: boolean };
+}
+export type EarlySpendStatus = "pending" | "approved" | "declined" | "cancelled";
+/**
+ * A member's time zone, from their Discord role in #⏲️-pick-your-timezone, e.g. "Reset 8–9am · UTC+8 to +9":
+ * the UTC offsets (hours) it covers.
+ */
+export interface ResetZone { name: string; from: number; to: number }
+/** A member who can't make a clan day's snipe asks to spend that line early; any leader approves or declines. */
+export interface EarlySpendRequest {
+  id: string;
+  /** The war, by the Monday before its Day 1. */
+  week: string;
+  day: number;
+  resource: SpendResource;
+  member: Member;
+  status: EarlySpendStatus;
+  /** When they plan to spend (ISO); null means any time before the snipe. */
+  spendAt: string | null;
+  /** Why they can't make the snipe (needed unless the snipe is in their night). */
+  reason: string;
+  /** Their place in the line and its war points when they asked. */
+  place: number | null;
+  points: number;
+  zone: ResetZone | null;
+  /** The snipe they can't make (ISO). */
+  snipeAt: string;
+  /** The snipe falls between 11 pm and 7 am for them. */
+  night: boolean;
+  requestedAt: string;
+  decidedBy: string | null;
+  decidedAt: string | null;
+}
+/** Before the Hub's form opens: whether this member can ask for this line, and if a reason is needed. */
+export interface EarlySpendCheck {
+  canAsk: boolean;
+  /** Why not, in English (the interface translates it), with its {placeholders}. */
+  blocked?: string;
+  values?: Record<string, string | number>;
+  /** They have no time zone role in Discord yet: where to pick one. */
+  needsZone?: boolean;
+  zoneUrl?: string;
+  zone: ResetZone | null;
+  snipeAt: string | null;
+  /** The snipe's time for them, e.g. "07:30–08:30". */
+  localTime: string | null;
+  night: boolean;
+  reasonRequired: boolean;
 }
 /** The #spending-order post's embed (a Discord card), drawn the same way in the leaders' preview. */
 export interface SpendingPostEmbed {
@@ -454,6 +507,8 @@ export interface SpendingPostEmbed {
   fields: { name: string; value: string }[];
   footer: string;
   button: { label: string; url: string };
+  /** Early spend requests switched on: a button that asks the bot (members who can't make the snipe). */
+  ask?: { label: string; customId: string };
 }
 export interface SpendingPostPreview {
   /** The clan day the post is for: the next one due (tomorrow's, or today's), else the next clan day. */

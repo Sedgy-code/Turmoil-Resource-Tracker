@@ -192,4 +192,14 @@ export const hoardingRulesSchema = z.object({
   wars: z.number().int().min(1).max(10),
 }).strict();
 /** Leaders: switch the daily #spending-order post on or off. */
-export const spendSettingsSchema = z.object({ postEnabled: z.boolean() }).strict();
+export const spendSettingsSchema = z.object({ postEnabled: z.boolean().optional(), earlyDiscord: z.boolean().optional() }).strict()
+  .refine((value) => value.postEnabled !== undefined || value.earlyDiscord !== undefined, "Nothing to change.");
+/** A member asks to spend a line early (they can't make that day's snipe). */
+export const earlyAskSchema = z.object({
+  day: z.number().int().min(1).max(5),
+  resource: z.enum(["skills", "pets", "mounts"]),
+  spendAt: z.string().trim().max(5).nullable().optional(),
+  reason: z.string().max(300).nullable().optional(),
+}).strict();
+/** Leaders approve or decline; the member who asked can cancel. */
+export const earlyDecisionSchema = z.object({ id: z.string().min(1).max(100), status: z.enum(["approved", "declined", "cancelled"]) }).strict();

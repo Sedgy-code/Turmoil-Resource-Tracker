@@ -1,6 +1,6 @@
 import { DAY_ACTIVITIES, SPENDING_DAYS } from "./clan-day-planner";
 import type { PlanningDetails, ResourceKey } from "./resources";
-import type { AscendCheck, AscensionPillar, GuideRarity, Member, ResourceEntry, SpendOrder, SpendResource, SpendRow, WarActivity, WarRates } from "./types";
+import type { AscendCheck, AscensionPillar, GuideRarity, Member, ResetZone, ResourceEntry, SpendOrder, SpendResource, SpendRow, WarActivity, WarRates } from "./types";
 import { estimateWar } from "./war";
 import { nextWarWeek, warDay, warWeekOf } from "./war-calendar";
 
@@ -145,6 +145,8 @@ export interface OrderInput {
   ascending: ReadonlyMap<string, readonly AscensionPillar[]>;
   /** In that day's snipe: they go first. */
   snipers: ReadonlySet<string>;
+  /** Approved by a leader to spend early that day (they can't make the snipe): marked, not moved. */
+  early?: ReadonlySet<string>;
   /** YYYY-MM-DD (UTC): members on holiday until at least this date are skipped. */
   date: string;
   day: number | null;
@@ -173,6 +175,7 @@ export function buildOrder(input: OrderInput): SpendOrder {
       sniper: input.snipers.has(member.id),
       ascending: !!input.ascending.get(member.id)?.includes(info.pillar),
       check: ascendCheck(resource, entry),
+      ...(input.early?.has(member.id) ? { early: true } : {}),
     });
   }
   const amount = (row: SpendRow) => row.amounts[0]?.value ?? 0;
@@ -184,4 +187,36 @@ export function buildOrder(input: OrderInput): SpendOrder {
     || a.member.username.localeCompare(b.member.username, undefined, { sensitivity: "base", numeric: true }));
   rows.filter((row) => row.state === "line").forEach((row, index) => { row.place = index + 1; });
   return { resource, day: input.day, today: input.today, rows };
+}
+
+/* Early spend requests (see server/early-spend.ts): shared with the page. */
+
+/** Only this far down a line can ask to spend early. */
+export const EARLY_TOP = 20;
+/** Their night: 11 pm to 7 am local time (minutes after midnight). */
+const NIGHT_STARTS = 23 * 60;
+const NIGHT_ENDS = 7 * 60;
+
+function clock(minutes: number): string {
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+}
+function minutesThere(date: Date, offsetHours: number): number {
+  const minutes = date.getUTCHours() * 60 + date.getUTCMinutes() + Math.round(offsetHours * 60);
+  return ((minutes % 1440) + 1440) % 1440;
+}
+
+/**
+ * What time the snipe is for a member ("07:30–08:30" across their time zone role's offsets), and
+ * whether that's their night (11 pm to 7 am), judged at the middle of the role's offsets.
+ */
+export function snipeForZone(snipeAt: Date, zone: ResetZone): { localTime: string; night: boolean } {
+  const from = minutesThere(snipeAt, zone.from);
+  const to = minutesThere(snipeAt, zone.to);
+  const middle = minutesThere(snipeAt, (zone.from + zone.to) / 2);
+  return { localTime: from === to ? clock(from) : `${clock(from)}–${clock(to)}`, night: middle >= NIGHT_STARTS || middle < NIGHT_ENDS };
+}
+
+/** Can ask to spend early by place and stockpile (the server also checks the snipe, time zone and day). */
+export function earlyEligible(row: SpendRow | undefined): boolean {
+  return !!row && row.state === "line" && row.place !== null && row.place <= EARLY_TOP && row.check.state === "ready";
 }

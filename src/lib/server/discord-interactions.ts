@@ -1,6 +1,7 @@
 import { createPublicKey, verify } from "node:crypto";
 import { currentWeek } from "../resources";
 import { database, lockAdministration, type Database, type SqlConnection } from "./db";
+import { handleEarlyInteraction, isEarlyInteraction, type EarlyInteraction } from "./early-spend";
 import { guildId } from "./config";
 import { iso, memberFromRow } from "./mappers";
 import { awardWeeklyDew, CHECKIN_CLOSES_AFTER_MS, CHECKIN_OPENS_BEFORE_MS, SNIPE_REWARD_WINDOW_MS } from "./planning";
@@ -89,8 +90,14 @@ async function isAdmin(connection: SqlConnection, discordId: string): Promise<bo
   return rows[0]?.active === true && rows[0]?.role === "ADMIN";
 }
 
-/** Handles slash commands and button presses sent by Discord. */
-export async function handleInteraction(interaction: Interaction, db?: Database, now = new Date(), fetcher: typeof fetch = fetch): Promise<unknown> {
+/**
+ * Handles slash commands and button presses sent by Discord. `later` runs work after the reply
+ * (Discord wants an answer within 3 seconds), such as posting a message or updating a post.
+ */
+export async function handleInteraction(
+  interaction: Interaction, db?: Database, now = new Date(), fetcher: typeof fetch = fetch,
+  later: (task: () => Promise<unknown>) => void = (task) => { void task().catch(() => undefined); },
+): Promise<unknown> {
   if (interaction.type === 1) return { type: 1 };
   const connection = db ?? await database();
   const discordId = interaction.member?.user?.id ?? interaction.user?.id;
@@ -113,6 +120,10 @@ export async function handleInteraction(interaction: Interaction, db?: Database,
         components: [{ type: 1, components: [{ type: 2, style: 3, label: "Check in", emoji: { name: "✅" }, custom_id: `checkin:${plan.id}` }] }],
       },
     };
+  }
+  // Early spend requests: the spending order post's button, its form, and leaders' Approve / Decline (see early-spend.ts).
+  if ((interaction.type === 3 || interaction.type === 5) && isEarlyInteraction(interaction.data?.custom_id)) {
+    return handleEarlyInteraction(connection, interaction as EarlyInteraction, discordId, now, fetcher, later);
   }
   // Applying to join (see discord-applications.ts).
   if (interaction.type === 2 && interaction.data?.name === "apply") return openApplyForm(connection, discordId);

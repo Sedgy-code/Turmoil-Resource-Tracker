@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { handleInteraction, verifyDiscordSignature } from "@/lib/server/discord-interactions";
 
 export const runtime = "nodejs";
@@ -11,7 +11,8 @@ export async function POST(request: Request) {
     return new NextResponse("Invalid request signature", { status: 401 });
   }
   try {
-    return NextResponse.json(await handleInteraction(JSON.parse(body)));
+    // Work that can wait (posting a message, updating a post) runs after Discord has its answer.
+    return NextResponse.json(await handleInteraction(JSON.parse(body), undefined, new Date(), fetch, (task) => after(() => task().then(() => undefined, () => undefined))));
   } catch {
     return NextResponse.json({ type: 4, data: { content: "Something went wrong. Please try again.", flags: 64 } });
   }

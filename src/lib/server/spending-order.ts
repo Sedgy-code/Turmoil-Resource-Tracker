@@ -1,6 +1,7 @@
 import { currentWeek } from "../resources";
+import { earlySpendsFor } from "./early-spend-store";
 import { buildOrder, orderDay, orderWeek, resourcesOnDay, SPEND_INFO, SPEND_RESOURCES } from "../spending-order";
-import type { AscendCheck, AscensionPillar, Member, ResourceEntry, SpendOrder, SpendResource, SpendingOrderResponse, SpendingPostEmbed, SpendingPostPreview, WarActivity, WarRates, WarTech } from "../types";
+import type { AscendCheck, AscensionPillar, EarlySpendRequest, Member, ResourceEntry, SpendOrder, SpendResource, SpendingOrderResponse, SpendingPostEmbed, SpendingPostPreview, WarActivity, WarRates, WarTech } from "../types";
 import { parsePillars } from "./ascensions";
 import { appUrl, isDemo } from "./config";
 import { database, type Database, type SqlConnection } from "./db";
@@ -11,13 +12,13 @@ import { clanDays } from "./war-days";
 import { warBoost } from "../war";
 
 const DAY = 86_400_000;
-const DISCORD_API = "https://discord.com/api/v10";
+export const DISCORD_API = "https://discord.com/api/v10";
 /** #📋-spending-order, a forum channel in the Turmoil server (DISCORD_SPENDING_CHANNEL_ID overrides it). */
 export const SPENDING_CHANNEL_ID = "1574254432357584898";
 
-interface SpendingSettings { postEnabled: boolean }
+interface SpendingSettings { postEnabled: boolean; earlyDiscord: boolean }
 
-interface Context {
+export interface Context {
   now: Date;
   week: string;
   warDay: number;
@@ -29,8 +30,10 @@ interface Context {
   /** The Clan Tech page's war point bonuses, on top of the rates. */
   warTech: WarTech | undefined;
   ascending: Map<string, AscensionPillar[]>;
-  /** Snipes in that war (not cancelled): the war day each is on, what it scores with, and who's in it. */
-  snipes: { day: number; activities: WarActivity[]; members: Set<string> }[];
+  /** Snipes in that war (not cancelled): the war day each is on, when it starts, what it scores with, and who's in it. */
+  snipes: { id: string; day: number; startsAt: Date; activities: WarActivity[]; members: Set<string> }[];
+  /** Early spend requests for that war (not cancelled). */
+  early: EarlySpendRequest[];
   settings: SpendingSettings;
 }
 
@@ -39,28 +42,28 @@ function jsonValue<T>(value: unknown): T {
 }
 
 /** 00:00 UTC on a war day: Day 1 is the Tuesday after the war's Monday. */
-function dayStart(week: string, day: number): Date {
+export function dayStart(week: string, day: number): Date {
   return new Date(Date.parse(`${week}T00:00:00Z`) + day * DAY);
 }
 
-async function activeMember(connection: SqlConnection, actorId: string): Promise<Member> {
+export async function activeMember(connection: SqlConnection, actorId: string): Promise<Member> {
   const rows = await connection.query("SELECT * FROM app_members WHERE id = $1 AND active = TRUE", [actorId]);
   if (!rows.length) throw new ApiError(403, "Your tracker account is inactive.", "ACCOUNT_INACTIVE");
   return memberFromRow(rows[0]);
 }
 
-async function requireLeader(connection: SqlConnection, actorId: string): Promise<Member> {
+export async function requireLeader(connection: SqlConnection, actorId: string): Promise<Member> {
   const member = await activeMember(connection, actorId);
   if (member.role !== "ADMIN") throw new ApiError(403, "Only leaders can change the spending order.", "ADMIN_REQUIRED");
   return member;
 }
 
 export async function spendingSettings(connection: SqlConnection): Promise<SpendingSettings> {
-  const rows = await connection.query("SELECT post_enabled FROM spending_settings WHERE id = 'clan'");
-  return { postEnabled: rows[0]?.post_enabled === true };
+  const rows = await connection.query("SELECT post_enabled, early_discord FROM spending_settings WHERE id = 'clan'");
+  return { postEnabled: rows[0]?.post_enabled === true, earlyDiscord: rows[0]?.early_discord === true };
 }
 
-async function loadContext(connection: SqlConnection, now: Date): Promise<Context> {
+export async function loadContext(connection: SqlConnection, now: Date): Promise<Context> {
   const { week, warDay, nextWar } = orderWeek(now);
   const members = (await connection.query("SELECT * FROM app_members WHERE active = TRUE ORDER BY LOWER(COALESCE(NULLIF(display_name, ''), username)), id")).map(memberFromRow);
   const bankRows = await connection.query(`SELECT b.*, COALESCE(NULLIF(editor.display_name, ''), editor.username) AS updated_by_username
@@ -83,6 +86,8 @@ async function loadContext(connection: SqlConnection, now: Date): Promise<Contex
   const snipes = snipeRows.map((row) => {
     const startsAt = new Date(iso(row.starts_at) ?? 0);
     return {
+      id: String(row.id),
+      startsAt,
       day: Math.floor((startsAt.getTime() - dayStart(week, 1).getTime()) / DAY) + 1,
       activities: jsonValue<WarActivity[]>(row.activities) ?? [],
       members: new Set(inSnipe.filter((item) => String(item.snipe_id) === String(row.id)).map((item) => String(item.member_id))),
@@ -91,16 +96,24 @@ async function loadContext(connection: SqlConnection, now: Date): Promise<Contex
   return {
     now, week, warDay, nextWar, clanDays: days, members, entries, rates, warTech,
     ascending: new Map(ascensionRows.map((row) => [String(row.member_id), parsePillars(String(row.pillars))])),
-    snipes,
+    snipes: snipes.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime()),
+    early: await earlySpendsFor(connection, week),
     settings: await spendingSettings(connection),
   };
+}
+
+/** The first snipe on a clan day that scores with this line, if one is planned. */
+export function lineSnipe(context: Context, day: number | null, resource: SpendResource): Context["snipes"][number] | null {
+  if (day === null) return null;
+  const activities = SPEND_INFO[resource].activities;
+  return context.snipes.find((snipe) => snipe.day === day && snipe.activities.some((activity) => activities.includes(activity))) ?? null;
 }
 
 /**
  * Each line in the context. With `forDay`, every line is for that clan day (a day's Discord post);
  * otherwise each is for today or its next clan day.
  */
-function buildOrders(context: Context, forDay?: number): SpendOrder[] {
+export function buildOrders(context: Context, forDay?: number): SpendOrder[] {
   return SPEND_RESOURCES.map((resource) => {
     const target = forDay !== undefined
       ? { day: forDay, today: !context.nextWar && forDay === context.warDay }
@@ -114,10 +127,12 @@ function buildOrders(context: Context, forDay?: number): SpendOrder[] {
     }
     // Holidays are checked against the day the line is for.
     const date = (target.day !== null ? dayStart(context.week, target.day) : context.now).toISOString().slice(0, 10);
-    return buildOrder({
+    const early = new Set(context.early.filter((item) => item.status === "approved" && item.day === target.day && item.resource === resource).map((item) => item.member.id));
+    const order = buildOrder({
       resource, members: context.members, entries: context.entries, rates: context.rates, boost: warBoost(context.warTech, target.day), ascending: context.ascending,
-      snipers, date, day: target.day, today: target.today,
+      snipers, early, date, day: target.day, today: target.today,
     });
+    return { ...order, snipeAt: lineSnipe(context, target.day, resource)?.startsAt.toISOString() ?? null };
   });
 }
 
@@ -150,7 +165,7 @@ function dayIsOn(context: Context, day: number): boolean {
   return !context.nextWar && day === context.warDay;
 }
 
-function botToken(): string | null {
+export function botToken(): string | null {
   return isDemo() ? null : process.env.DISCORD_BOT_TOKEN || null;
 }
 function channelId(): string {
@@ -168,20 +183,22 @@ export async function getSpendingOrder(actor: Member, db?: Database | SqlConnect
     nextWar: context.nextWar,
     clanDays: context.clanDays,
     orders: buildOrders(context),
-    ...(me.role === "ADMIN" ? { post: { enabled: context.settings.postEnabled, configured: !!botToken() && !!channelId(), openDays: await openPostDays(connection, context.week) } } : {}),
+    early: context.early,
+    ...(me.role === "ADMIN" ? { post: { enabled: context.settings.postEnabled, configured: !!botToken() && !!channelId(), openDays: await openPostDays(connection, context.week), earlyDiscord: context.settings.earlyDiscord } } : {}),
   };
 }
 
 interface Dependencies { db?: Database; fetcher?: typeof fetch; now?: Date }
 
-/** Leaders: whether the bot posts in #spending-order each clan day. */
-export async function updateSpendingSettings(actor: Member, input: { postEnabled: boolean }, dependencies: Dependencies = {}): Promise<SpendingOrderResponse> {
+/** Leaders: whether the bot posts in #spending-order each clan day, and whether early spend requests show there. */
+export async function updateSpendingSettings(actor: Member, input: { postEnabled?: boolean; earlyDiscord?: boolean }, dependencies: Dependencies = {}): Promise<SpendingOrderResponse> {
   const connection = dependencies.db ?? await database();
   const now = dependencies.now ?? new Date();
   const leader = await requireLeader(connection, actor.id);
-  await connection.query(`INSERT INTO spending_settings (id, post_enabled, updated_by, updated_at) VALUES ('clan', $1, $2, $3)
-    ON CONFLICT (id) DO UPDATE SET post_enabled = EXCLUDED.post_enabled, updated_by = EXCLUDED.updated_by, updated_at = EXCLUDED.updated_at`,
-  [input.postEnabled, leader.id, now.toISOString()]);
+  const current = await spendingSettings(connection);
+  await connection.query(`INSERT INTO spending_settings (id, post_enabled, early_discord, updated_by, updated_at) VALUES ('clan', $1, $2, $3, $4)
+    ON CONFLICT (id) DO UPDATE SET post_enabled = EXCLUDED.post_enabled, early_discord = EXCLUDED.early_discord, updated_by = EXCLUDED.updated_by, updated_at = EXCLUDED.updated_at`,
+  [input.postEnabled ?? current.postEnabled, input.earlyDiscord ?? current.earlyDiscord, leader.id, now.toISOString()]);
   return getSpendingOrder(leader, connection, now);
 }
 
@@ -192,7 +209,7 @@ export async function updateSpendingSettings(actor: Member, input: { postEnabled
  * archived when the day ends.
  * ------------------------------------------------------------------------------------------- */
 
-const RESOURCE_EMOJI: Record<SpendResource, string> = { skills: "🎟️", pets: "🥚", mounts: "🐎" };
+export const RESOURCE_EMOJI: Record<SpendResource, string> = { skills: "🎟️", pets: "🥚", mounts: "🐎" };
 
 /** Names exactly as written: Discord formatting characters are shown, not applied. */
 export function plainName(name: string): string {
@@ -220,7 +237,7 @@ const MAX_FIELDS = 25;
 const EMBED_LIMIT = 5800;
 
 /** War points kept short, as in the app: 1.9M, 64.2K. */
-function shortNumber(value: number): string {
+export function shortNumber(value: number): string {
   return new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(Math.round(value));
 }
 
@@ -258,10 +275,11 @@ function packFields(name: string, lines: string[]): { name: string; value: strin
  * of each line and how many more there are. With `starts`, the post is up before the day and says
  * when it starts; without, the day is on now.
  */
-export function spendingPost(day: number, orders: SpendOrder[], hub: string, starts?: Date): { content: string; embed: SpendingPostEmbed } {
+export function spendingPost(day: number, orders: SpendOrder[], hub: string, starts?: Date, ask?: { week: string }): { content: string; embed: SpendingPostEmbed } {
   const shown = orders.filter((order) => resourcesOnDay(day).includes(order.resource));
   const snipers = shown.some((order) => order.rows.some((row) => row.sniper && row.state === "line"));
   const ascenders = shown.some((order) => order.rows.some((row) => row.ascending && row.state === "line"));
+  const early = shown.some((order) => order.rows.some((row) => row.early && row.state === "line"));
   const link = `${hub}/spending-order`;
   const write = (limit: number): SpendingPostEmbed => ({
     color: EMBED_COLOR,
@@ -274,15 +292,17 @@ export function spendingPost(day: number, orders: SpendOrder[], hub: string, sta
     ].join("\n"),
     fields: shown.flatMap((order) => {
       const line = order.rows.filter((row) => row.state === "line");
-      const lines = line.slice(0, limit).map((row) => `${row.place}. ${row.sniper ? "🎯 " : ""}${row.ascending ? "⏫ " : ""}${plainName(row.member.username)} · ${shortNumber(row.points)} pts${checkMark(row.check)}`);
+      const lines = line.slice(0, limit).map((row) => `${row.place}. ${row.sniper ? "🎯 " : ""}${row.ascending ? "⏫ " : ""}${row.early ? "⏰ " : ""}${plainName(row.member.username)} · ${shortNumber(row.points)} pts${checkMark(row.check)}`);
       if (line.length > limit) lines.push(`+${line.length - limit} more on the Clan Hub`);
       return packFields(`${RESOURCE_EMOJI[order.resource]} ${SPEND_INFO[order.resource].label} · ${line.length} in line`, lines);
     }),
     footer: [
       "✅ ready to ascend", "⏳ not enough yet", "🔒 summon level under 100",
       ...(ascenders ? ["⏫ ascending this week"] : []), ...(snipers ? [`🎯 in the Day ${day} snipe`] : []),
+      ...(early ? ["⏰ approved to spend early"] : []),
     ].join(" · "),
     button: { label: "Open the Spending Order", url: link },
+    ...(ask ? { ask: { label: "Ask to spend early", customId: `early:ask:${ask.week}:${day}` } } : {}),
   });
   let embed = write(60);
   for (let limit = 55; limit >= 5 && (embedSize(embed) > EMBED_LIMIT || embed.fields.length > MAX_FIELDS); limit -= 5) embed = write(limit);
@@ -303,13 +323,17 @@ function discordMessage(post: { content: string; embed: SpendingPostEmbed }) {
       fields: embed.fields.slice(0, MAX_FIELDS).map((field) => ({ name: field.name, value: field.value, inline: false })),
       footer: { text: embed.footer },
     }],
-    // A link button (style 5) opens the Hub; it needs nothing from the bot when tapped.
-    components: [{ type: 1, components: [{ type: 2, style: 5, label: embed.button.label, url: embed.button.url }] }],
+    // A link button (style 5) opens the Hub; it needs nothing from the bot when tapped. With early spend
+    // requests switched on, a second button asks the bot (see early-spend.ts).
+    components: [{ type: 1, components: [
+      { type: 2, style: 5, label: embed.button.label, url: embed.button.url },
+      ...(embed.ask ? [{ type: 2, style: 2, label: embed.ask.label, emoji: { name: "⏰" }, custom_id: embed.ask.customId }] : []),
+    ] }],
     allowed_mentions: { parse: [] },
   };
 }
 
-async function discordReason(response: Response): Promise<string> {
+export async function discordReason(response: Response): Promise<string> {
   const body = (await response.json().catch(() => null)) as { message?: unknown; code?: unknown } | null;
   if (typeof body?.message === "string") return typeof body.code === "number" ? `${body.message}, ${body.code}` : body.message;
   return `HTTP ${response.status}`;
@@ -318,9 +342,9 @@ async function discordReason(response: Response): Promise<string> {
 interface PostDraft { day: number; week: string; title: string; content: string; embed: SpendingPostEmbed }
 
 /** A clan day's post as it would go up now: before the day it says when it starts, on the day that it's on. */
-function draftFor(context: Context, day: number): PostDraft {
+export function draftFor(context: Context, day: number): PostDraft {
   const starts = dayStart(context.week, day);
-  const post = spendingPost(day, buildOrders(context, day), appUrl(), dayIsOn(context, day) ? undefined : starts);
+  const post = spendingPost(day, buildOrders(context, day), appUrl(), dayIsOn(context, day) ? undefined : starts, context.settings.earlyDiscord ? { week: context.week } : undefined);
   return { day, week: context.week, title: spendingPostTitle(day, starts), ...post };
 }
 
@@ -375,7 +399,7 @@ async function openPost(connection: SqlConnection, token: string, fetcher: typeo
 }
 
 /** Rewrites a post's first message (a forum post's first message has the post's id). */
-async function editPost(thread: string, draft: PostDraft, token: string, fetcher: typeof fetch): Promise<void> {
+export async function editPost(thread: string, draft: PostDraft, token: string, fetcher: typeof fetch): Promise<void> {
   const response = await fetcher(`${DISCORD_API}/channels/${thread}/messages/${thread}`, {
     method: "PATCH",
     headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
@@ -482,4 +506,22 @@ export async function updateSpendingPostsNow(actor: Member, dependencies: Depend
     if (dayIsOn(context, day)) await connection.query("UPDATE spending_posts SET refreshed_at = $3 WHERE war_week = $1 AND war_day = $2", [context.week, day, now.toISOString()]);
   }
   return spendingPostPreview(actor, connection, now);
+}
+
+/** The open post for a clan day (its thread), if it's up. */
+export async function openPostThread(connection: SqlConnection, week: string, day: number): Promise<string | null> {
+  const rows = await connection.query("SELECT thread_id FROM spending_posts WHERE war_week = $1 AND war_day = $2 AND closed_at IS NULL AND thread_id <> ''", [week, day]);
+  return rows[0] ? String(rows[0].thread_id) : null;
+}
+
+/** Rewrites one clan day's post with the order as it stands now (e.g. after an early spend is approved). Quietly does nothing when it isn't up. */
+export async function refreshDayPost(connection: SqlConnection, week: string, day: number, dependencies: { fetcher?: typeof fetch; now?: Date } = {}): Promise<boolean> {
+  const token = botToken();
+  if (!token) return false;
+  const thread = await openPostThread(connection, week, day);
+  if (!thread) return false;
+  const context = await loadContext(connection, dependencies.now ?? new Date());
+  if (context.week !== week) return false;
+  await editPost(thread, draftFor(context, day), token, dependencies.fetcher ?? fetch);
+  return true;
 }

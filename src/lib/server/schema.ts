@@ -347,4 +347,29 @@ CREATE TABLE IF NOT EXISTS spending_posts (
 );
 -- When the post got the order as it stood at the start of its day (set straight away for a post opened on the day).
 ALTER TABLE spending_posts ADD COLUMN IF NOT EXISTS refreshed_at TIMESTAMPTZ;
+-- Early spend requests: a member who can't make a clan day's snipe asks to spend that line early, and a leader decides.
+-- One per member, day and line (asking again after a decline or cancel reuses it). The notice is the bot's message in that day's post.
+CREATE TABLE IF NOT EXISTS early_spends (
+  id TEXT PRIMARY KEY,
+  war_week DATE NOT NULL CHECK (EXTRACT(ISODOW FROM war_week) = 1),
+  war_day SMALLINT NOT NULL CHECK (war_day BETWEEN 1 AND 5),
+  resource TEXT NOT NULL CHECK (resource IN ('skills', 'pets', 'mounts')),
+  member_id TEXT NOT NULL REFERENCES app_members(id),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'declined', 'cancelled')),
+  spend_at TIMESTAMPTZ,
+  reason TEXT NOT NULL DEFAULT '' CHECK (LENGTH(reason) <= 300),
+  place SMALLINT,
+  points INTEGER NOT NULL DEFAULT 0,
+  zone JSONB,
+  snipe_at TIMESTAMPTZ NOT NULL,
+  night BOOLEAN NOT NULL DEFAULT FALSE,
+  requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  decided_by TEXT REFERENCES app_members(id),
+  decided_at TIMESTAMPTZ,
+  notice_channel_id TEXT NOT NULL DEFAULT '',
+  notice_message_id TEXT NOT NULL DEFAULT '',
+  UNIQUE (war_week, war_day, resource, member_id)
+);
+-- Whether early spend requests show in Discord: an Ask button on each day's post, and a message in it for each request.
+ALTER TABLE spending_settings ADD COLUMN IF NOT EXISTS early_discord BOOLEAN NOT NULL DEFAULT FALSE;
 `;
