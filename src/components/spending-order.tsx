@@ -213,6 +213,8 @@ function PostPanel({ order, notify, onChange }: { order: SpendingOrderResponse; 
     try {
       const posted = await request<SpendingPostPreview>("/api/spending-order/post", { method: "POST", body: "{}" });
       setPreview(posted);
+      // The new post joins the list of posts that are up.
+      onChange(await request<SpendingOrderResponse>("/api/spending-order"));
       notify(t("Day {day}’s post is up in #spending-order.", { day: posted.day ?? "" }));
     } catch (error) { notify(t(errorText(error)), true); } finally { setBusy(false); }
   }
@@ -231,8 +233,9 @@ function PostPanel({ order, notify, onChange }: { order: SpendingOrderResponse; 
     <div className="planning-inline-actions spend-post-actions">
       <button type="button" className="planning-button planning-button-subtle" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? <EyeOff size={15} /> : <Eye size={15} />}{t(open ? "Hide preview" : "Show preview")}</button>
       {post.enabled && preview?.due && !preview.posted && <button type="button" className="planning-button" disabled={busy || !post.configured} onClick={() => void postNow()}>{busy ? <LoaderCircle size={15} className="spin" /> : <Send size={15} />}{t("Post Day {day} now", { day: preview.day ?? "" })}</button>}
-      {preview?.posted && <span className="planning-chip"><Check size={13} />{t("Day {day}’s post is up.", { day: preview.day ?? "" })}</span>}
-      {preview?.posted && <button type="button" className="planning-button planning-button-subtle" disabled={busy || !post.configured} onClick={() => void updateNow()}>{busy ? <LoaderCircle size={15} className="spin" /> : <RefreshCw size={15} />}{t("Update the post")}</button>}
+      {/* Every post that's up, and one button to update them all: on a clan day, today's post can be updated while tomorrow's is still to post. */}
+      {post.openDays.map((day) => <span key={day} className="planning-chip"><Check size={13} />{t("Day {day}’s post is up.", { day })}</span>)}
+      {post.openDays.length > 0 && <button type="button" className="planning-button planning-button-subtle" disabled={busy || !post.configured} onClick={() => void updateNow()}>{busy ? <LoaderCircle size={15} className="spin" /> : <RefreshCw size={15} />}{t("Update the post")}</button>}
     </div>
     {open && (preview
       ? preview.day === null
