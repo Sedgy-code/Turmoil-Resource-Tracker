@@ -320,7 +320,7 @@ export interface WarSpendingRow {
 }
 export interface WarSpendingResponse { week: string; warWeeks: string[]; rows: WarSpendingRow[] }
 
-export type RankingMetric = "warPoints" | "vials" | "snipes" | "updates" | "clanDays";
+export type RankingMetric = "warPoints" | "vials" | "updates";
 export interface ContributionRow {
   member: Member;
   /** Place among ranked members (1 = lowest score). 0 while settling in. */
@@ -338,16 +338,9 @@ export interface ContributionRow {
   warsCounted: number;
   /** Average vials donated per recent vial record since they joined. Null: none yet. */
   vials: number | null;
-  /** Snipes they joined, out of snipesHeld: the snipes held since they joined (last 8 weeks). */
-  snipes: number;
-  snipesHeld: number;
   /** Weeks with a complete resource save, out of updatesDue: the weeks since they joined (last 8, plus this week once saved). */
   updates: number;
   updatesDue: number;
-  /** Share (0–1) of their war points scored on the clan's chosen days, over recent wars since they joined. */
-  clanDayShare: number | null;
-  /** Recent wars where too much of their spending was on other days. */
-  blackMarks: number;
   penalty: number;
   parts: Partial<Record<RankingMetric, number>>;
   /** Days since they joined the Turmoil Discord server (or the Clan Hub, until Discord's date is known). */
@@ -359,8 +352,6 @@ export interface ContributionRow {
 }
 /** Leadership jobs that are due right now, for the to-do card at the top of Home. */
 export interface LeaderTodo {
-  /** Today's daily war screenshot (Days 1–5) is missing; that day ends at endsAt. */
-  warDay: { day: number; endsAt: string } | null;
   /** The clan days aren't picked: this war's (Days 1–5) or the next war's (Days 6–7, with members' votes). */
   clanDays: { nextWar: boolean; voters: number } | null;
   /** Day 7: the end-of-war screenshots are missing (they reset when the next war starts). */

@@ -79,29 +79,32 @@ test("points on clan days count; too much on other days earns a black mark", asy
   });
 });
 
-test("the ranking rewards spending on clan days and docks black marks", async () => {
-  const { contributionRanking, BLACK_MARK_PENALTY } = await import("../src/lib/server/ranking");
+test("strikes dock the ranking; spending on clan days isn't scored, as the daily screenshots aren't kept", async () => {
+  const { contributionRanking, STRIKE_PENALTY, STRIKE_CAP, RANKING_WEIGHTS } = await import("../src/lib/server/ranking");
+  const { applyLeadershipAction } = await import("../src/lib/server/leadership");
   await withDatabase(async (db) => {
     const admin = await addMember(db, "leader", "ADMIN");
     const loyal = await addMember(db, "loyal");
     const offday = await addMember(db, "offday");
-    const later = await addMember(db, "later");
     await db.query("UPDATE app_members SET joined_at = NOW() - INTERVAL '60 days'");
-    // Joined the day after this war began.
-    await db.query("UPDATE app_members SET discord_joined_at = '2026-10-14T00:00:00Z' WHERE id = $1", [later.id]);
     await setClanDays(admin, { week: WEEK, days: [1, 3] }, db);
     await day(admin, 1, [{ member: loyal, points: 100 }, { member: offday, points: 10 }], db);
     await day(admin, 2, [{ member: offday, points: 90 }], db);
-    const ranking = await contributionRanking(admin, db, DURING_WAR);
-    // A war from before they joined (and that they scored nothing in) isn't counted for them.
-    assert.equal(ranking.rows.find((row) => row.member.id === later.id)?.clanDayShare, null);
-    assert.equal(ranking.weights.clanDays, 15);
-    const loyalRow = ranking.rows.find((row) => row.member.id === loyal.id)!;
-    const offdayRow = ranking.rows.find((row) => row.member.id === offday.id)!;
-    assert.equal(loyalRow.clanDayShare, 1);
-    assert.equal(offdayRow.clanDayShare, 0.1);
-    assert.deepEqual([loyalRow.blackMarks, offdayRow.blackMarks], [0, 1]);
-    assert.equal(offdayRow.penalty, BLACK_MARK_PENALTY);
-    assert.ok(offdayRow.rank < loyalRow.rank, "spending on the wrong days ranks lower (nearer the top)");
+    let ranking = await contributionRanking(admin, db, DURING_WAR);
+    const row = (id: string) => ranking.rows.find(({ member }) => member.id === id)!;
+    assert.equal("clanDays" in RANKING_WEIGHTS, false);
+    assert.equal("clanDays" in ranking.weights, false);
+    // Spending on other days, seen in the daily uploads, no longer costs points by itself.
+    assert.equal(row(offday.id).penalty, 0);
+    assert.equal(row(offday.id).score, row(loyal.id).score);
+    // Leaders give strikes by hand: 5 points off each, up to 15.
+    await applyLeadershipAction(admin, offday.id, { action: "strike", reason: "Spent on Day 2" }, db);
+    ranking = await contributionRanking(admin, db, DURING_WAR);
+    assert.equal(row(offday.id).member.strikes, 1);
+    assert.equal(row(offday.id).penalty, STRIKE_PENALTY);
+    assert.ok(row(offday.id).rank < row(loyal.id).rank, "a strike ranks lower (nearer the top)");
+    for (let index = 0; index < 4; index++) await applyLeadershipAction(admin, offday.id, { action: "strike", reason: "Again" }, db);
+    ranking = await contributionRanking(admin, db, DURING_WAR);
+    assert.equal(row(offday.id).penalty, STRIKE_CAP);
   });
 });

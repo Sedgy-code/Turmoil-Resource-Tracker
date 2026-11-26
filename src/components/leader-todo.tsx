@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { CalendarDays, Camera, ChevronRight, ClipboardList, FlaskConical, ShieldCheck, Target, Trophy, Users } from "lucide-react";
+import { CalendarDays, ChevronRight, ClipboardList, FlaskConical, ShieldCheck, Target, Trophy, Users } from "lucide-react";
 import { countdown, utcDateTime } from "@/lib/war-calendar";
 import { useLanguage } from "@/lib/i18n";
 import type { LeaderTodo } from "@/lib/types";
@@ -44,7 +44,6 @@ export function LeaderTodoCard() {
     return () => document.removeEventListener("visibilitychange", again);
   }, [load]);
   const jobs: ReactNode[] = [];
-  if (todo?.warDay) jobs.push(<Job key="warday" href="/war-results" icon={<Camera size={19} />} title={t("Add the Day {day} war screenshot", { day: todo.warDay.day })} detail={t("Day {day} ends in {time}", { day: todo.warDay.day, time: countdown(new Date(todo.warDay.endsAt), now) })} />);
   if (todo?.clanDays) jobs.push(<Job key="days" href="/war" icon={<CalendarDays size={19} />}
     title={todo.clanDays.nextWar ? t("Pick next war’s clan days") : t("Pick this war’s clan days")}
     detail={todo.clanDays.nextWar ? t("Members voted so far: {count}.", { count: todo.clanDays.voters }) : t("Members don’t know when to spend yet.")} />);

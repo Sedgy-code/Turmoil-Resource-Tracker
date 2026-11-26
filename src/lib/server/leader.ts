@@ -18,26 +18,20 @@ export const ATTENDANCE_TODO_MS = 36 * HOUR;
 /** Leaders can remind everyone who hasn't saved this often (the Monday reminder runs regardless). */
 export const REMIND_ALL_EVERY_MS = 12 * HOUR;
 
-async function uploaded(connection: SqlConnection, week: string, kind: string, day?: number): Promise<boolean> {
-  const rows = day === undefined
-    ? await connection.query("SELECT 1 FROM war_results WHERE week_start = $1 AND kind = $2 LIMIT 1", [week, kind])
-    : await connection.query("SELECT 1 FROM war_results WHERE week_start = $1 AND kind = $2 AND war_day = $3 LIMIT 1", [week, kind, day]);
-  return rows.length > 0;
+async function uploaded(connection: SqlConnection, week: string, kind: string): Promise<boolean> {
+  return (await connection.query("SELECT 1 FROM war_results WHERE week_start = $1 AND kind = $2 LIMIT 1", [week, kind])).length > 0;
 }
 
 /**
  * What leadership should do now, for the to-do card on Home. Unlike the Discord reminders, each job
- * only shows on the days it can be done: daily points on Days 1–5, vials on Day 6 (the race resets
- * on Monday 00:00 UTC) and the end-of-war screenshots on Day 7.
+ * only shows on the days it can be done: vials on Day 6 (the race resets on Monday 00:00 UTC) and the
+ * end-of-war screenshots on Day 7. Daily war screenshots aren't asked for: leadership stopped keeping them.
  */
 export async function leaderTodo(actor: Member, db?: Database, now = new Date()): Promise<LeaderTodo> {
   const connection = db ?? await database();
   await requireAdmin(connection, actor.id);
   const today = warDay(now);
-  const todo: LeaderTodo = { warDay: null, clanDays: null, warResults: null, vials: null, attendance: [], unsaved: 0, away: 0 };
-  if (today.day <= 5 && !(await uploaded(connection, warWeekOf(now), "warday", today.day))) {
-    todo.warDay = { day: today.day, endsAt: today.nextDay.toISOString() };
-  }
+  const todo: LeaderTodo = { clanDays: null, warResults: null, vials: null, attendance: [], unsaved: 0, away: 0 };
   // Days 1–5: this war's spending days. Days 6–7: the next war's, with what members voted for.
   const nextWar = today.day >= 6;
   const week = nextWar ? nextWarWeek(now) : warWeekOf(now);

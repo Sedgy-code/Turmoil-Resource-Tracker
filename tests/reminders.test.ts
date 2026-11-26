@@ -49,15 +49,15 @@ test("automatic posts are English only (the translation bot handles other langua
   const shoutout = shoutoutMessage(["🥇 <@1> — 3 (8 wk)"], "https://x/snipes");
   assert.match(shoutout, /Thank you to everyone who joined last week's snipes!/);
   assert.doesNotMatch(shoutout, otherScripts);
-  const leadership = leadershipReminderMessage({ tasks: ["warday", "clanDays", "war", "vials"], warDay: { day: 2, endsAt: new Date("2026-10-22T00:00:00Z") }, nextWar: true }, "https://x");
-  assert.match(leadership, /Day 2 war points[\s\S]*Clan days for the next war[\s\S]*Clan war results[\s\S]*Clan tech vial donations/);
+  const leadership = leadershipReminderMessage({ tasks: ["clanDays", "war", "vials"], nextWar: true }, "https://x");
+  assert.match(leadership, /Clan days for the next war[\s\S]*Clan war results[\s\S]*Clan tech vial donations/);
   assert.doesNotMatch(leadership, otherScripts);
 });
 
 test("leadership reminders ping nobody and post silently, only when a job is still undone", async () => {
   const { randomUUID } = await import("node:crypto");
   const { initializeSchema, openDatabase } = await import("../src/lib/server/db");
-  const { sendLeadershipReminder } = await import("../src/lib/server/reminders");
+  const { sendLeadershipReminder, LEADERSHIP_TASKS } = await import("../src/lib/server/reminders");
   const db = await openDatabase({ localPath: "memory://" });
   const previous = process.env.DISCORD_BOT_TOKEN;
   try {
@@ -97,20 +97,10 @@ test("leadership reminders ping nobody and post silently, only when a job is sti
     await db.query("INSERT INTO clan_war_days (war_week, days, updated_by) VALUES ('2026-10-19', '1,3', $1)", [admin]);
     assert.equal((await send(monday, ["war", "clanDays"])).posted, false);
 
-    // Day 1 (Tuesday 20 October), evening: today's daily points, due before 00:00 UTC.
-    const day1 = "2026-10-20T21:00:00Z";
-    assert.deepEqual((await send(day1, ["warday"])).missing, ["warday"]);
-    assert.match(last().content, /Day 1 war points\*\*: add today's clan war screenshot before Day 1 ends at 00:00 UTC \(<t:1792540800:R>\)/);
-    assert.match(last().content, /tap \*\*Day 1\*\*/);
-    await db.query("INSERT INTO war_results (id, week_start, label, created_by, kind, war_day) VALUES ($1, '2026-10-19', '', $2, 'warday', 1)", [randomUUID(), admin]);
-    assert.equal((await send(day1, ["warday"])).posted, false);
-    // Day 2 needs its own upload. Day 6 (the battle) and Day 7 (claiming) have none.
-    assert.deepEqual((await send("2026-10-21T21:00:00Z", ["warday"])).missing, ["warday"]);
-    assert.match(last().content, /Day 2 war points/);
-    assert.equal((await send("2026-10-25T21:00:00Z", ["warday"])).posted, false);
-    assert.equal((await send("2026-10-26T10:00:00Z", ["warday"])).posted, false);
-    assert.equal(posts.length, 5);
-    // Every kind of leadership reminder (vials, war results, clan days, daily points) pings nobody.
+    assert.equal(posts.length, 3);
+    // Daily war screenshots (Days 1–5) aren't a job any more: leadership stopped keeping them.
+    assert.equal((LEADERSHIP_TASKS as readonly string[]).includes("warday"), false);
+    // Every kind of leadership reminder (vials, war results, clan days) pings nobody.
     for (const { body } of posts) {
       assert.deepEqual(body.allowed_mentions, { parse: [] });
       assert.equal(body.flags, 4 | 4096);
