@@ -220,16 +220,22 @@ export async function contributionRanking(actor: Member, db?: Database, now = ne
   const valuesOf = (pick: (row: (typeof raw)[number]) => number | null) => ranked.map(pick).filter((value): value is number => value !== null);
   const warValues = valuesOf((row) => row.warPoints);
   const dayValues = valuesOf((row) => row.clanDayShare);
+  const share = (done: number, due: number) => due > 0 ? done / due : null;
+  const updateValues = valuesOf((row) => share(row.updates, row.updatesDue));
+  const snipeValues = valuesOf((row) => share(row.snipes, row.snipesHeld));
   // A typical donor: the middle of everyone who donated anything, per vial record.
   const typicalVials = median(valuesOf((row) => row.vials).filter((value) => value > 0));
   const partsOf = (row: (typeof raw)[number]): Partial<Record<RankingMetric, number>> => {
     const parts: Partial<Record<RankingMetric, number>> = {};
     if (row.warPoints !== null) parts.warPoints = percentile(row.warPoints, warValues);
     if (row.vials !== null) parts.vials = typicalVials > 0 ? Math.min(1, row.vials / (VIALS_FULL_MARKS * typicalVials)) : 0.5;
-    // Shares of their own weeks and snipes: keeping up every week earns full marks, however long they've been here.
-    if (row.updatesDue > 0) parts.updates = row.updates / row.updatesDue;
+    // Shares of their own weeks and snipes, compared with everyone else's: the same for a member of three
+    // weeks as for one of a year.
+    const updates = share(row.updates, row.updatesDue);
+    if (updates !== null) parts.updates = percentile(updates, updateValues);
     if (row.clanDayShare !== null) parts.clanDays = percentile(row.clanDayShare, dayValues);
-    if (row.snipesHeld > 0) parts.snipes = row.snipes / row.snipesHeld;
+    const snipes = share(row.snipes, row.snipesHeld);
+    if (snipes !== null) parts.snipes = percentile(snipes, snipeValues);
     return parts;
   };
   // The exact score, before rounding and the 0–100 limits: breaks ties such as two members at 0.
