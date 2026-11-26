@@ -3,9 +3,9 @@ import type { ContributionRankingResponse, ContributionRow, Member, RankingMetri
 import { database, type Database } from "./db";
 import { refreshDiscordJoinDates } from "./discord-sync";
 import { ApiError } from "./errors";
-import { memberFromRow } from "./mappers";
-import { snipeRecognition } from "./war-results";
+import { iso, memberFromRow } from "./mappers";
 import { strikeCounts } from "./leadership";
+import { dayStart } from "./spending-order";
 import { hasBlackMark, weekBreakdown } from "./war-days";
 
 const DAY = 86_400_000;
@@ -80,94 +80,182 @@ export async function contributionRanking(actor: Member, db?: Database, now = ne
       if (await refreshDiscordJoinDates({ db: connection, fetcher: options.fetcher })) members = await activeMembers();
     } catch { /* Discord unavailable: count from the Clan Hub join date for now. */ }
   }
-  const sinceWeek = shiftWeek(currentWeek(now), -RECENT_WEEKS);
+  const thisWeek = currentWeek(now);
+  const sinceWeek = shiftWeek(thisWeek, -RECENT_WEEKS);
+  // Without a Discord join date, everyone who signed up in the first few days was already in the
+  // clan when the site launched, so they aren't "new".
+  const launch = Math.min(...members.map((member) => new Date(member.joinedAt).getTime()));
+  const joinedRecently = (member: Member) => !!member.discordJoinedAt || new Date(member.joinedAt).getTime() > launch + 3 * DAY;
+  const joinedAt = (member: Member) => new Date(clanJoinDate(member)).getTime();
+  // Records count from when they joined; for those already here at launch (no Discord date), all of them.
+  const joined = (member: Member) => joinedRecently(member) ? joinedAt(member) : -Infinity;
 
-  // Last few war and vial records; missing from a record counts as 0.
-  const recordTotals = async (kind: "war" | "vials") => {
+  // Everything counts only from when each member joined, so time in the clan neither helps nor hurts:
+  // a record is theirs when it started after they joined (missing from it counts as 0), or when they
+  // scored in it anyway (Discord's join date can be a few days after joining in the game).
+  const recentRecords = async (kind: "war" | "vials") => {
     const records = await connection.query("SELECT id, week_start::text AS week FROM war_results WHERE kind = $1 ORDER BY week_start DESC, created_at DESC LIMIT $2", [kind, RECENT_RECORDS]);
-    const totals = new Map<string, { sum: number; appeared: number }>();
-    for (const record of records) {
-      const points = await connection.query("SELECT member_id, SUM(points) AS points FROM war_result_points WHERE result_id = $1 AND member_id IS NOT NULL GROUP BY member_id", [record.id]);
-      for (const row of points) {
-        const current = totals.get(String(row.member_id)) ?? { sum: 0, appeared: 0 };
-        totals.set(String(row.member_id), { sum: current.sum + Number(row.points), appeared: current.appeared + 1 });
-      }
-    }
-    return { count: records.length, weeks: records.map((record) => String(record.week)), totals };
+    return Promise.all(records.map(async (record) => {
+      const week = String(record.week).slice(0, 10);
+      const points = new Map((await connection.query("SELECT member_id, SUM(points) AS points FROM war_result_points WHERE result_id = $1 AND member_id IS NOT NULL GROUP BY member_id", [record.id]))
+        .map((row) => [String(row.member_id), Number(row.points)]));
+      // A war starts on Day 1 (Tuesday); vials count from the start of the week.
+      return { starts: dayStart(week, kind === "war" ? 1 : 0).getTime(), points };
+    }));
   };
-  const wars = await recordTotals("war");
-  const vials = await recordTotals("vials");
+  const wars = await recentRecords("war");
+  const vials = await recentRecords("vials");
+  type WarRecord = (typeof wars)[number];
+  const scored = (record: WarRecord, member: Member) => (record.points.get(member.id) ?? 0) > 0;
+  const perRecord = (records: WarRecord[], member: Member) => {
+    const mine = records.filter((record) => scored(record, member) || record.starts >= joined(member));
+    const total = mine.reduce((sum, record) => sum + (record.points.get(member.id) ?? 0), 0);
+    return { average: mine.length ? total / mine.length : null, counted: mine.length, appeared: mine.filter((record) => scored(record, member)).length };
+  };
 
-  const snipes = await snipeRecognition(connection, now);
+  // Weekly Clan Hub saves: the past weeks since they joined (or that they saved in anyway), plus this week once saved.
+  const saves = await connection.query(`SELECT member_id, week_start::text AS week FROM dew_weekly_earnings
+    WHERE reason = 'resources' AND week_start >= $1`, [sinceWeek]);
+  const savedWeeks = new Map<string, Set<string>>();
+  for (const row of saves) {
+    const id = String(row.member_id);
+    savedWeeks.set(id, (savedWeeks.get(id) ?? new Set()).add(String(row.week).slice(0, 10)));
+  }
+  const pastWeeks = Array.from({ length: RECENT_WEEKS }, (_, index) => shiftWeek(sinceWeek, index));
+  const updatesFor = (member: Member) => {
+    const saved = savedWeeks.get(member.id) ?? new Set<string>();
+    const due = pastWeeks.filter((week) => saved.has(week) || Date.parse(`${week}T00:00:00Z`) >= joined(member));
+    const thisWeekSaved = saved.has(thisWeek) ? 1 : 0;
+    return { done: due.filter((week) => saved.has(week)).length + thisWeekSaved, due: due.length + thisWeekSaved };
+  };
+
+  // Snipes in the last 8 weeks that leaders took attendance for. Each counts for everyone who joined
+  // the clan before it started, and for anyone who checked in. One that was called off counts only for
+  // those who checked in before it was.
+  const snipesFrom = new Date(`${sinceWeek}T00:00:00Z`).toISOString();
+  const snipeRows = await connection.query(`SELECT plan.id, plan.starts_at, plan.cancelled_at IS NOT NULL AS cancelled, attendance.member_id
+    FROM snipe_plans plan JOIN snipe_attendance attendance ON attendance.snipe_id = plan.id
+    WHERE plan.starts_at >= $1 AND plan.starts_at <= $2`, [snipesFrom, now.toISOString()]);
+  const held = new Map<string, { starts: number; cancelled: boolean }>();
+  const attended = new Map<string, Set<string>>();
+  for (const row of snipeRows) {
+    const id = String(row.id);
+    held.set(id, { starts: new Date(iso(row.starts_at)!).getTime(), cancelled: !!row.cancelled });
+    const memberId = String(row.member_id);
+    attended.set(memberId, (attended.get(memberId) ?? new Set()).add(id));
+  }
+  const snipesFor = (member: Member) => {
+    const joinedSnipes = attended.get(member.id) ?? new Set<string>();
+    const theirs = [...held].filter(([id, snipe]) => joinedSnipes.has(id) || (!snipe.cancelled && snipe.starts >= joined(member)));
+    return { joined: joinedSnipes.size, held: theirs.length };
+  };
   // Saying Yes to a snipe and not checking in costs nothing: snipes are often called off when they
   // aren't needed, so a no-show isn't held against anyone (leadership's call).
-  const updates = await connection.query(`SELECT member_id, COUNT(*)::int AS count FROM dew_weekly_earnings
-    WHERE reason = 'resources' AND week_start >= $1 GROUP BY member_id`, [sinceWeek]);
-  const updateCounts = new Map(updates.map((row) => [String(row.member_id), Number(row.count)]));
 
   // Spending on the clan's chosen days, from the daily war-point uploads of recent wars that had clan days picked.
   const dayWeeks = (await connection.query(`SELECT DISTINCT result.week_start::text AS week FROM war_results result
     JOIN clan_war_days chosen ON chosen.war_week = result.week_start AND chosen.days <> ''
     WHERE result.kind = 'warday' ORDER BY week DESC LIMIT $1`, [RECENT_RECORDS])).map((row) => String(row.week).slice(0, 10));
-  const onDays = new Map<string, { on: number; other: number; marks: number }>();
+  const dayRows = new Map<string, Map<string, { on: number; other: number; mark: boolean }>>();
   for (const week of dayWeeks) {
     const breakdown = await weekBreakdown(connection, week);
+    const rowsThisWeek = new Map<string, { on: number; other: number; mark: boolean }>();
     for (const row of breakdown.rows) {
-      if (!row.memberId) continue;
-      const current = onDays.get(row.memberId) ?? { on: 0, other: 0, marks: 0 };
-      onDays.set(row.memberId, {
-        on: current.on + row.onClanDays,
-        other: current.other + row.otherDays,
-        marks: current.marks + (hasBlackMark(row, breakdown.clanDays) ? 1 : 0),
-      });
+      // Everyone is listed, even with nothing scored: only those who scored were there for sure.
+      if (!row.memberId || row.onClanDays + row.otherDays <= 0) continue;
+      const current = rowsThisWeek.get(row.memberId) ?? { on: 0, other: 0, mark: false };
+      rowsThisWeek.set(row.memberId, { on: current.on + row.onClanDays, other: current.other + row.otherDays, mark: current.mark || hasBlackMark(row, breakdown.clanDays) });
     }
+    dayRows.set(week, rowsThisWeek);
   }
-  // Nothing scored at all counts as 0: they didn't spend on the clan days either.
-  const clanDayShare = (memberId: string) => {
-    const totals = onDays.get(memberId);
-    return totals && totals.on + totals.other > 0 ? totals.on / (totals.on + totals.other) : 0;
+  // Their clan-day wars: ones that started after they joined, or that they scored in. Nothing scored
+  // in one of theirs counts as 0: they didn't spend on the clan days either.
+  const clanDaysFor = (member: Member) => {
+    const mine = dayWeeks.filter((week) => dayRows.get(week)?.has(member.id) || dayStart(week, 1).getTime() >= joined(member));
+    let on = 0;
+    let other = 0;
+    let marks = 0;
+    for (const week of mine) {
+      const row = dayRows.get(week)?.get(member.id);
+      if (!row) continue;
+      on += row.on;
+      other += row.other;
+      if (row.mark) marks += 1;
+    }
+    return { share: mine.length ? (on + other > 0 ? on / (on + other) : 0) : null, marks };
   };
 
-  const raw = members.map((member) => ({
-    member,
-    warPoints: wars.count ? (wars.totals.get(member.id)?.sum ?? 0) / wars.count : null,
-    warsPlayed: wars.totals.get(member.id)?.appeared ?? 0,
-    vials: vials.count ? vials.totals.get(member.id)?.sum ?? 0 : null,
-    snipes: snipes.recent[member.id] ?? 0,
-    updates: updateCounts.get(member.id) ?? 0,
-    clanDays: dayWeeks.length ? clanDayShare(member.id) : null,
-    clanDayShare: dayWeeks.length ? clanDayShare(member.id) : null,
-    blackMarks: onDays.get(member.id)?.marks ?? 0,
-    daysInClan: Math.max(0, Math.floor((now.getTime() - new Date(clanJoinDate(member)).getTime()) / DAY)),
-    lastSavedAt: member.lastUpdatedAt,
-  }));
-  const available: RankingMetric[] = (Object.keys(RANKING_WEIGHTS) as RankingMetric[]).filter((metric) =>
-    metric === "warPoints" ? wars.count > 0 : metric === "vials" ? vials.count > 0 : metric === "clanDays" ? dayWeeks.length > 0 : true);
-  const totalWeight = available.reduce((sum, metric) => sum + RANKING_WEIGHTS[metric], 0);
-  const values = (metric: RankingMetric) => raw.map((row) => Number(row[metric] ?? 0));
-  // A typical donor: the middle of everyone who donated anything.
-  const typicalVials = median(values("vials").filter((value) => value > 0));
-  const part = (metric: RankingMetric, value: number) => metric === "vials" && typicalVials > 0
-    ? Math.min(1, value / (VIALS_FULL_MARKS * typicalVials))
-    : percentile(value, values(metric));
+  const raw = members.map((member) => {
+    const war = perRecord(wars, member);
+    const vial = perRecord(vials, member);
+    const update = updatesFor(member);
+    const snipe = snipesFor(member);
+    const days = clanDaysFor(member);
+    const daysInClan = Math.max(0, Math.floor((now.getTime() - joinedAt(member)) / DAY));
+    const isNew = daysInClan < NEW_MEMBER_DAYS && joinedRecently(member);
+    // Settling in: their first two weeks, or no full war since they joined (when there are wars to go by).
+    const fullWars = wars.filter((record) => record.starts >= joined(member)).length;
+    const settling = isNew || (joinedRecently(member) && wars.length > 0 && fullWars === 0 && war.appeared === 0);
+    return {
+      member,
+      warPoints: war.average,
+      warsPlayed: war.appeared,
+      warsCounted: war.counted,
+      vials: vial.average,
+      snipes: snipe.joined,
+      snipesHeld: snipe.held,
+      updates: update.done,
+      updatesDue: update.due,
+      clanDayShare: days.share,
+      blackMarks: days.marks,
+      daysInClan,
+      isNew,
+      settling,
+      lastSavedAt: member.lastUpdatedAt,
+    };
+  });
 
-  // Without a Discord join date, everyone who signed up in the first few days was already in the
-  // clan when the site launched, so they aren't "new".
-  const launch = Math.min(...members.map((member) => new Date(member.joinedAt).getTime()));
-  const joinedRecently = (member: Member) => !!member.discordJoinedAt || new Date(member.joinedAt).getTime() > launch + 3 * DAY;
+  // Ranked members are compared with each other; members settling in don't move anyone's place.
+  const ranked = raw.filter((row) => !row.settling);
+  const valuesOf = (pick: (row: (typeof raw)[number]) => number | null) => ranked.map(pick).filter((value): value is number => value !== null);
+  const warValues = valuesOf((row) => row.warPoints);
+  const dayValues = valuesOf((row) => row.clanDayShare);
+  // A typical donor: the middle of everyone who donated anything, per vial record.
+  const typicalVials = median(valuesOf((row) => row.vials).filter((value) => value > 0));
+  const partsOf = (row: (typeof raw)[number]): Partial<Record<RankingMetric, number>> => {
+    const parts: Partial<Record<RankingMetric, number>> = {};
+    if (row.warPoints !== null) parts.warPoints = percentile(row.warPoints, warValues);
+    if (row.vials !== null) parts.vials = typicalVials > 0 ? Math.min(1, row.vials / (VIALS_FULL_MARKS * typicalVials)) : 0.5;
+    // Shares of their own weeks and snipes: keeping up every week earns full marks, however long they've been here.
+    if (row.updatesDue > 0) parts.updates = row.updates / row.updatesDue;
+    if (row.clanDayShare !== null) parts.clanDays = percentile(row.clanDayShare, dayValues);
+    if (row.snipesHeld > 0) parts.snipes = row.snipes / row.snipesHeld;
+    return parts;
+  };
+  // The exact score, before rounding and the 0–100 limits: breaks ties such as two members at 0.
+  const exact = new Map<string, number>();
   const rows: ContributionRow[] = raw.map((row) => {
-    const parts = Object.fromEntries(available.map((metric) => [metric, part(metric, Number(row[metric] ?? 0))])) as Partial<Record<RankingMetric, number>>;
-    const base = totalWeight ? available.reduce((sum, metric) => sum + (parts[metric] ?? 0) * RANKING_WEIGHTS[metric], 0) / totalWeight * 100 : 50;
+    if (row.settling) return { ...row, parts: {}, penalty: 0, score: 0, rank: 0 };
+    const parts = partsOf(row);
+    // Parts with nothing to go by yet for this member are left out, and the rest count for more.
+    const weight = (Object.keys(parts) as RankingMetric[]).reduce((sum, metric) => sum + RANKING_WEIGHTS[metric], 0);
+    const base = weight ? (Object.keys(parts) as RankingMetric[]).reduce((sum, metric) => sum + (parts[metric] ?? 0) * RANKING_WEIGHTS[metric], 0) / weight * 100 : 50;
     // Never signing in to the Clan Hub at all is the biggest red flag.
     const penalty = (row.member.neverSignedIn ? NEVER_SIGNED_IN_PENALTY : 0) + Math.min(BLACK_MARK_CAP, row.blackMarks * BLACK_MARK_PENALTY);
-    return { ...row, parts, penalty, score: Math.min(100, Math.max(0, Math.round(base - penalty))), isNew: row.daysInClan < NEW_MEMBER_DAYS && joinedRecently(row.member), rank: 0 };
+    exact.set(row.member.id, base - penalty);
+    return { ...row, parts, penalty, score: Math.min(100, Math.max(0, Math.round(base - penalty))), rank: 0 };
   });
-  rows.sort((a, b) => a.score - b.score || (a.lastSavedAt ?? "").localeCompare(b.lastSavedAt ?? ""));
-  rows.forEach((row, index) => { row.rank = index + 1; });
+  // Lowest scores first (who to talk to first); members settling in after everyone, newest last.
+  rows.sort((a, b) => Number(a.settling) - Number(b.settling)
+    || (a.settling ? b.daysInClan - a.daysInClan : (exact.get(a.member.id) ?? 0) - (exact.get(b.member.id) ?? 0) || (a.lastSavedAt ?? "").localeCompare(b.lastSavedAt ?? "")));
+  let place = 0;
+  for (const row of rows) if (!row.settling) row.rank = ++place;
+  const available = (Object.keys(RANKING_WEIGHTS) as RankingMetric[]).filter((metric) =>
+    metric === "warPoints" ? wars.length > 0 : metric === "vials" ? vials.length > 0 : metric === "clanDays" ? dayWeeks.length > 0 : metric === "snipes" ? held.size > 0 : true);
   return {
     rows,
     weights: Object.fromEntries(available.map((metric) => [metric, RANKING_WEIGHTS[metric]])) as Partial<Record<RankingMetric, number>>,
-    records: { wars: wars.count, vials: vials.count },
+    records: { wars: wars.length, vials: vials.length },
     generatedAt: now.toISOString(),
   };
 }

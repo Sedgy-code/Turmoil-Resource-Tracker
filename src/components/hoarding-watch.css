@@ -74,3 +74,8 @@
 .rank-place { display: inline-grid; place-items: center; min-width: 30px; height: 26px; padding: 0 6px; border: 1px solid var(--chip-line, #2a4552); border-radius: 8px; color: #dce5f0; font-weight: 750; font-variant-numeric: tabular-nums; }
 /* Low contributors: one line on how they're picked, above the list. */
 .hoard-low-intro { margin: 0 0 12px; }
+/* Members settling in: listed under the ranking, not scored yet. */
+.rank-settling-head { padding: 16px 20px 6px; }
+.rank-settling-head h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: 15px; }
+.rank-settling-head h2 .rank-new { margin: 0; }
+.rank-settling-head p { margin: 0; max-width: 760px; color: var(--muted); font-size: 12.5px; line-height: 1.6; }

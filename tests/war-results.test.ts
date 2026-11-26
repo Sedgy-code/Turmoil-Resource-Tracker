@@ -299,6 +299,95 @@ test("the ranking fills in missing Discord join dates straight away", async () =
   });
 });
 
+test("time in the clan doesn't raise or lower the ranking: only each member's own time counts", async () => {
+  const { contributionRanking, percentile } = await import("../src/lib/server/ranking");
+  await withDatabase(async (db) => {
+    const now = new Date("2026-11-26T12:00:00Z"); // Thursday; this week started Monday 23 November.
+    const admin = await addMember(db, "leader", "ADMIN");
+    const veteran = await addMember(db, "veteran");
+    const newer = await addMember(db, "newer");
+    const coaster = await addMember(db, "coaster");
+    const settler = await addMember(db, "settler");
+    const joinedDiscord = async (member: Member, date: string) => db.query("UPDATE app_members SET discord_joined_at = $2 WHERE id = $1", [member.id, date]);
+    for (const member of [admin, veteran, coaster]) await joinedDiscord(member, "2026-05-01T00:00:00Z");
+    await joinedDiscord(newer, "2026-11-05T09:00:00Z"); // three weeks ago, after two of the four wars began
+    await joinedDiscord(settler, "2026-11-21T09:00:00Z"); // five days ago
+    // Four wars. The newer member missed the first two: they weren't in the clan yet.
+    const war = (week: string, rows: [Member, number][]) => saveWarResult(admin, { week, label: "", clanTotal: null, images: [],
+      rows: rows.map(([member, points]) => ({ gameName: member.username, memberId: member.id, points })) }, db);
+    await war("2026-10-26", [[veteran, 1000], [coaster, 200], [admin, 600]]);
+    await war("2026-11-02", [[veteran, 1000], [coaster, 200], [admin, 600]]);
+    await war("2026-11-09", [[veteran, 1000], [newer, 1000], [coaster, 200], [admin, 600]]);
+    await war("2026-11-16", [[veteran, 1000], [newer, 1000], [coaster, 200], [admin, 600], [settler, 5000]]);
+    // Weekly saves: the veteran every week, the newer member every week since joining, the coaster every other week.
+    const save = (member: Member, week: string) => db.query("INSERT INTO dew_weekly_earnings (member_id, week_start, reason, amount) VALUES ($1, $2, 'resources', 20)", [member.id, week]);
+    const weeks = Array.from({ length: 9 }, (_, index) => shiftWeek("2026-09-28", index)); // the last 8 weeks and this one
+    for (const week of weeks) await save(veteran, week);
+    for (const week of ["2026-11-09", "2026-11-16", "2026-11-23"]) await save(newer, week);
+    for (const week of weeks.filter((_, index) => index % 2 === 0)) await save(coaster, week);
+    // Snipes: one before the newer member joined, one after; a called-off one only counts for whoever checked in.
+    const snipe = async (startsAt: string, cancelled: boolean, came: Member[]) => {
+      const id = randomUUID();
+      await db.query(`INSERT INTO snipe_plans (id, title, starts_at, activities, created_by, cancelled_at, cancelled_by)
+        VALUES ($1, 'Snipe', $2, '["mountSummons"]'::jsonb, $3, $4, $5)`, [id, startsAt, admin.id, cancelled ? startsAt : null, cancelled ? admin.id : null]);
+      for (const member of came) await db.query("INSERT INTO snipe_attendance (snipe_id, member_id, confirmed_by) VALUES ($1, $2, $3)", [id, member.id, admin.id]);
+    };
+    await snipe("2026-11-01T10:00:00Z", false, [veteran]);
+    await snipe("2026-11-18T10:00:00Z", false, [veteran, newer]);
+    await snipe("2026-11-19T10:00:00Z", true, [coaster]);
+
+    const ranking = await contributionRanking(admin, db, now);
+    const row = (member: Member) => ranking.rows.find((item) => item.member.id === member.id)!;
+    // Only the wars since they joined count for the newer member: 1,000 a war, just like the veteran.
+    assert.deepEqual([row(newer).warPoints, row(newer).warsPlayed, row(newer).warsCounted], [1000, 2, 2]);
+    assert.deepEqual([row(veteran).warPoints, row(veteran).warsCounted], [1000, 4]);
+    // Weekly saves out of their own weeks here (this week counts once saved).
+    assert.deepEqual([row(newer).updates, row(newer).updatesDue], [3, 3]);
+    assert.deepEqual([row(veteran).updates, row(veteran).updatesDue], [9, 9]);
+    assert.deepEqual([row(coaster).updates, row(coaster).updatesDue], [5, 9]);
+    // Snipes since they joined; the called-off one only for the coaster, who checked in.
+    assert.deepEqual([row(newer).snipes, row(newer).snipesHeld], [1, 1]);
+    assert.deepEqual([row(veteran).snipes, row(veteran).snipesHeld], [2, 2]);
+    assert.deepEqual([row(coaster).snipes, row(coaster).snipesHeld], [1, 3]);
+    assert.equal(row(newer).parts.updates, 1);
+    // Same effort, same score, whatever the time in the clan; a long-time member doing little stays low.
+    assert.equal(row(newer).score, row(veteran).score);
+    assert.ok(row(coaster).score < row(newer).score - 30);
+    assert.ok(row(coaster).rank < row(newer).rank);
+    // Settling in: in the first two weeks, not scored or ranked, listed after everyone else,
+    // and their big first war doesn't change anyone else's score.
+    assert.deepEqual([row(settler).settling, row(settler).rank, row(settler).score], [true, 0, 0]);
+    assert.equal(ranking.rows.at(-1)?.member.id, settler.id);
+    assert.deepEqual(ranking.rows.filter((item) => !item.settling).map((item) => item.rank), [1, 2, 3, 4]);
+    // Wars: the veteran and the newer member tie for the top among ranked members (5,000 from the settler isn't counted).
+    assert.equal(row(veteran).parts.warPoints, percentile(1000, [600, 1000, 1000, 200]));
+    assert.equal(row(newer).parts.warPoints, row(veteran).parts.warPoints);
+  });
+});
+
+test("settling in also covers members who haven't had a full war since joining", async () => {
+  const { contributionRanking } = await import("../src/lib/server/ranking");
+  await withDatabase(async (db) => {
+    const now = new Date("2026-11-26T12:00:00Z");
+    const admin = await addMember(db, "leader", "ADMIN");
+    const waiting = await addMember(db, "waiting");
+    const midWar = await addMember(db, "midwar");
+    await db.query("UPDATE app_members SET discord_joined_at = '2026-05-01T00:00:00Z' WHERE id = $1", [admin.id]);
+    // Joined 18 days ago, during the last recorded war (it began Tuesday 3 November).
+    await db.query("UPDATE app_members SET discord_joined_at = '2026-11-08T00:00:00Z' WHERE id <> $1", [admin.id]);
+    await saveWarResult(admin, { week: "2026-11-02", label: "", clanTotal: null, images: [], rows: [
+      { gameName: "leader", memberId: admin.id, points: 500 }, { gameName: "midwar", memberId: midWar.id, points: 300 },
+    ] }, db);
+    const ranking = await contributionRanking(admin, db, now);
+    const row = (member: Member) => ranking.rows.find((item) => item.member.id === member.id)!;
+    assert.equal(row(waiting).settling, true, "no full war since joining yet");
+    assert.equal(row(waiting).isNew, false);
+    // Scoring in the war they joined partway through counts, so they're ranked.
+    assert.equal(row(midWar).settling, false);
+    assert.deepEqual([row(midWar).warPoints, row(midWar).warsCounted], [300, 1]);
+  });
+});
+
 test("vials: donating at least 80% of a typical donor's amount earns full marks", async () => {
   const { contributionRanking, VIALS_FULL_MARKS } = await import("../src/lib/server/ranking");
   assert.equal(VIALS_FULL_MARKS, 0.8);
