@@ -233,7 +233,7 @@ test("the snipers are told in #snipe-chat when a snipe is cancelled", async () =
 test("a new snipe's post says when, what and who planned it, with a button, and never pings", () => {
   const message = snipePlanMessage({ title: "Day 3 – Skills @everyone", startsAt, activities: ["skillSummons", "eggMerges"], cancelled: false }, "Boss_*x*", "https://tracker.example");
   assert.deepEqual(message.allowed_mentions, { parse: [] });
-  assert.equal(message.content, "🎯 A new snipe is planned. Say **Yes** or **No** on the Clan Hub so leaders know who's in.");
+  assert.equal(message.content, "🎯 A new snipe is planned. Say **Yes**, **Maybe** or **No** on the Clan Hub so leaders know who's in.");
   const [embed] = message.embeds;
   assert.equal(embed.title, "🎯 New snipe: Day 3 – Skills @everyone");
   assert.equal(embed.color, 0xe6bd59);
@@ -315,4 +315,56 @@ test("the Snipes tab glows while a snipe is to come or on now, never for one cal
   assert.equal(await openSnipeCount(db, new Date("2031-03-05T01:00:00Z")), before + 1, "on now (check-in still open): glows");
   await db.query("UPDATE snipe_plans SET archived = TRUE, cancelled_at = $2 WHERE id = $1", [soon, at.toISOString()]);
   assert.equal(await openSnipeCount(db, at), before, "called off: no glow");
+});
+
+test("Maybe: pinged on a line of its own in the call, given the role, and told when a snipe is cancelled", async () => {
+  const deeId = randomUUID();
+  await db.query("INSERT INTO app_members (id, discord_id, username, role, active) VALUES ($1, '600', 'Dee', 'MEMBER', TRUE)", [deeId]);
+  const unsure = randomUUID();
+  await db.query("INSERT INTO snipe_plans (id, title, starts_at, activities, created_by) VALUES ($1, 'Day 3 – Pets', $2, '[\"eggMerges\"]'::jsonb, $3)", [unsure, startsAt, bossId]);
+  for (const [who, answer] of [[annId, "yes"], [deeId, "maybe"], [cyId, "no"]]) {
+    await db.query("INSERT INTO snipe_responses (snipe_id, member_id, answer) VALUES ($1, $2, $3)", [unsure, who, answer]);
+  }
+  const { calls, fetcher } = discord();
+  const call = await assembleSnipers(await member(bossId), unsure, { db, fetcher, now });
+  assert.deepEqual({ count: call.count, roleFailed: call.roleFailed }, { count: 2, roleFailed: 0 });
+  // Dee can't see #snipe-chat without the role either.
+  assert.deepEqual(calls.filter(({ method }) => method === "PUT").map(({ url }) => url), [`${API}/guilds/999/members/600/roles/r2`]);
+  const post = calls.find(({ method }) => method === "POST")!.body!;
+  assert.equal(post.content, [
+    "🎯 **Snipers, assemble! Day 3 – Pets**",
+    `Starts at 23:45 UTC (<t:${Date.parse(startsAt) / 1000}:R>). Called by Boss.`,
+    "<@200>",
+    "**Maybe:** <@600>, join if you can!",
+    "",
+    "Press **Check in** when you join the snipe (+10 Clan Points, once a week).",
+  ].join("\n"));
+  assert.deepEqual(post.allowed_mentions, { parse: [], users: ["200", "600"] });
+  // Only Maybes: the call still goes out, with no Yes line.
+  const maybesOnly = assembleMessages({ id: "s2", title: "Day 4 – Hammers", startsAt }, "Boss", [], now, ["600"]);
+  assert.equal(maybesOnly[0].content.split("\n")[2], "**Maybe:** <@600>, join if you can!");
+  assert.deepEqual(maybesOnly[0].allowed_mentions.users, ["600"]);
+  // Yes and Maybe spread over two posts keep their own lines.
+  const big = assembleMessages({ id: "s3", title: "Day 4", startsAt }, "Boss", Array.from({ length: 39 }, (_, index) => String(10_000 + index)), now, ["600", "700"]);
+  assert.deepEqual(big.map((part) => part.allowed_mentions.users.length), [40, 1]);
+  assert.match(big[0].content, /\n\*\*Maybe:\*\* <@600>, join if you can!\n/);
+  assert.equal(big[1].content, "**Maybe:** <@700>, join if you can!");
+  // Nobody said Yes or Maybe: nothing to call.
+  await db.query("DELETE FROM snipe_responses WHERE snipe_id = $1 AND answer <> 'no'", [unsure]);
+  await db.query("DELETE FROM snipe_assemblies");
+  await assert.rejects(assembleSnipers(await member(bossId), unsure, { db, fetcher, now }), /Nobody has said Yes or Maybe/);
+
+  // Leaders opening Snipes catch up the role for a Maybe too.
+  const future = randomUUID();
+  await db.query("INSERT INTO snipe_plans (id, title, starts_at, activities, created_by) VALUES ($1, 'Day 1 – Hammers', '2027-02-01T23:45:00Z', '[\"hammers\"]'::jsonb, $2)", [future, bossId]);
+  await respondToSnipe(await member(deeId), future, { answer: "maybe" }, db);
+  const catchUp = discord();
+  assert.deepEqual(await catchUpSnipeRoles({ db, fetcher: catchUp.fetcher, now: new Date("2027-02-01T22:45:00Z") }), { given: 1, failed: 0 });
+  assert.deepEqual(catchUp.calls.filter(({ method }) => method === "PUT").map(({ url }) => url), [`${API}/guilds/999/members/600/roles/r2`]);
+  // Cancelled: everyone who said Yes or Maybe is told (A–Z), not who said No.
+  await respondToSnipe(await member(annId), future, { answer: "yes" }, db);
+  await respondToSnipe(await member(cyId), future, { answer: "no" }, db);
+  const cancelled = await cancelSnipe(await member(bossId), future, db, new Date("2027-02-01T20:00:00Z"));
+  assert.deepEqual(cancelled.snipers, ["200", "600"]);
+  assert.deepEqual([cancelled.plan.counts.yes, cancelled.plan.counts.maybe, cancelled.plan.counts.no], [1, 1, 1]);
 });

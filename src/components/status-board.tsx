@@ -125,7 +125,7 @@ export function StatusBoard({ notify }: { notify: (message: string, error?: bool
               </small>
               {(board.voting || board.snipe) && <small className="status-extra">
                 {board.voting && <span>{row.vote ? t("Vote: {days}", { days: row.vote.map((day) => t("Day {day}", { day })).join(" + ") }) : t("No vote yet")}</span>}
-                {board.snipe && <span>{row.snipe === "yes" ? t("Snipe: Yes") : row.snipe === "no" ? t("Snipe: No") : t("Snipe: no answer")}</span>}
+                {board.snipe && <span>{row.snipe === "yes" ? t("Snipe: Yes") : row.snipe === "maybe" ? t("Snipe: Maybe") : row.snipe === "no" ? t("Snipe: No") : t("Snipe: no answer")}</span>}
               </small>}
             </span>
           </button>

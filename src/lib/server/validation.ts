@@ -117,7 +117,7 @@ export const createSnipeSchema = z.object({
   activities: activitiesSchema,
 }).strict();
 export const updateSnipeSchema = createSnipeSchema.partial().extend({ archived: z.boolean().optional() }).strict().refine(value => Object.keys(value).length > 0, "Choose a change to save.");
-export const snipeResponseSchema = z.object({ answer: z.enum(["yes", "no"]) }).strict();
+export const snipeResponseSchema = z.object({ answer: z.enum(["yes", "maybe", "no"]) }).strict();
 export const purchaseDewSchema = z.object({ itemId: z.string().min(1).max(64) }).strict();
 export const equipDewSchema = z.object({
   itemId: z.string().min(1).max(64).nullable(),

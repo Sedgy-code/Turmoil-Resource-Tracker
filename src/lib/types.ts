@@ -108,6 +108,8 @@ export interface WarEstimate {
   rows: { activity: WarActivity; label: string; quantity: number; minimum: number; maximum: number }[];
   missingCosts: number;
 }
+/** Maybe: might join. Not counted as coming, and missing the snipe isn't held against them. */
+export type SnipeAnswer = "yes" | "maybe" | "no";
 export interface SnipePlan {
   id: string;
   title: string;
@@ -120,10 +122,11 @@ export interface SnipePlan {
   assembled?: { by: string; at: string; count: number } | null;
   /** A leader called the snipe off; it's archived and closed to answers and check-in. */
   cancelled?: { by: string; at: string } | null;
-  responses: { memberId: string; answer: "yes" | "no"; updatedAt: string }[];
+  responses: { memberId: string; answer: SnipeAnswer; updatedAt: string }[];
   attendees?: { memberId: string; confirmedBy: string; confirmedAt: string; member?: Member }[];
   participants: { member: Member; estimate: WarEstimate }[];
-  counts: { yes: number; no: number; unanswered: number };
+  /** maybe is missing from snipes archived before Maybe existed. */
+  counts: { yes: number; maybe?: number; no: number; unanswered: number };
   estimate: WarEstimate;
 }
 export interface SnipesResponse { plans: SnipePlan[] }
@@ -370,7 +373,7 @@ export interface StatusRow {
   /** Their vote for next war's clan days, while voting is open (null: not voted). */
   vote: number[] | null;
   /** Their answer to the next snipe (null: not answered, or no snipe). */
-  snipe: "yes" | "no" | null;
+  snipe: SnipeAnswer | null;
   remindersAllowed: boolean;
   /** A leader's reminder this clan week (one per member per week). */
   nudge: { by: string; at: string } | null;
