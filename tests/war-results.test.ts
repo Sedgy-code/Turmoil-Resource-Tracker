@@ -349,7 +349,10 @@ test("time in the clan doesn't raise or lower the ranking: only each member's ow
     assert.deepEqual([row(newer).snipes, row(newer).snipesHeld], [1, 1]);
     assert.deepEqual([row(veteran).snipes, row(veteran).snipesHeld], [2, 2]);
     assert.deepEqual([row(coaster).snipes, row(coaster).snipesHeld], [1, 3]);
-    assert.equal(row(newer).parts.updates, 1);
+    // Keeping up with every week of theirs counts the same as the veteran's every week.
+    assert.equal(row(newer).parts.updates, row(veteran).parts.updates);
+    assert.equal(row(newer).parts.snipes, row(veteran).parts.snipes);
+    assert.ok(row(coaster).parts.updates! < row(newer).parts.updates!);
     // Same effort, same score, whatever the time in the clan; a long-time member doing little stays low.
     assert.equal(row(newer).score, row(veteran).score);
     assert.ok(row(coaster).score < row(newer).score - 30);
