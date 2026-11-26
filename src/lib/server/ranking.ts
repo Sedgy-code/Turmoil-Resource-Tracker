@@ -112,6 +112,7 @@ export async function contributionRanking(actor: Member, db?: Database, now = ne
   };
 
   // Weekly Clan Hub saves: the past weeks since they joined (or that they saved in anyway), plus this week once saved.
+  // Includes every member's saves, active or not: they show which weeks the Hub was keeping saves.
   const saves = await connection.query(`SELECT member_id, week_start::text AS week FROM dew_weekly_earnings
     WHERE reason = 'resources' AND week_start >= $1`, [sinceWeek]);
   const savedWeeks = new Map<string, Set<string>>();
@@ -119,7 +120,10 @@ export async function contributionRanking(actor: Member, db?: Database, now = ne
     const id = String(row.member_id);
     savedWeeks.set(id, (savedWeeks.get(id) ?? new Set()).add(String(row.week).slice(0, 10)));
   }
-  const pastWeeks = Array.from({ length: RECENT_WEEKS }, (_, index) => shiftWeek(sinceWeek, index));
+  // Only weeks the Clan Hub was keeping saves: someone saved that week. Weeks before the first save on
+  // record (or a week nobody could save) count for no one.
+  const trackedWeeks = new Set([...savedWeeks.values()].flatMap((weeks) => [...weeks]));
+  const pastWeeks = Array.from({ length: RECENT_WEEKS }, (_, index) => shiftWeek(sinceWeek, index)).filter((week) => trackedWeeks.has(week));
   const updatesFor = (member: Member) => {
     const saved = savedWeeks.get(member.id) ?? new Set<string>();
     const due = pastWeeks.filter((week) => saved.has(week) || Date.parse(`${week}T00:00:00Z`) >= joined(member));

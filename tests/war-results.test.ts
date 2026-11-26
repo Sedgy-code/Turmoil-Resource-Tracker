@@ -355,6 +355,29 @@ test("time in the clan doesn't raise or lower the ranking: only each member's ow
   });
 });
 
+test("weekly updates only count the weeks the Clan Hub was keeping saves", async () => {
+  const { contributionRanking } = await import("../src/lib/server/ranking");
+  await withDatabase(async (db) => {
+    const now = new Date("2026-11-26T12:00:00Z");
+    const admin = await addMember(db, "leader", "ADMIN");
+    const founder = await addMember(db, "founder");
+    const late = await addMember(db, "late");
+    await db.query("UPDATE app_members SET discord_joined_at = '2026-04-11T00:00:00Z'");
+    const save = (member: Member, week: string) => db.query("INSERT INTO dew_weekly_earnings (member_id, week_start, reason, amount) VALUES ($1, $2, 'resources', 20)", [member.id, week]);
+    // The last 8 weeks start on 28 September, but the first save anyone made was for the week of 12 October.
+    const tracked = ["2026-10-12", "2026-10-19", "2026-10-26", "2026-11-02", "2026-11-09", "2026-11-16", "2026-11-23"];
+    for (const week of tracked) await save(founder, week);
+    for (const week of tracked.slice(2)) await save(late, week);
+    const ranking = await contributionRanking(admin, db, now);
+    const row = (member: Member) => ranking.rows.find((item) => item.member.id === member.id)!;
+    // Saving every week there was to save: all of them, not 7 of 9.
+    assert.deepEqual([row(founder).updates, row(founder).updatesDue], [7, 7]);
+    // Weeks the Hub was keeping saves still count when they're missed.
+    assert.deepEqual([row(late).updates, row(late).updatesDue], [5, 7]);
+    assert.deepEqual([row(admin).updates, row(admin).updatesDue], [0, 6]);
+  });
+});
+
 test("settling in also covers members who haven't had a full war since joining", async () => {
   const { contributionRanking } = await import("../src/lib/server/ranking");
   await withDatabase(async (db) => {
