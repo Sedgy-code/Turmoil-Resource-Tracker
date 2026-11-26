@@ -181,7 +181,7 @@ function LowContributors({ ranking }: { ranking: ContributionRankingResponse | n
   const { rows, typical } = lowContributors(ranking);
   const today = new Date().toISOString().slice(0, 10);
   return <>
-    <p className="hoard-typical hoard-low-intro">{t("Average war points per war over the last {wars} wars, from War Results (missing a war counts as 0). Listed: under half of a typical member’s {points}.", { wars, points: numberFormat(Math.round(typical)) })}</p>
+    <p className="hoard-typical hoard-low-intro">{t("Average war points per war over the last {wars} wars, from War Results, counting only wars since each member joined (missing one counts as 0). Listed: under half of a typical member’s {points}. Members settling in aren’t listed.", { wars, points: numberFormat(Math.round(typical)) })}</p>
     {rows.length === 0 ? <section className="panel hoard-state"><p>{t("Nobody is far below a typical member right now.")}</p></section> : <div className="hoard-list">
       {rows.map((row) => <article key={row.member.id} className="panel hoard-card hoard-watch">
         <header>
@@ -192,7 +192,7 @@ function LowContributors({ ranking }: { ranking: ContributionRankingResponse | n
         </header>
         <dl className="hoard-facts">
           <div><dt>{t("Average per war")}</dt><dd>{numberFormat(Math.round(row.warPoints ?? 0))}{typical > 0 && <small>{t("{percent}% of typical", { percent: Math.round((row.warPoints ?? 0) / typical * 100) })}</small>}</dd></div>
-          <div><dt>{t("Wars played")}</dt><dd>{t("{count} of {total} wars", { count: row.warsPlayed, total: wars })}</dd></div>
+          <div><dt>{t("Wars played")}</dt><dd>{t("{count} of {total} wars", { count: row.warsPlayed, total: row.warsCounted })}</dd></div>
           <div><dt>{t("Days in clan")}</dt><dd>{row.daysInClan}</dd></div>
         </dl>
       </article>)}

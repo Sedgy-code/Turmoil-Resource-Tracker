@@ -323,18 +323,28 @@ export interface WarSpendingResponse { week: string; warWeeks: string[]; rows: W
 export type RankingMetric = "warPoints" | "vials" | "snipes" | "updates" | "clanDays";
 export interface ContributionRow {
   member: Member;
+  /** Place among ranked members (1 = lowest score). 0 while settling in. */
   rank: number;
-  /** 0–100; lower means contributing less. */
+  /** 0–100; lower means contributing less. 0 while settling in (not scored yet). */
   score: number;
-  /** Average war points over the last few wars (0 when missing from a war). */
+  /**
+   * Everything is counted only from when they joined the clan, so time in the clan doesn't help or hurt.
+   * Average war points per war of theirs (0 for a war of theirs they're missing from). Null: no war of theirs yet.
+   */
   warPoints: number | null;
+  /** Wars of theirs they scored in. */
   warsPlayed: number;
-  /** Vials donated across the last few vial records. */
+  /** Recent wars since they joined (and any earlier one they scored in). */
+  warsCounted: number;
+  /** Average vials donated per recent vial record since they joined. Null: none yet. */
   vials: number | null;
+  /** Snipes they joined, out of snipesHeld: the snipes held since they joined (last 8 weeks). */
   snipes: number;
-  /** Weeks with a complete resource save, out of the last 8. */
+  snipesHeld: number;
+  /** Weeks with a complete resource save, out of updatesDue: the weeks since they joined (last 8, plus this week once saved). */
   updates: number;
-  /** Share (0–1) of their war points scored on the clan's chosen days, over recent wars. */
+  updatesDue: number;
+  /** Share (0–1) of their war points scored on the clan's chosen days, over recent wars since they joined. */
   clanDayShare: number | null;
   /** Recent wars where too much of their spending was on other days. */
   blackMarks: number;
@@ -343,6 +353,8 @@ export interface ContributionRow {
   /** Days since they joined the Turmoil Discord server (or the Clan Hub, until Discord's date is known). */
   daysInClan: number;
   isNew: boolean;
+  /** In their first two weeks, or no full war since joining yet: shown apart, not ranked. */
+  settling: boolean;
   lastSavedAt: string | null;
 }
 /** Leadership jobs that are due right now, for the to-do card at the top of Home. */

@@ -85,11 +85,16 @@ test("the ranking rewards spending on clan days and docks black marks", async ()
     const admin = await addMember(db, "leader", "ADMIN");
     const loyal = await addMember(db, "loyal");
     const offday = await addMember(db, "offday");
+    const later = await addMember(db, "later");
     await db.query("UPDATE app_members SET joined_at = NOW() - INTERVAL '60 days'");
+    // Joined the day after this war began.
+    await db.query("UPDATE app_members SET discord_joined_at = '2026-10-14T00:00:00Z' WHERE id = $1", [later.id]);
     await setClanDays(admin, { week: WEEK, days: [1, 3] }, db);
     await day(admin, 1, [{ member: loyal, points: 100 }, { member: offday, points: 10 }], db);
     await day(admin, 2, [{ member: offday, points: 90 }], db);
     const ranking = await contributionRanking(admin, db, DURING_WAR);
+    // A war from before they joined (and that they scored nothing in) isn't counted for them.
+    assert.equal(ranking.rows.find((row) => row.member.id === later.id)?.clanDayShare, null);
     assert.equal(ranking.weights.clanDays, 15);
     const loyalRow = ranking.rows.find((row) => row.member.id === loyal.id)!;
     const offdayRow = ranking.rows.find((row) => row.member.id === offday.id)!;

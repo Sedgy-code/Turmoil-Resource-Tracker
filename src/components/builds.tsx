@@ -233,7 +233,7 @@ function DiscordPanel({ page, onChange, notify, t }: { page: BuildsResponse; onC
   </section>;
 }
 
-/** Clan → Builds: the strongest builds right now, pulled every day from 1vcian's site. */
+/** Builds (its own place in the side menu): the strongest builds right now, pulled every day from 1vcian's site. */
 export function Builds({ notify }: { notify: (message: string, error?: boolean) => void }) {
   const { t } = useLanguage();
   const date = useDate();

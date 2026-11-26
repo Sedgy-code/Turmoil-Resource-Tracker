@@ -25,6 +25,10 @@ function scoreClass(score: number) {
   return score < 35 ? "rank-low" : score < 60 ? "rank-mid" : "rank-high";
 }
 
+/** A share such as "3 / 4", or a dash when there was nothing to count. */
+const share = (done: number, due: number) => due > 0 ? `${done} / ${due}` : "—";
+const rate = (done: number, due: number) => due > 0 ? done / due : null;
+
 export function ContributionRanking() {
   const { t, language } = useLanguage();
   const [data, setData] = useState<ContributionRankingResponse | null>(null);
@@ -43,14 +47,17 @@ export function ContributionRanking() {
   }, []);
   useEffect(() => { void load(); }, [load]);
   const rows = data?.rows ?? [];
-  const { sorted, header } = useSortable<ContributionRow, Column>(rows, {
+  // Members settling in aren't scored yet: they get their own list below the ranking.
+  const ranked = rows.filter((row) => !row.settling);
+  const settling = rows.filter((row) => row.settling);
+  const { sorted, header } = useSortable<ContributionRow, Column>(ranked, {
     rank: (row) => -row.rank,
     member: (row) => row.member.username,
     score: (row) => row.score,
     warPoints: (row) => row.warPoints,
     vials: (row) => row.vials,
-    snipes: (row) => row.snipes,
-    updates: (row) => row.updates,
+    snipes: (row) => rate(row.snipes, row.snipesHeld),
+    updates: (row) => rate(row.updates, row.updatesDue),
     clanDays: (row) => row.clanDayShare,
     blackMarks: (row) => row.blackMarks,
     days: (row) => row.daysInClan,
@@ -62,12 +69,18 @@ export function ContributionRanking() {
   const weights = Object.entries(data.weights) as [RankingMetric, number][];
   const missing = (Object.keys(METRIC_LABELS) as RankingMetric[]).filter((metric) => !(metric in data.weights));
   const amount = (value: number | null) => value === null ? "—" : numberFormat(Math.round(value));
+  const wars = (row: ContributionRow) => row.warsCounted > 0 && <small className="rank-sub">{t("{count} of {total} wars", { count: row.warsPlayed, total: row.warsCounted })}</small>;
+  const joinedOn = (row: ContributionRow) => row.member.discordJoinedAt && <small className="rank-sub">{new Intl.DateTimeFormat(language, { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" }).format(new Date(row.member.discordJoinedAt))}</small>;
+  const lastSaved = (row: ContributionRow) => row.lastSavedAt ? t("{days} days ago", { days: Math.floor((Date.now() - new Date(row.lastSavedAt).getTime()) / 86_400_000) }) : t("Never");
+  const badges = (row: ContributionRow) => <>{row.member.neverSignedIn && <span className="rank-never">{t("Never signed in")}</span>}{!!row.member.strikes && <span className="rank-never">⚠️ {t("{count} strikes", { count: row.member.strikes })}</span>}</>;
   return <div className="hoard-page">
     <section className="panel hoard-intro">
       <div>
         <h2>{t("How the score works")}</h2>
         <p>{t("Each member gets a score out of 100 from how they compare with everyone else. Lowest scores are at the top — talk to them first when you need space.")}</p>
         <ul className="rank-weights">{weights.map(([metric, weight]) => <li key={metric}><strong>{weight}%</strong> {t(METRIC_LABELS[metric])}</li>)}</ul>
+        <p>{t("Everything counts only from when each member joined, so time in the clan doesn’t raise or lower the score.")}</p>
+        <p>{t("Weekly updates and snipes are shares of their own time here: weeks saved out of their weeks in the clan, and snipes joined out of the snipes held since they joined (last 8 weeks).")}</p>
         <p>{t("Vials: donating at least 80% of what a typical member gives earns full marks, as ascension bonuses differ (5% to 60%).")}</p>
         <p>{t("Minus 40 for never signing in to the Clan Hub.")}</p>
         <p>{t("Minus 5 for each war where more than 10% of their war points came on days that weren’t clan days (a black mark, up to 15).")}</p>
@@ -75,8 +88,8 @@ export function ContributionRanking() {
       </div>
       <div className="rank-controls">
         <button className="button subtle" onClick={() => downloadRows(`turmoil-ranking-${new Date().toISOString().slice(0, 10)}.csv`, [
-          ["Rank", "Member", "Score", "Penalty", "War points (avg)", "Wars played", "Vials donated", "Snipes (8 wk)", "Weekly updates", "On clan days (%)", "Black marks", "Strikes", "Holiday until", "Days in clan", "Joined Discord", "Last saved", "Never signed in"],
-          ...sorted.map((row) => [row.rank, row.member.username, row.score, row.penalty, row.warPoints === null ? "" : Math.round(row.warPoints), row.warsPlayed, row.vials ?? "", row.snipes, row.updates, row.clanDayShare === null ? "" : Math.round(row.clanDayShare * 100), row.blackMarks, row.member.strikes ?? 0, row.member.holidayUntil ?? "", row.daysInClan, row.member.discordJoinedAt?.slice(0, 10) ?? "", row.lastSavedAt ?? "", row.member.neverSignedIn ? "Yes" : ""]),
+          ["Rank", "Member", "Score", "Penalty", "War points (avg)", "Wars played", "Wars counted", "Vials donated (avg)", "Snipes joined", "Snipes held", "Weekly updates", "Weeks counted", "On clan days (%)", "Black marks", "Strikes", "Holiday until", "Days in clan", "Joined Discord", "Last saved", "Never signed in", "Settling in"],
+          ...[...sorted, ...settling].map((row) => [row.settling ? "" : row.rank, row.member.username, row.settling ? "" : row.score, row.penalty, row.warPoints === null ? "" : Math.round(row.warPoints), row.warsPlayed, row.warsCounted, row.vials === null ? "" : Math.round(row.vials), row.snipes, row.snipesHeld, row.updates, row.updatesDue, row.clanDayShare === null ? "" : Math.round(row.clanDayShare * 100), row.blackMarks, row.member.strikes ?? 0, row.member.holidayUntil ?? "", row.daysInClan, row.member.discordJoinedAt?.slice(0, 10) ?? "", row.lastSavedAt ?? "", row.member.neverSignedIn ? "Yes" : "", row.settling ? "Yes" : ""]),
         ])}><ArrowDownToLine size={15} />{t("Export CSV")}</button>
         <button className="button subtle" onClick={() => void load()} disabled={loading}><RefreshCw size={15} className={loading ? "spin" : undefined} />{t("Refresh")}</button>
       </div>
@@ -85,26 +98,46 @@ export function ContributionRanking() {
       <div className="table-scroll"><table className="resource-table rank-table stack-table">
         <thead><tr>
           {header("rank", "#")}{header("member", t("Member"))}{header("score", t("Score"))}
-          {header("warPoints", t("War points (avg)"))}{header("vials", t("Vials donated"))}{header("snipes", t("Snipes (8 wk)"))}
+          {header("warPoints", t("War points (avg)"))}{header("vials", t("Vials donated"))}{header("snipes", t("Snipes joined"))}
           {header("updates", t("Weekly updates"))}{header("clanDays", t("On clan days"))}{header("blackMarks", t("Black marks"))}
           {header("days", t("Days in clan"))}{header("saved", t("Last saved"))}
         </tr></thead>
         <tbody>{sorted.map((row) => <tr key={row.member.id} {...fold.row(row.member.id)}>
           {/* A plain place number: the lowest scores are who to talk to first, not an award. */}
           <td className="stack-hide"><span className="rank-place">{row.rank}</span></td>
-          <td className="stack-title"><div className="table-member"><span className="rank-place stack-only">{row.rank}</span><MemberAvatar member={row.member} small /><div><strong><MemberName member={row.member} /></strong>{row.isNew && <span className="rank-new">{t("New")}</span>}{row.member.neverSignedIn && <span className="rank-never">{t("Never signed in")}</span>}{!!row.member.strikes && <span className="rank-never">⚠️ {t("{count} strikes", { count: row.member.strikes })}</span>}</div></div></td>
+          <td className="stack-title"><div className="table-member"><span className="rank-place stack-only">{row.rank}</span><MemberAvatar member={row.member} small /><div><strong><MemberName member={row.member} /></strong>{badges(row)}</div></div></td>
           <td className="stack-key" data-label={t("Score")}><span className={`rank-score ${scoreClass(row.score)}`}>{row.score}</span>{row.penalty > 0 && <small className="rank-penalty">−{row.penalty}</small>}</td>
-          <td data-label={t("War points (avg)")}>{amount(row.warPoints)}{row.warPoints !== null && <small className="rank-sub">{t("{count} of {total} wars", { count: row.warsPlayed, total: data.records.wars })}</small>}</td>
+          <td data-label={t("War points (avg)")}>{amount(row.warPoints)}{wars(row)}</td>
           <td data-label={t("Vials donated")}>{amount(row.vials)}</td>
-          <td data-label={t("Snipes (8 wk)")}>{row.snipes || "—"}</td>
-          <td data-label={t("Weekly updates")}>{row.updates} / 8</td>
+          <td data-label={t("Snipes joined")}>{share(row.snipes, row.snipesHeld)}</td>
+          <td data-label={t("Weekly updates")}>{share(row.updates, row.updatesDue)}</td>
           <td data-label={t("On clan days")}>{row.clanDayShare === null ? "—" : `${Math.round(row.clanDayShare * 100)}%`}</td>
           <td data-label={t("Black marks")} className={row.blackMarks ? "hoard-up" : undefined}>{row.blackMarks || "—"}</td>
-          <td data-label={t("Days in clan")}>{row.daysInClan}{row.member.discordJoinedAt && <small className="rank-sub">{new Intl.DateTimeFormat(language, { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" }).format(new Date(row.member.discordJoinedAt))}</small>}</td>
-          <td data-label={t("Last saved")}>{row.lastSavedAt ? t("{days} days ago", { days: Math.floor((Date.now() - new Date(row.lastSavedAt).getTime()) / 86_400_000) }) : t("Never")}</td>
+          <td data-label={t("Days in clan")}>{row.daysInClan}{joinedOn(row)}</td>
+          <td data-label={t("Last saved")}>{lastSaved(row)}</td>
           {fold.toggleCell(row.member.id)}
         </tr>)}</tbody>
       </table></div>
     </section>
+    {settling.length > 0 && <section className="panel rank-settling">
+      <div className="rank-settling-head">
+        <h2>{t("Settling in")} <span className="rank-new">{settling.length}</span></h2>
+        <p>{t("New members in their first two weeks, or who haven’t had a full war since joining. They aren’t scored or ranked yet — here’s how they’re getting on.")}</p>
+      </div>
+      <div className="table-scroll"><table className="resource-table rank-table stack-table">
+        <thead><tr>
+          <th>{t("Member")}</th><th>{t("Days in clan")}</th><th>{t("War points (avg)")}</th><th>{t("Snipes joined")}</th><th>{t("Weekly updates")}</th><th>{t("Last saved")}</th>
+        </tr></thead>
+        <tbody>{settling.map((row) => <tr key={row.member.id} {...fold.row(row.member.id)}>
+          <td className="stack-title"><div className="table-member"><MemberAvatar member={row.member} small /><div><strong><MemberName member={row.member} /></strong>{badges(row)}</div></div></td>
+          <td className="stack-key" data-label={t("Days in clan")}>{row.daysInClan}{joinedOn(row)}</td>
+          <td data-label={t("War points (avg)")}>{amount(row.warPoints)}{wars(row)}</td>
+          <td data-label={t("Snipes joined")}>{share(row.snipes, row.snipesHeld)}</td>
+          <td data-label={t("Weekly updates")}>{share(row.updates, row.updatesDue)}</td>
+          <td data-label={t("Last saved")}>{lastSaved(row)}</td>
+          {fold.toggleCell(row.member.id)}
+        </tr>)}</tbody>
+      </table></div>
+    </section>}
   </div>;
 }

@@ -64,6 +64,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  Anvil,
   ArrowDownToLine,
   ArrowDown,
   ArrowUp,
@@ -174,19 +175,21 @@ const VIEW_HREF: Record<View, string> = {
   me: "/me",
   status: "/status",
 };
-type Section = "home" | "resources" | "war" | "snipes" | "clan" | "me" | "leadership";
+type Section = "home" | "resources" | "war" | "snipes" | "clan" | "builds" | "me" | "leadership";
 /**
  * The menu, the same six tabs for everyone: Home, Resources, War (what's happening now), Snipes (its
  * own tab, so the question "can you join?" is one tap away), Clan (how the clan and its members are
  * doing) and Me (your own things and settings). Each opens its first page; a section with more than
  * one page shows tabs. Leaders also get Leadership in the side menu.
  */
-const SECTIONS: { section: Section; label: string; short: string; icon: Icon; tabs: { view: View; label: string }[]; admin?: boolean }[] = [
+/** The side menu. `bar: false` keeps a section out of the phone bar along the bottom (it stays in the phone menu). */
+const SECTIONS: { section: Section; label: string; short: string; icon: Icon; tabs: { view: View; label: string }[]; admin?: boolean; bar?: false }[] = [
   { section: "home", label: "Home", short: "Home", icon: House, tabs: [{ view: "dashboard", label: "Home" }] },
   { section: "resources", label: "My Resources", short: "Resources", icon: Backpack, tabs: [{ view: "resources", label: "My Resources" }] },
   { section: "war", label: "War", short: "War", icon: Swords, tabs: [{ view: "warWeek", label: "This Week" }, { view: "spending", label: "Spending Order" }, { view: "war", label: "Points Calculator" }] },
   { section: "snipes", label: "Snipes", short: "Snipes", icon: Crosshair, tabs: [{ view: "snipes", label: "Snipes" }] },
-  { section: "clan", label: "Clan", short: "Clan", icon: Trophy, tabs: [{ view: "clan", label: "Rankings" }, { view: "warResults", label: "War Results" }, { view: "vials", label: "Vials" }, { view: "tech", label: "Clan Tech" }, { view: "builds", label: "Builds" }, { view: "weeks", label: "Weekly History" }] },
+  { section: "clan", label: "Clan", short: "Clan", icon: Trophy, tabs: [{ view: "clan", label: "Rankings" }, { view: "warResults", label: "War Results" }, { view: "vials", label: "Vials" }, { view: "tech", label: "Clan Tech" }, { view: "weeks", label: "Weekly History" }] },
+  { section: "builds", label: "Builds", short: "Builds", icon: Anvil, bar: false, tabs: [{ view: "builds", label: "Builds" }] },
   { section: "me", label: "Me", short: "Me", icon: CircleUserRound, tabs: [{ view: "me", label: "Me" }, { view: "store", label: "Reward Shop" }] },
   { section: "leadership", label: "Leadership", short: "Leadership", icon: ShieldCheck, admin: true, tabs: [{ view: "status", label: "Status board" }, { view: "members", label: "Members" }, { view: "ranking", label: "Ranking" }, { view: "hoarding", label: "Player Resource Management" }, { view: "settings", label: "Settings" }] },
 ];
@@ -896,7 +899,7 @@ function TrackerApp({ view }: { view: View }) {
         </main>
       </div>
       <nav className="bottom-bar" aria-label={t("Quick navigation")}>
-        {SECTIONS.filter((entry) => !entry.admin).map(({ section, short, icon: NavIcon, tabs }) => (
+        {SECTIONS.filter((entry) => !entry.admin && entry.bar !== false).map(({ section, short, icon: NavIcon, tabs }) => (
           <Link key={section} href={VIEW_HREF[tabs[0].view]} className={[sectionOf(view).section === section ? "active" : "", section === "snipes" && snipeOpen ? "snipe-open" : ""].filter(Boolean).join(" ") || undefined} aria-current={sectionOf(view).section === section ? "page" : undefined}>
             <NavIcon size={20} />
             <span>{t(short)}</span>
