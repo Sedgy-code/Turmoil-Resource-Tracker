@@ -228,6 +228,9 @@ CREATE TABLE IF NOT EXISTS member_strikes (
   removed_by TEXT REFERENCES app_members(id)
 );
 CREATE INDEX IF NOT EXISTS member_strikes_member_idx ON member_strikes(member_id);
+ALTER TABLE member_strikes ALTER COLUMN created_by DROP NOT NULL;
+ALTER TABLE member_strikes ADD COLUMN IF NOT EXISTS auto_week DATE;
+CREATE UNIQUE INDEX IF NOT EXISTS member_strikes_auto_week_idx ON member_strikes (member_id, auto_week) WHERE auto_week IS NOT NULL;
 CREATE TABLE IF NOT EXISTS member_events (
   id TEXT PRIMARY KEY,
   member_id TEXT NOT NULL REFERENCES app_members(id),

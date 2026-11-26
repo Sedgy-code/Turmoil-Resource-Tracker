@@ -39,6 +39,7 @@ export function reminderMessage(mentions: string[], link: string): string {
     mentions.join(" "),
     "",
     `Please save your resources before Clan War Day 1 starts (Tuesday 00:00 UTC) (+20 Clan Points): ${link}`,
+    "⚠️ Not saved by the end of Day 1 (Wednesday 00:00 UTC) means an automatic strike.",
   ].join("\n");
 }
 
@@ -122,7 +123,7 @@ export async function sendSnipeShoutout(
 }
 
 /** #the-dictators-den, where leadership gets its reminders. */
-const LEADERSHIP_CHANNEL_ID = "1504758222974746645";
+export const LEADERSHIP_CHANNEL_ID = "1504758222974746645";
 const DAY = 86_400_000;
 
 /**

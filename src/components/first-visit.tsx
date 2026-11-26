@@ -200,7 +200,7 @@ export function AfterSaveSheet({ member, first = false, onClose, notify }: { mem
       </div>}
       {!member.remindersAllowed && <div className="after-save-part">
         <h3><Bell size={17} aria-hidden="true" />{t("Want a reminder if you forget?")}</h3>
-        <p>{t("If you haven’t saved, a leader can send you one Discord message a week. Never more.")}</p>
+        <p>{t("If you haven’t saved, a leader can send you one Discord message a week. You’ll also get one if you get an automatic strike.")}</p>
         <button type="button" className={`button ${reminders ? "secondary" : "primary"}`} disabled={busy || reminders} onClick={async () => {
           setBusy(true);
           try { await saveReminders(true); setReminders(true); notify(t("Discord reminders are on.")); }

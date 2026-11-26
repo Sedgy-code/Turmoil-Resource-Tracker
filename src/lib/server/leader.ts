@@ -61,7 +61,7 @@ export async function leaderTodo(actor: Member, db?: Database, now = new Date())
  * Each active member's clan week: saved (a complete save this week, or a leader saved for them),
  * away, or not started. Shared by the to-do card and the status board, so their counts agree.
  */
-async function memberWeeks(connection: SqlConnection, now: Date) {
+export async function memberWeeks(connection: SqlConnection, now: Date) {
   const week = currentWeek(now);
   const rows = await connection.query(
     `SELECT m.*, b.updated_at AS bank_updated_at,
