@@ -126,19 +126,17 @@ const LEADERSHIP_CHANNEL_ID = "1504758222974746645";
 const DAY = 86_400_000;
 
 /**
- * Jobs the bot reminds leadership about, in the order they appear in a reminder:
- * - warday: today's clan war screenshot (Days 1–5, before the day ends at 00:00 UTC)
+ * Jobs the bot reminds leadership about, in the order they appear in a reminder. Daily war screenshots
+ * (Days 1–5) aren't one any more: leadership stopped keeping them.
  * - clanDays: pick the clan days (Monday, before the next war's Day 1 starts on Tuesday 00:00 UTC)
  * - war: the end-of-war screenshots (Monday, Day 7)
  * - vials: the clan tech donation list (Sunday; the race resets Monday 00:00 UTC)
  */
-export const LEADERSHIP_TASKS = ["warday", "clanDays", "war", "vials"] as const;
+export const LEADERSHIP_TASKS = ["clanDays", "war", "vials"] as const;
 export type LeadershipTask = (typeof LEADERSHIP_TASKS)[number];
 
 export interface LeadershipDue {
   tasks: LeadershipTask[];
-  /** The war day (1–5) that still needs its daily upload, and when that day ends. */
-  warDay?: { day: number; endsAt: Date };
   /** On Day 7 the clan days are for the war that starts the next day (as on War → This Week). */
   nextWar: boolean;
   /** Members' votes for that war's days (index 0 = Day 1), when the clan days still need picking. */
@@ -146,18 +144,14 @@ export interface LeadershipDue {
 }
 
 /**
- * Which jobs are still undone. Vials belong to the Monday–Monday race week; war results and daily
- * points belong to the war that runs Tuesday to Monday (its week is the Monday before Day 1).
+ * Which jobs are still undone. Vials belong to the Monday–Monday race week; war results belong to
+ * the war that runs Tuesday to Monday (its week is the Monday before Day 1).
  */
 export async function leadershipDue(db: Database, now = new Date(), tasks: readonly LeadershipTask[] = ["war", "vials"]): Promise<LeadershipDue> {
   const today = warDay(now);
   const due: LeadershipDue = { tasks: [], nextWar: today.day === 7 };
   for (const task of LEADERSHIP_TASKS.filter((item) => tasks.includes(item))) {
-    if (task === "warday") {
-      if (today.day > 5) continue; // Day 6 is the battle and Day 7 is for claiming: no daily points.
-      const rows = await db.query("SELECT 1 FROM war_results WHERE week_start = $1 AND kind = 'warday' AND war_day = $2 LIMIT 1", [warWeekOf(now), today.day]);
-      if (!rows.length) { due.tasks.push(task); due.warDay = { day: today.day, endsAt: today.nextDay }; }
-    } else if (task === "clanDays") {
+    if (task === "clanDays") {
       const week = warWeekOf(due.nextWar ? new Date(now.getTime() + DAY) : now);
       if (!(await clanDays(db, week)).length) {
         due.tasks.push(task);
@@ -175,13 +169,6 @@ export async function leadershipDue(db: Database, now = new Date(), tasks: reado
 /** English only, like every automatic post: the server's translation bot does the rest. */
 export function leadershipReminderMessage(due: LeadershipDue, base: string): string {
   const blocks = due.tasks.map((task) => {
-    if (task === "warday" && due.warDay) {
-      const { day, endsAt } = due.warDay;
-      return [
-        `📸 **Day ${day} war points**: add today's clan war screenshot before Day ${day} ends at 00:00 UTC (<t:${Math.floor(endsAt.getTime() / 1000)}:R>) → ${base}/war-results`,
-        `Under **Daily war points**, tap **Day ${day}**, add the screenshot, then **Read screenshots** → **Save daily points**.`,
-      ];
-    }
     if (task === "clanDays") {
       const voted = (due.votes ?? []).map((count, index) => ({ day: index + 1, count })).filter((item) => item.count > 0)
         .sort((a, b) => b.count - a.count || a.day - b.day);
@@ -207,8 +194,8 @@ export function leadershipReminderMessage(due: LeadershipDue, base: string): str
 /**
  * Posts in the leadership channel with the site's bot, only when a job is undone. It pings nobody
  * (leadership asked for no pings in #the-dictators-den): no one is mentioned, and the post is sent
- * silently, so it never sets off a notification. Times are in vercel.json: daily points
- * Tuesday–Saturday 21:00 UTC (Days 1–5), war results and clan days Monday 10:00 UTC, vials Sunday 10:00 UTC.
+ * silently, so it never sets off a notification. Times are in vercel.json: war results and clan days
+ * Monday 10:00 UTC, vials Sunday 10:00 UTC.
  */
 export async function sendLeadershipReminder(dependencies: { db?: Database; fetcher?: typeof fetch; now?: Date; tasks?: readonly LeadershipTask[] } = {}): Promise<{ posted: boolean; missing: LeadershipTask[] }> {
   const token = process.env.DISCORD_BOT_TOKEN;

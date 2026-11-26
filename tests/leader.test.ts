@@ -47,7 +47,8 @@ test("the leaders' to-do card shows only jobs that are due today", async () => {
     [snipeId, new Date(thursday.getTime() - 2 * 3_600_000).toISOString(), adminId]);
   await db.query("INSERT INTO snipe_responses (snipe_id, member_id, answer) VALUES ($1, $2, 'yes')", [snipeId, savedId]);
   const todo = await leaderTodo(await member(adminId), db, thursday);
-  assert.deepEqual(todo.warDay, { day: 3, endsAt: "2026-10-23T00:00:00.000Z" });
+  // Daily war screenshots aren't asked for any more: leadership stopped keeping them.
+  assert.equal("warDay" in todo, false);
   assert.deepEqual(todo.clanDays, { nextWar: false, voters: 0 });
   // Vials are due on Day 6 and the end-of-war screenshots on Day 7, not on Day 3.
   assert.equal(todo.vials, null);
@@ -57,7 +58,6 @@ test("the leaders' to-do card shows only jobs that are due today", async () => {
   assert.equal(todo.unsaved, 3);
 
   const sunday = await leaderTodo(await member(adminId), db, new Date("2026-10-25T12:00:00Z"));
-  assert.equal(sunday.warDay, null);
   assert.ok(sunday.vials);
   assert.deepEqual(sunday.clanDays, { nextWar: true, voters: 0 });
   const monday = await leaderTodo(await member(adminId), db, new Date("2026-10-26T12:00:00Z"));

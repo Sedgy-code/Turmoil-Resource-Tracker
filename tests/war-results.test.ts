@@ -169,11 +169,13 @@ test("the contribution ranking puts the least active members first", async () =>
     assert.equal(ranking.rows.at(-1)?.member.id, star.id);
     assert.equal(ranking.rows.find(({ member }) => member.id === star.id)?.vials, 50);
     assert.equal(ranking.records.wars, 1);
-    assert.equal(ranking.weights.vials, 25);
-    // Weekly updates count most; snipes only a little (availability and time zones); the parts add up to 100.
+    assert.equal(ranking.weights.vials, 35);
+    // War points and vials count most, then weekly updates; snipes (time zones and other commitments)
+    // and spending on clan days (the daily screenshots are often missed) don't; the parts add up to 100.
     const { RANKING_WEIGHTS } = await import("../src/lib/server/ranking");
-    assert.equal(RANKING_WEIGHTS.updates, 30);
-    assert.equal(RANKING_WEIGHTS.snipes, 5);
+    assert.deepEqual(RANKING_WEIGHTS, { warPoints: 35, vials: 35, updates: 30 });
+    assert.equal("snipes" in RANKING_WEIGHTS, false);
+    assert.equal("snipes" in ranking.weights, false);
     assert.equal(Object.values(RANKING_WEIGHTS).reduce((sum, weight) => sum + weight, 0), 100);
     // Hoarding isn't part of the score any more.
     assert.equal("hoarding" in ranking.rows[0], false);
@@ -325,16 +327,6 @@ test("time in the clan doesn't raise or lower the ranking: only each member's ow
     for (const week of weeks) await save(veteran, week);
     for (const week of ["2026-11-09", "2026-11-16", "2026-11-23"]) await save(newer, week);
     for (const week of weeks.filter((_, index) => index % 2 === 0)) await save(coaster, week);
-    // Snipes: one before the newer member joined, one after; a called-off one only counts for whoever checked in.
-    const snipe = async (startsAt: string, cancelled: boolean, came: Member[]) => {
-      const id = randomUUID();
-      await db.query(`INSERT INTO snipe_plans (id, title, starts_at, activities, created_by, cancelled_at, cancelled_by)
-        VALUES ($1, 'Snipe', $2, '["mountSummons"]'::jsonb, $3, $4, $5)`, [id, startsAt, admin.id, cancelled ? startsAt : null, cancelled ? admin.id : null]);
-      for (const member of came) await db.query("INSERT INTO snipe_attendance (snipe_id, member_id, confirmed_by) VALUES ($1, $2, $3)", [id, member.id, admin.id]);
-    };
-    await snipe("2026-11-01T10:00:00Z", false, [veteran]);
-    await snipe("2026-11-18T10:00:00Z", false, [veteran, newer]);
-    await snipe("2026-11-19T10:00:00Z", true, [coaster]);
 
     const ranking = await contributionRanking(admin, db, now);
     const row = (member: Member) => ranking.rows.find((item) => item.member.id === member.id)!;
@@ -345,13 +337,8 @@ test("time in the clan doesn't raise or lower the ranking: only each member's ow
     assert.deepEqual([row(newer).updates, row(newer).updatesDue], [3, 3]);
     assert.deepEqual([row(veteran).updates, row(veteran).updatesDue], [9, 9]);
     assert.deepEqual([row(coaster).updates, row(coaster).updatesDue], [5, 9]);
-    // Snipes since they joined; the called-off one only for the coaster, who checked in.
-    assert.deepEqual([row(newer).snipes, row(newer).snipesHeld], [1, 1]);
-    assert.deepEqual([row(veteran).snipes, row(veteran).snipesHeld], [2, 2]);
-    assert.deepEqual([row(coaster).snipes, row(coaster).snipesHeld], [1, 3]);
     // Keeping up with every week of theirs counts the same as the veteran's every week.
     assert.equal(row(newer).parts.updates, row(veteran).parts.updates);
-    assert.equal(row(newer).parts.snipes, row(veteran).parts.snipes);
     assert.ok(row(coaster).parts.updates! < row(newer).parts.updates!);
     // Same effort, same score, whatever the time in the clan; a long-time member doing little stays low.
     assert.equal(row(newer).score, row(veteran).score);
@@ -433,6 +420,11 @@ test("saying Yes to a snipe and not turning up never costs points, cancelled or 
     await addSnipe(false);
     assert.equal((await row()).penalty, 0, "snipes are often called off, so no-shows aren't held against anyone");
     assert.equal("noShows" in (await row()), false);
+    // Joining snipes doesn't change the score either: time zones and other commitments decide who can make them.
+    const ranking = await contributionRanking(admin, db);
+    const score = (id: string) => ranking.rows.find(({ member }) => member.id === id)!.score;
+    assert.equal(score(came.id), score(missed.id));
+    assert.equal("snipes" in ranking.rows[0].parts, false);
   });
 });
 
