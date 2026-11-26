@@ -171,11 +171,12 @@
 .planning-attendance { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 0 24px 18px; color: var(--subtle); font-size: 11px; }
 .planning-attendance > span { display: flex; align-items: center; gap: 4px; }
 .planning-attendance .planning-yes { color: var(--emerald); }
+.planning-attendance .planning-maybe { color: #e6c46a; }
 .planning-attendance .planning-no { color: #e99586; }
 .planning-response-details { padding: 0 24px 18px; color: var(--muted); font-size: 11px; }
 .planning-response-details > summary { cursor: pointer; width: fit-content; line-height: 1.6; }
 .planning-response-details > summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 4px; }
-.planning-response-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 14px; padding: 14px; background: #101611; border: 1px solid var(--border); border-radius: 6px; }
+.planning-response-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 14px; padding: 14px; background: #101611; border: 1px solid var(--border); border-radius: 6px; }
 .planning-response-grid h3 { color: var(--text); font-size: 11px; margin-bottom: 7px; }
 .planning-response-grid p { color: var(--subtle); font-size: 12px; line-height: 1.8; }
 .planning-rsvp { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; border-top: 1px solid var(--border); padding: 18px 24px; }

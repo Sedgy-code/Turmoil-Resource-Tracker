@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { awayWeeksFrom, savingStreak } from "../streak";
 import { COSMETIC_CATEGORIES, DEW_ITEMS, equippedCosmetics } from "../dew";
 import { currentWeek } from "../resources";
-import type { ClanSettings, CosmeticCategory, DewResponse, Member, ResourceEntry, SnipePlan, SnipesResponse, WarActivity, WarRates } from "../types";
+import type { ClanSettings, CosmeticCategory, DewResponse, Member, ResourceEntry, SnipeAnswer, SnipePlan, SnipesResponse, WarActivity, WarRates } from "../types";
 import { estimateWar, WAR_ACTIVITIES, warBoost } from "../war";
 import { nextWarWeek, warDay } from "../war-calendar";
 import { database, lockAdministration, type Database, type SqlConnection } from "./db";
@@ -68,7 +68,7 @@ async function planFromRow(tx: SqlConnection, row: Record<string, unknown>, cont
     FROM snipe_attendance attendance JOIN app_members member ON member.id = attendance.member_id
     WHERE attendance.snipe_id = $1 ORDER BY attendance.confirmed_at, attendance.member_id`, [row.id]);
   const responses: SnipePlan["responses"] = responseRows.filter((response) => activeIds.has(String(response.member_id))).map((response) => ({
-    memberId: String(response.member_id), answer: response.answer as "yes" | "no", updatedAt: iso(response.updated_at)!,
+    memberId: String(response.member_id), answer: response.answer as SnipeAnswer, updatedAt: iso(response.updated_at)!,
   }));
   const participantIds = new Set(responses.filter((response) => response.answer === "yes").map((response) => response.memberId));
   // Clan tech war point bonuses for the war day the snipe is on.
@@ -82,7 +82,12 @@ async function planFromRow(tx: SqlConnection, row: Record<string, unknown>, cont
     assembled: await lastAssembly(tx, String(row.id)),
     responses, participants,
     attendees: attendeeRows.map((attendee) => ({ memberId: String(attendee.member_id), confirmedBy: String(attendee.confirmed_by), confirmedAt: iso(attendee.confirmed_at)!, member: memberFromRow(attendee) })),
-    counts: { yes: participants.length, no: responses.filter((response) => response.answer === "no").length, unanswered: live.members.length - responses.length },
+    counts: {
+      yes: participants.length,
+      maybe: responses.filter((response) => response.answer === "maybe").length,
+      no: responses.filter((response) => response.answer === "no").length,
+      unanswered: live.members.length - responses.length,
+    },
     estimate: estimateWar(live.entries.filter((entry) => participantIds.has(entry.memberId)), live.rates, activities, "current", boost),
   };
 }
@@ -186,7 +191,7 @@ export async function updateSnipe(actor: Member, id: string, input: Partial<Snip
 /**
  * A leader calls a snipe off (not needed after all). It moves to History marked Cancelled, with
  * everyone's answers kept, and nobody can answer or check in. Reopen brings it back.
- * Also returns the Discord ids of everyone who said Yes (A–Z), so they can be told.
+ * Also returns the Discord ids of everyone who said Yes or Maybe (A–Z), so they can be told.
  */
 export async function cancelSnipe(actor: Member, id: string, db?: Database, now = new Date()): Promise<{ plan: SnipePlan; leader: Member; snipers: string[] }> {
   const connection = db ?? await database();
@@ -201,11 +206,13 @@ export async function cancelSnipe(actor: Member, id: string, db?: Database, now 
     plan.cancelled = { by: leader.username, at: now.toISOString() };
     await tx.query("UPDATE snipe_plans SET archived = TRUE, archived_result = $2::jsonb, cancelled_at = $3, cancelled_by = $4 WHERE id = $1",
       [id, JSON.stringify(plan), now.toISOString(), leader.id]);
-    return { plan, leader, snipers: plan.participants.map(({ member }) => member.discordId) };
+    const told = await tx.query(`SELECT m.discord_id FROM snipe_responses r JOIN app_members m ON m.id = r.member_id
+      WHERE r.snipe_id = $1 AND r.answer IN ('yes', 'maybe') AND m.active = TRUE ORDER BY LOWER(m.username), m.id`, [id]);
+    return { plan, leader, snipers: told.map((member) => String(member.discord_id)) };
   });
 }
 
-export async function respondToSnipe(actor: Member, id: string, input: { answer: "yes" | "no" }, db?: Database): Promise<SnipePlan> {
+export async function respondToSnipe(actor: Member, id: string, input: { answer: SnipeAnswer }, db?: Database): Promise<SnipePlan> {
   const connection = db ?? await database();
   return connection.transaction(async (tx) => {
     await lockAdministration(tx, connection.dialect);
@@ -213,7 +220,7 @@ export async function respondToSnipe(actor: Member, id: string, input: { answer:
     const row = await findPlan(tx, id);
     requireOpen(row);
     if (new Date(iso(row.starts_at)!).getTime() <= Date.now()) throw new ApiError(409, "Attendance is closed because this snipe has started.", "SNIPE_STARTED");
-    if (input.answer !== "yes" && input.answer !== "no") throw new ApiError(400, "Answer Yes or No for this snipe.", "INVALID_SNIPE_RESPONSE");
+    if (!["yes", "maybe", "no"].includes(input.answer)) throw new ApiError(400, "Answer Yes, Maybe or No for this snipe.", "INVALID_SNIPE_RESPONSE");
     await tx.query(`INSERT INTO snipe_responses (snipe_id, member_id, answer) VALUES ($1, $2, $3)
       ON CONFLICT (snipe_id, member_id) DO UPDATE SET answer = EXCLUDED.answer, updated_at = NOW()`, [id, freshActor.id, input.answer]);
     return planFromRow(tx, row);

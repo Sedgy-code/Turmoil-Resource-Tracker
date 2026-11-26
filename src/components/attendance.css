@@ -85,6 +85,7 @@
   cursor: pointer;
 }
 .snipe-said-yes { color: #9fd3a9; font-size: 12px; white-space: nowrap; }
+.snipe-said-maybe { color: #e6c46a; font-size: 12px; white-space: nowrap; }
 .snipe-needs-attendance { border-color: #d9a52b88 !important; color: #f0c560 !important; }
 
 /* Check in: one big button while the snipe is on; calendar links before it starts. */

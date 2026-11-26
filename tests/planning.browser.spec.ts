@@ -79,7 +79,7 @@ async function expectHeaderBalance(page: Page, balance: number) {
   const header = page.locator(".topbar-clan-points");
   const formatted = new Intl.NumberFormat("en-US").format(balance);
   await expect(header).toBeVisible();
-  await expect(header).toHaveAttribute("aria-label", `${formatted} Clan Points. Open Reward Shop.`);
+  await expect(header).toHaveAttribute("aria-label", `${formatted} Clan Points. Open the Reward Shop.`);
   await expect(header).toContainText(formatted);
 }
 
@@ -306,6 +306,11 @@ test("snipe creation, attendance, selected points, and archived history use the 
     const noPlan = (await read<SnipesResponse>(request, "/api/snipes")).plans.find((plan) => plan.id === createdId)!;
     expect(noPlan.counts.no).toBe(1);
     expect(noPlan.estimate.minimum).toBe(0);
+    // Maybe isn't counted as coming.
+    await card.getByRole("button", { name: "Maybe", exact: true }).click();
+    await expect(card.locator(".planning-maybe")).toHaveText("Maybe: 1");
+    const maybePlan = (await read<SnipesResponse>(request, "/api/snipes")).plans.find((plan) => plan.id === createdId)!;
+    expect([maybePlan.counts.yes, maybePlan.counts.maybe, maybePlan.estimate.minimum]).toEqual([0, 1, 0]);
     await card.getByRole("button", { name: "Yes", exact: true }).click();
     await expect(card.locator(".planning-yes")).toHaveText("Yes: 1");
     // A response saved from another device must become visible without

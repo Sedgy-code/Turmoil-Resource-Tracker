@@ -224,20 +224,24 @@ test("war estimates reject an unsafe activity score and an unsafe total of indiv
   assert.throws(() => estimateWar([combined], boundaryRates, ["hammers", "mountMerges"]), tooLarge);
 });
 
-test("snipe participant estimates use current banks only for members who answered yes", async () => {
+test("snipe participant estimates use current banks only for members who answered yes (Maybe isn't counted as coming)", async () => {
   await withDatabase(async (db) => {
     const admin = await addMember(db, "Admin", "ADMIN");
     const yes = await addMember(db, "Attending");
     const no = await addMember(db, "Absent");
+    const maybe = await addMember(db, "Unsure");
     const unanswered = await addMember(db, "Unanswered");
     await saveBank(db, yes, { hammers: 10 });
     await saveBank(db, no, { hammers: 1_000 });
+    await saveBank(db, maybe, { hammers: 100_000 });
     await saveBank(db, unanswered, { hammers: 10_000 });
     const plan = await makeSnipe(db, admin);
     await respondToSnipe(yes, plan.id, { answer: "yes" }, db);
     await respondToSnipe(no, plan.id, { answer: "no" }, db);
+    await respondToSnipe(maybe, plan.id, { answer: "maybe" }, db);
     let listed = (await listSnipes(admin, db)).plans[0];
-    assert.deepEqual(listed.counts, { yes: 1, no: 1, unanswered: 2 });
+    assert.deepEqual(listed.counts, { yes: 1, maybe: 1, no: 1, unanswered: 2 });
+    assert.equal(listed.responses.find((response) => response.memberId === maybe.id)?.answer, "maybe");
     assert.deepEqual(listed.participants.map(({ member }) => member.id), [yes.id]);
     assert.equal(listed.estimate.minimum, 20);
     assert.equal(listed.estimate.maximum, 50);
@@ -247,10 +251,16 @@ test("snipe participant estimates use current banks only for members who answere
     assert.equal(listed.estimate.maximum, 60);
     await respondToSnipe(yes, plan.id, { answer: "no" }, db);
     listed = (await listSnipes(admin, db)).plans[0];
-    assert.deepEqual(listed.counts, { yes: 0, no: 2, unanswered: 2 });
+    assert.deepEqual(listed.counts, { yes: 0, maybe: 1, no: 2, unanswered: 2 });
     assert.equal(listed.participants.length, 0);
     assert.equal(listed.estimate.maximum, 0);
-    assert.equal(listed.responses.length, 2);
+    assert.equal(listed.responses.length, 3);
+    // A Maybe can firm up to Yes, and then counts.
+    await respondToSnipe(maybe, plan.id, { answer: "yes" }, db);
+    listed = (await listSnipes(admin, db)).plans[0];
+    assert.deepEqual(listed.counts, { yes: 1, maybe: 0, no: 2, unanswered: 2 });
+    assert.deepEqual(listed.participants.map(({ member }) => member.id), [maybe.id]);
+    await assert.rejects(respondToSnipe(maybe, plan.id, { answer: "perhaps" as "maybe" }, db), (error: unknown) => error instanceof Error && /Yes, Maybe or No/.test(error.message));
   });
 });
 

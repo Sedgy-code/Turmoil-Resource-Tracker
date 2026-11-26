@@ -14,8 +14,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const id = z.string().uuid().parse((await context.params).id);
     const input = snipeResponseSchema.parse(await request.json());
     const plan = await respondToSnipe(actor, id, input);
-    // A Yes opens #snipe-chat: the bot gives them the Snipe Group role once the answer is saved.
-    if (input.answer === "yes") after(() => giveSnipeRole([actor.discordId]).then(() => undefined, () => undefined));
+    // A Yes or a Maybe opens #snipe-chat: the bot gives them the Snipe Group role once the answer is saved.
+    if (input.answer !== "no") after(() => giveSnipeRole([actor.discordId]).then(() => undefined, () => undefined));
     return privateResponse({ plan });
   } catch (error) { return errorResponse(error); }
 }

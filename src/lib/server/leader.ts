@@ -1,6 +1,6 @@
 import { currentWeek } from "../resources";
 import { nextWarWeek, raceEnd, warDay, warWeekOf } from "../war-calendar";
-import type { LeaderTodo, Member, StatusResponse, StatusRow, WarActivity } from "../types";
+import type { LeaderTodo, Member, SnipeAnswer, StatusResponse, StatusRow, WarActivity } from "../types";
 import { randomUUID } from "node:crypto";
 import { appUrl, isDemo } from "./config";
 import { database, lockAdministration, type Database, type SqlConnection } from "./db";
@@ -110,10 +110,10 @@ export async function statusBoard(actor: Member, db?: Database, now = new Date()
     id: String(next[0].id), title: String(next[0].title), startsAt: iso(next[0].starts_at)!,
     activities: (typeof next[0].activities === "string" ? JSON.parse(next[0].activities) : next[0].activities) as WarActivity[],
   } : null;
-  const answers = new Map<string, "yes" | "no">();
+  const answers = new Map<string, SnipeAnswer>();
   if (snipe) {
     for (const row of await connection.query("SELECT member_id, answer FROM snipe_responses WHERE snipe_id = $1", [snipe.id])) {
-      answers.set(String(row.member_id), row.answer === "yes" ? "yes" : "no");
+      answers.set(String(row.member_id), row.answer === "yes" || row.answer === "maybe" ? row.answer : "no");
     }
   }
   const rows: StatusRow[] = weeks.map(({ row, member, savedAt, state }) => {

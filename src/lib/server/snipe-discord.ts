@@ -84,7 +84,7 @@ const ROLE_CATCH_UP_MS = 10 * 60_000;
 let lastRoleCatchUp = 0;
 
 /**
- * Everyone who said Yes to a snipe that's still to come (or on now) gets the Snipe Group role, in case
+ * Everyone who said Yes or Maybe to a snipe that's still to come (or on now) gets the Snipe Group role, in case
  * they answered before the bot handed it out or Discord didn't take it then. Runs when a leader opens
  * Snipes, at most every 10 minutes. Never throws: the page loads either way.
  */
@@ -96,7 +96,7 @@ export async function catchUpSnipeRoles(dependencies: { db?: Database; fetcher?:
     const connection = dependencies.db ?? await database();
     const rows = await connection.query(`SELECT DISTINCT m.discord_id FROM snipe_responses r
       JOIN snipe_plans p ON p.id = r.snipe_id JOIN app_members m ON m.id = r.member_id
-      WHERE r.answer = 'yes' AND m.active = TRUE AND p.archived = FALSE AND p.starts_at > $1`,
+      WHERE r.answer IN ('yes', 'maybe') AND m.active = TRUE AND p.archived = FALSE AND p.starts_at > $1`,
     [new Date(now.getTime() - CHECKIN_CLOSES_AFTER_MS).toISOString()]);
     return await giveSnipeRole(rows.map((row) => String(row.discord_id)), dependencies.fetcher ?? fetch);
   } catch {
@@ -107,16 +107,23 @@ export async function catchUpSnipeRoles(dependencies: { db?: Database; fetcher?:
 /** Stops a name or title from turning into Discord formatting. */
 const plain = (text: string) => text.replace(/([\\*_~`|>])/g, "\\$1");
 
-/** The call in #snipe-chat (English only, like every Discord post): when, who, and a Check in button. */
-export function assembleMessages(snipe: { id: string; title: string; startsAt: string }, leader: string, discordIds: string[], now = new Date()) {
+/**
+ * The call in #snipe-chat (English only, like every Discord post): when, who, and a Check in button.
+ * Everyone who said Yes is pinged, then everyone who said Maybe on a line of their own.
+ */
+export function assembleMessages(snipe: { id: string; title: string; startsAt: string }, leader: string, discordIds: string[], now = new Date(), maybeIds: string[] = []) {
   const start = new Date(snipe.startsAt);
   const unix = Math.floor(start.getTime() / 1000);
   // The clock time in UTC, plus Discord's own "in 12 minutes" for every reader.
   const when = `${start.getTime() > now.getTime() ? "Starts" : "Started"} at ${start.toISOString().slice(11, 16)} UTC (<t:${unix}:R>)`;
+  const everyone = [...discordIds.map((id) => ({ id, maybe: false })), ...maybeIds.map((id) => ({ id, maybe: true }))];
   const posts: { content: string; allowed_mentions: { parse: never[]; users: string[] }; components?: unknown[] }[] = [];
-  for (let first = 0; first < discordIds.length; first += MENTIONS_PER_POST) {
-    const users = discordIds.slice(first, first + MENTIONS_PER_POST);
-    const mentions = users.map((id) => `<@${id}>`).join(" ");
+  for (let first = 0; first < everyone.length; first += MENTIONS_PER_POST) {
+    const chunk = everyone.slice(first, first + MENTIONS_PER_POST);
+    const users = chunk.map(({ id }) => id);
+    const yes = chunk.filter(({ maybe }) => !maybe).map(({ id }) => `<@${id}>`).join(" ");
+    const maybe = chunk.filter(({ maybe }) => maybe).map(({ id }) => `<@${id}>`).join(" ");
+    const mentions = [yes, maybe ? `**Maybe:** ${maybe}, join if you can!` : ""].filter(Boolean);
     // Only the listed members are pinged: never @everyone or a role.
     const allowed = { parse: [] as never[], users };
     posts.push(first === 0
@@ -124,14 +131,14 @@ export function assembleMessages(snipe: { id: string; title: string; startsAt: s
         content: [
           `🎯 **Snipers, assemble! ${plain(snipe.title)}**`,
           `${when}. Called by ${plain(leader)}.`,
-          mentions,
+          ...mentions,
           "",
           "Press **Check in** when you join the snipe (+10 Clan Points, once a week).",
         ].join("\n"),
         allowed_mentions: allowed,
         components: [{ type: 1, components: [{ type: 2, style: 3, label: "Check in", emoji: { name: "✅" }, custom_id: `checkin:${snipe.id}` }] }],
       }
-      : { content: mentions, allowed_mentions: allowed });
+      : { content: mentions.join("\n"), allowed_mentions: allowed });
   }
   return posts;
 }
@@ -159,7 +166,7 @@ export function snipePlanMessage(plan: SnipePostPlan, leader: string, hub: strin
   return {
     content: plan.cancelled
       ? "❌ This snipe was called off. No need to join."
-      : "🎯 A new snipe is planned. Say **Yes** or **No** on the Clan Hub so leaders know who's in.",
+      : "🎯 A new snipe is planned. Say **Yes**, **Maybe** or **No** on the Clan Hub so leaders know who's in.",
     embeds: [{
       color: plan.cancelled ? SNIPE_GREY : SNIPE_GOLD,
       author: { name: "Turmoil Clan Hub", icon_url: `${hub}/app-icons/icon-192.png`, url: link },
@@ -246,7 +253,7 @@ export async function refreshSnipePost(snipeId: string, dependencies: { db?: Dat
   }
 }
 
-/** Tells everyone who said Yes that the snipe is off (English only, like every Discord post). */
+/** Tells everyone who said Yes or Maybe that the snipe is off (English only, like every Discord post). */
 export function cancelMessages(snipe: { title: string; startsAt: string }, leader: string, discordIds: string[]) {
   const posts: { content: string; allowed_mentions: { parse: never[]; users: string[] } }[] = [];
   for (let first = 0; first < discordIds.length; first += MENTIONS_PER_POST) {
@@ -263,7 +270,7 @@ export function cancelMessages(snipe: { title: string; startsAt: string }, leade
 }
 
 /**
- * Posts the cancellation in #snipe-chat, pinging everyone who said Yes. True when it was posted
+ * Posts the cancellation in #snipe-chat, pinging everyone who said Yes or Maybe. True when it was posted
  * (nothing is sent in the demo); false if Discord didn't take it. The cancel stands either way.
  */
 export async function tellSnipersCancelled(snipe: { title: string; startsAt: string }, leader: string, discordIds: string[], fetcher: typeof fetch = fetch): Promise<boolean> {
@@ -297,13 +304,14 @@ export interface SnipeCall {
   at: string;
   /** Members pinged in #snipe-chat. */
   count: number;
-  /** Members who said Yes but couldn't be given the Snipe Group role (so may not see the channel). */
+  /** Members who said Yes or Maybe but couldn't be given the Snipe Group role (so may not see the channel). */
   roleFailed: number;
 }
 
 /**
- * A leader calls everyone who said Yes: the bot makes sure they have the Snipe Group role, then posts in
- * #snipe-chat mentioning each of them, with a Check in button. Until check-in closes, at most every 10 minutes.
+ * A leader calls everyone who said Yes (and, on a line of their own, everyone who said Maybe): the bot
+ * makes sure they have the Snipe Group role, then posts in #snipe-chat mentioning each of them, with a
+ * Check in button. Until check-in closes, at most every 10 minutes.
  */
 export async function assembleSnipers(actor: Member, snipeId: string, dependencies: { db?: Database; fetcher?: typeof fetch; now?: Date } = {}): Promise<SnipeCall> {
   const connection = dependencies.db ?? await database();
@@ -312,7 +320,7 @@ export async function assembleSnipers(actor: Member, snipeId: string, dependenci
   const token = process.env.DISCORD_BOT_TOKEN;
   const live = !isDemo();
   // Who to call. The lock is let go before Discord is asked for anything.
-  const { leader, plan, snipers } = await connection.transaction(async (tx) => {
+  const { leader, plan, snipers, maybes } = await connection.transaction(async (tx) => {
     await lockAdministration(tx, connection.dialect);
     const leader = await requireAdmin(tx, actor.id);
     const rows = await tx.query("SELECT id, title, starts_at, archived, cancelled_at FROM snipe_plans WHERE id = $1", [snipeId]);
@@ -324,27 +332,31 @@ export async function assembleSnipers(actor: Member, snipeId: string, dependenci
       throw new ApiError(409, "This snipe is over, so the snipers can’t be called.", "ASSEMBLE_OVER");
     }
     await requireNotRecent(tx, snipeId, now);
-    const snipers = (await tx.query(`SELECT m.* FROM snipe_responses r JOIN app_members m ON m.id = r.member_id
-      WHERE r.snipe_id = $1 AND r.answer = 'yes' AND m.active = TRUE`, [snipeId])).map(memberFromRow)
+    const answered = async (answer: "yes" | "maybe") => (await tx.query(`SELECT m.* FROM snipe_responses r JOIN app_members m ON m.id = r.member_id
+      WHERE r.snipe_id = $1 AND r.answer = $2 AND m.active = TRUE`, [snipeId, answer])).map(memberFromRow)
       .sort((a, b) => a.username.localeCompare(b.username, undefined, { sensitivity: "base" }));
-    if (!snipers.length || (live && !snipers.some((member) => DISCORD_ID.test(member.discordId)))) {
-      throw new ApiError(409, "Nobody has said Yes to this snipe yet.", "ASSEMBLE_NOBODY");
+    const snipers = await answered("yes");
+    const maybes = await answered("maybe");
+    const called = [...snipers, ...maybes];
+    if (!called.length || (live && !called.some((member) => DISCORD_ID.test(member.discordId)))) {
+      throw new ApiError(409, "Nobody has said Yes or Maybe to this snipe yet.", "ASSEMBLE_NOBODY");
     }
-    return { leader, plan, snipers };
+    return { leader, plan, snipers, maybes };
   });
   if (live && (!token || !guildId())) throw new ApiError(503, "Discord isn’t set up for snipe calls yet.", "ASSEMBLE_NOT_CONFIGURED");
   const ids = snipers.map((member) => member.discordId).filter((id) => DISCORD_ID.test(id));
+  const maybeIds = maybes.map((member) => member.discordId).filter((id) => DISCORD_ID.test(id));
   // Without the role they can't see #snipe-chat, and the ping never reaches them.
-  const roles = live ? await giveSnipeRole(ids, fetcher) : { given: 0, failed: 0 };
+  const roles = live ? await giveSnipeRole([...ids, ...maybeIds], fetcher) : { given: 0, failed: 0 };
   return connection.transaction(async (tx) => {
     await lockAdministration(tx, connection.dialect);
     // Another leader may have called them while the roles were handed out.
     await requireNotRecent(tx, snipeId, now);
-    let pinged = live ? 0 : snipers.length;
+    let pinged = live ? 0 : snipers.length + maybes.length;
     if (live) {
       const channel = process.env.DISCORD_SNIPE_CHANNEL_ID || SNIPE_CHANNEL_ID;
       const headers = { Authorization: `Bot ${token}`, "Content-Type": "application/json" };
-      for (const post of assembleMessages(plan, leader.username, ids, now)) {
+      for (const post of assembleMessages(plan, leader.username, ids, now, maybeIds)) {
         const sent = await fetcher(`${DISCORD_API}/channels/${channel}/messages`, { method: "POST", headers, body: JSON.stringify(post) }).catch(() => null);
         if (!sent?.ok) {
           // Discord's reason (such as "Missing Permissions") never contains secrets.

@@ -374,6 +374,9 @@ CREATE TABLE IF NOT EXISTS early_spends (
 ALTER TABLE early_spends ADD COLUMN IF NOT EXISTS notice_closed_at TIMESTAMPTZ;
 -- Whether early spend requests show in Discord: an Ask button on each day's post, and a ticket for each request.
 ALTER TABLE spending_settings ADD COLUMN IF NOT EXISTS early_discord BOOLEAN NOT NULL DEFAULT FALSE;
+-- Snipe answers can be Maybe: not counted as coming, and missing the snipe is not held against them.
+ALTER TABLE snipe_responses DROP CONSTRAINT IF EXISTS snipe_responses_answer_check;
+ALTER TABLE snipe_responses ADD CONSTRAINT snipe_responses_answer_check CHECK (answer IN ('yes','maybe','no'));
 -- Builds: the top builds of each game update, pulled daily from 1vcian's Forge Master site and boiled down.
 -- One row per game update (its builds file), the older ones kept as the archive.
 CREATE TABLE IF NOT EXISTS build_snapshots (
