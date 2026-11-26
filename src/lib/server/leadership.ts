@@ -55,6 +55,9 @@ export async function applyLeadershipAction(actor: Member, memberId: string, inp
   });
 }
 
+/** Who gave an automatic strike (no leader): the Clan Hub itself. */
+const AUTOMATIC = "Clan Hub (automatic)";
+
 /** Everything that has happened to one member, newest first. */
 export async function memberHistory(actor: Member, memberId: string, db?: Database): Promise<MemberHistoryResponse> {
   const connection = db ?? await database();
@@ -79,7 +82,7 @@ export async function memberHistory(actor: Member, memberId: string, db?: Databa
 
   const strikes = await connection.query("SELECT id, reason, created_at, created_by, removed_at FROM member_strikes WHERE member_id = $1 ORDER BY created_at DESC", [memberId]);
   // A strike's reason is the leader's own words, shown as written.
-  for (const row of strikes) events.push({ at: iso(row.created_at)!, kind: "strike", text: String(row.reason || "Strike"), ...(row.reason ? {} : { template: "Strike" }), by: names.get(String(row.created_by)) ?? null, strikeId: row.removed_at ? undefined : String(row.id) });
+  for (const row of strikes) events.push({ at: iso(row.created_at)!, kind: "strike", text: String(row.reason || "Strike"), ...(row.reason ? {} : { template: "Strike" }), by: row.created_by ? names.get(String(row.created_by)) ?? null : AUTOMATIC, strikeId: row.removed_at ? undefined : String(row.id) });
   const logged = await connection.query("SELECT kind, detail, created_at, created_by FROM member_events WHERE member_id = $1", [memberId]);
   for (const row of logged) {
     const kind = String(row.kind) as MemberHistoryEvent["kind"];
@@ -110,7 +113,7 @@ export async function memberHistory(actor: Member, memberId: string, db?: Databa
   events.sort((a, b) => b.at.localeCompare(a.at));
   return {
     member: { ...member, strikes: strikes.filter((row) => !row.removed_at).length },
-    strikes: strikes.filter((row) => !row.removed_at).map((row) => ({ id: String(row.id), reason: String(row.reason ?? ""), createdAt: iso(row.created_at)!, createdBy: names.get(String(row.created_by)) ?? "" })),
+    strikes: strikes.filter((row) => !row.removed_at).map((row) => ({ id: String(row.id), reason: String(row.reason ?? ""), createdAt: iso(row.created_at)!, createdBy: row.created_by ? names.get(String(row.created_by)) ?? "" : AUTOMATIC })),
     events: events.slice(0, 300),
   };
 }

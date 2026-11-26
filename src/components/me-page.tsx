@@ -160,7 +160,7 @@ export function MePage({ data, notify, refresh, onSignOut, onOpenGuide }: {
 
     <section className="home-card me-reminders" aria-labelledby="me-reminders-title">
       <div className="home-card-head"><h2 id="me-reminders-title"><Bell size={21} />{t("Discord reminders")}</h2></div>
-      <p className="me-hint">{t("If you haven’t saved, a leader can send you one Discord message a week. Never more.")}</p>
+      <p className="me-hint">{t("If you haven’t saved, a leader can send you one Discord message a week. You’ll also get one if you get an automatic strike.")}</p>
       <button type="button" className={`me-switch${me.remindersAllowed ? " on" : ""}`} role="switch" aria-checked={me.remindersAllowed === true} disabled={busy !== null} onClick={() => void toggleReminders()}>
         <span className="me-switch-track" aria-hidden="true"><i /></span>
         {me.remindersAllowed ? t("Reminders are on") : t("Reminders are off")}
